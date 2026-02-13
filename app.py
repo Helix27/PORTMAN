@@ -1,0 +1,151 @@
+from flask import Flask, render_template, request, redirect, url_for, session, jsonify
+from functools import wraps
+from database import get_db, get_cursor
+
+app = Flask(__name__)
+app.secret_key = 'portman-secret-key-2024'
+
+# Module registry
+MODULES = {}
+
+def register_module(code, name, blueprint):
+    MODULES[code] = {'name': name}
+    app.register_blueprint(blueprint)
+
+# Import and register existing modules
+from modules.VC01 import bp as vc01_bp, MODULE_INFO as vc01_info
+from modules.VTM01 import bp as vtm01_bp, MODULE_INFO as vtm01_info
+from modules.VCM01 import bp as vcm01_bp, MODULE_INFO as vcm01_info
+from modules.GM01 import bp as gm01_bp, MODULE_INFO as gm01_info
+from modules.ADMIN import bp as admin_bp, MODULE_INFO as admin_info
+
+# Import new master modules
+from modules.VAM01 import bp as vam01_bp, MODULE_INFO as vam01_info
+from modules.VIEM01 import bp as viem01_bp, MODULE_INFO as viem01_info
+from modules.VCUM01 import bp as vcum01_bp, MODULE_INFO as vcum01_info
+from modules.VOT01 import bp as vot01_bp, MODULE_INFO as vot01_info
+from modules.VCDS01 import bp as vcds01_bp, MODULE_INFO as vcds01_info
+from modules.VTOD01 import bp as vtod01_bp, MODULE_INFO as vtod01_info
+from modules.VRT01 import bp as vrt01_bp, MODULE_INFO as vrt01_info
+from modules.VDM01 import bp as vdm01_bp, MODULE_INFO as vdm01_info
+from modules.VCG01 import bp as vcg01_bp, MODULE_INFO as vcg01_info
+from modules.VCN01 import bp as vcn01_bp, MODULE_INFO as vcn01_info
+from modules.VQM01 import bp as vqm01_bp, MODULE_INFO as vqm01_info
+from modules.VHM01 import bp as vhm01_bp, MODULE_INFO as vhm01_info
+from modules.VHO01 import bp as vho01_bp, MODULE_INFO as vho01_info
+from modules.VDAT01 import bp as vdat01_bp, MODULE_INFO as vdat01_info
+from modules.VEM01 import bp as vem01_bp, MODULE_INFO as vem01_info
+from modules.VBM01 import bp as vbm01_bp, MODULE_INFO as vbm01_info
+from modules.VCTM01 import bp as vctm01_bp, MODULE_INFO as vctm01_info
+from modules.LDUD01 import bp as ldud01_bp, MODULE_INFO as ldud01_info
+from modules.MBCM01 import bp as mbcm01_bp, MODULE_INFO as mbcm01_info
+from modules.PBM01 import bp as pbm01_bp, MODULE_INFO as pbm01_info
+from modules.MBCDS01 import bp as mbcds01_bp, MODULE_INFO as mbcds01_info
+from modules.MBC01 import bp as mbc01_bp, MODULE_INFO as mbc01_info
+from modules.EU01 import bp as eu01_bp, MODULE_INFO as eu01_info
+from modules.CRM01 import bp as crm01_bp, MODULE_INFO as crm01_info
+from modules.VEX01 import bp as vex01_bp, MODULE_INFO as vex01_info
+from modules.VEXDS01 import bp as vexds01_bp, MODULE_INFO as vexds01_info
+
+# Import finance modules
+from modules.FCRM01 import bp as fcrm01_bp, MODULE_INFO as fcrm01_info
+from modules.FGRM01 import bp as fgrm01_bp, MODULE_INFO as fgrm01_info
+from modules.FSTM01 import bp as fstm01_bp, MODULE_INFO as fstm01_info
+from modules.FCAM01 import bp as fcam01_bp, MODULE_INFO as fcam01_info
+from modules.FIN01 import bp as fin01_bp, MODULE_INFO as fin01_info
+from modules.SRV01 import bp as srv01_bp, MODULE_INFO as srv01_info
+
+# Register existing modules
+register_module(vc01_info['code'], vc01_info['name'], vc01_bp)
+register_module(vtm01_info['code'], vtm01_info['name'], vtm01_bp)
+register_module(vcm01_info['code'], vcm01_info['name'], vcm01_bp)
+register_module(gm01_info['code'], gm01_info['name'], gm01_bp)
+register_module(admin_info['code'], admin_info['name'], admin_bp)
+
+# Register new master modules
+register_module(vam01_info['code'], vam01_info['name'], vam01_bp)
+register_module(viem01_info['code'], viem01_info['name'], viem01_bp)
+register_module(vcum01_info['code'], vcum01_info['name'], vcum01_bp)
+register_module(vot01_info['code'], vot01_info['name'], vot01_bp)
+register_module(vcds01_info['code'], vcds01_info['name'], vcds01_bp)
+register_module(vtod01_info['code'], vtod01_info['name'], vtod01_bp)
+register_module(vrt01_info['code'], vrt01_info['name'], vrt01_bp)
+register_module(vdm01_info['code'], vdm01_info['name'], vdm01_bp)
+register_module(vcg01_info['code'], vcg01_info['name'], vcg01_bp)
+register_module(vcn01_info['code'], vcn01_info['name'], vcn01_bp)
+register_module(vqm01_info['code'], vqm01_info['name'], vqm01_bp)
+register_module(vhm01_info['code'], vhm01_info['name'], vhm01_bp)
+register_module(vho01_info['code'], vho01_info['name'], vho01_bp)
+register_module(vdat01_info['code'], vdat01_info['name'], vdat01_bp)
+register_module(vem01_info['code'], vem01_info['name'], vem01_bp)
+register_module(vbm01_info['code'], vbm01_info['name'], vbm01_bp)
+register_module(vctm01_info['code'], vctm01_info['name'], vctm01_bp)
+register_module(ldud01_info['code'], ldud01_info['name'], ldud01_bp)
+register_module(mbcm01_info['code'], mbcm01_info['name'], mbcm01_bp)
+register_module(pbm01_info['code'], pbm01_info['name'], pbm01_bp)
+register_module(mbcds01_info['code'], mbcds01_info['name'], mbcds01_bp)
+register_module(mbc01_info['code'], mbc01_info['name'], mbc01_bp)
+register_module(eu01_info['code'], eu01_info['name'], eu01_bp)
+register_module(crm01_info['code'], crm01_info['name'], crm01_bp)
+register_module(vexds01_info['code'], vexds01_info['name'], vexds01_bp)
+register_module(vex01_info['code'], vex01_info['name'], vex01_bp)
+
+# Register finance modules
+register_module(fcrm01_info['code'], fcrm01_info['name'], fcrm01_bp)
+register_module(fgrm01_info['code'], fgrm01_info['name'], fgrm01_bp)
+register_module(fstm01_info['code'], fstm01_info['name'], fstm01_bp)
+register_module(fcam01_info['code'], fcam01_info['name'], fcam01_bp)
+register_module(fin01_info['code'], fin01_info['name'], fin01_bp)
+register_module(srv01_info['code'], srv01_info['name'], srv01_bp)
+
+def login_required(f):
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        if 'user_id' not in session:
+            return redirect(url_for('login'))
+        return f(*args, **kwargs)
+    return decorated
+
+@app.route('/')
+def index():
+    return redirect(url_for('login'))
+
+@app.route('/login', methods=['GET', 'POST'])
+def login():
+    if request.method == 'POST':
+        username = request.form.get('username')
+        password = request.form.get('password')
+        conn = get_db()
+        cur = get_cursor(conn)
+        cur.execute('SELECT * FROM users WHERE username = %s AND password = %s',
+                       (username, password))
+        user = cur.fetchone()
+        conn.close()
+        if user:
+            session['user_id'] = user['id']
+            session['username'] = user['username']
+            session['is_admin'] = bool(user['is_admin'])
+            return redirect(url_for('home'))
+        return render_template('login.html', error='Invalid credentials')
+    return render_template('login.html')
+
+@app.route('/logout')
+def logout():
+    session.clear()
+    return redirect(url_for('login'))
+
+@app.route('/home')
+@login_required
+def home():
+    return render_template('home.html', modules=MODULES, username=session.get('username'), is_admin=session.get('is_admin'))
+
+@app.route('/api/modules/search')
+@login_required
+def search_modules():
+    query = request.args.get('q', '').lower()
+    results = [{'code': k, 'name': v['name']} for k, v in MODULES.items()
+               if query in k.lower() or query in v['name'].lower()]
+    return jsonify(results)
+
+if __name__ == '__main__':
+    app.run(debug=True, host='0.0.0.0', port=5000)

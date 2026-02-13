@@ -1,0 +1,155 @@
+{% extends "base.html" %}
+
+{% block title %}Bills - PORTMAN{% endblock %}
+
+{% block content %}
+<style>
+
+    .toolbar { margin-bottom: 15px; }
+    .btn { padding: 6px 12px; font-size: 11px; border: none; border-radius: 3px; cursor: pointer; margin-right: 5px; }
+    .btn-primary { background: #3498db; color: white; }
+    .btn-success { background: #27ae60; color: white; }
+    .data-table { width: 100%; border-collapse: collapse; font-size: 11px; background: white; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+    .data-table th, .data-table td { padding: 8px; text-align: left; border-bottom: 1px solid #ecf0f1; }
+    .data-table th { background: #34495e; color: white; font-weight: 600; font-size: 10px; text-transform: uppercase; }
+    .data-table tr:hover { background: #f8f9fa; }
+    .status { padding: 2px 6px; border-radius: 3px; font-size: 10px; color: white; }
+    .status-draft { background: #95a5a6; }
+    .status-approved { background: #27ae60; }
+    .status-rejected { background: #e74c3c; }
+    .status-invoiced { background: #3498db; }
+    .filters { margin-bottom: 15px; display: flex; gap: 10px; }
+    .filters select { padding: 6px; font-size: 11px; border: 1px solid #ddd; border-radius: 3px; }
+    .pagination { margin-top: 15px; display: flex; gap: 5px; justify-content: center; font-size: 11px; }
+</style>
+
+<div class="module-header">
+    <h2>Billing and Invoicing</h2>
+    <span class="module-code">FIN01</span>
+</div>
+
+<div class="toolbar">
+    {% if perms.can_add %}
+    <button class="btn btn-primary" onclick="location.href='/module/FIN01/bill/generate'">+ Generate Bill</button>
+    <button class="btn btn-success" onclick="location.href='/module/FIN01/invoice/generate'">+ Generate Invoice</button>
+    {% endif %}
+    <button class="btn btn-primary" onclick="location.href='/module/FIN01/invoices'">View Invoices</button>
+</div>
+
+<div class="filters">
+    <label style="font-size: 11px; padding: 6px 0;">Filter by Status:</label>
+    <select onchange="location.href='?status='+this.value" style="padding: 6px; font-size: 11px;">
+        <option value="">All</option>
+        <option value="Draft" {% if status_filter == 'Draft' %}selected{% endif %}>Draft</option>
+        <option value="Pending Approval" {% if status_filter == 'Pending Approval' %}selected{% endif %}>Pending Approval</option>
+        <option value="Approved" {% if status_filter == 'Approved' %}selected{% endif %}>Approved</option>
+        <option value="Rejected" {% if status_filter == 'Rejected' %}selected{% endif %}>Rejected</option>
+        <option value="Invoiced" {% if status_filter == 'Invoiced' %}selected{% endif %}>Invoiced</option>
+    </select>
+</div>
+
+<table class="data-table">
+    <thead>
+        <tr>
+            <th>Bill Number</th>
+            <th>Bill Date</th>
+            <th>Source</th>
+            <th>Customer</th>
+            <th>Subtotal</th>
+            <th>GST</th>
+            <th>Total</th>
+            <th>Currency</th>
+            <th>Status</th>
+            <th>Actions</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for row in data %}
+        <tr>
+            <td>{{ row.bill_number }}</td>
+            <td>{{ row.bill_date }}</td>
+            <td>{{ row.source_display }}</td>
+            <td>{{ row.customer_name }}</td>
+            <td style="text-align: right;">{{ "%.2f"|format(row.subtotal) }}</td>
+            <td style="text-align: right;">{{ "%.2f"|format(row.cgst_amount + row.sgst_amount + row.igst_amount) }}</td>
+            <td style="text-align: right;">{{ "%.2f"|format(row.total_amount) }}</td>
+            <td>{{ row.currency_code }}</td>
+            <td>
+                <span class="status status-{{ row.bill_status|lower|replace(' ', '-') }}">{{ row.bill_status }}</span>
+            </td>
+            <td>
+                <button class="btn" style="background:#3498db;color:white;font-size:10px;padding:4px 8px;" onclick="location.href='/module/FIN01/bill/{{ row.id }}'">View</button>
+                {% if row.bill_status == 'Draft' or row.bill_status == 'Rejected' %}
+                    {% if perms.can_edit %}
+                    <button class="btn btn-primary" onclick="submitForApproval({{ row.id }})">Submit</button>
+                    {% endif %}
+                {% elif row.bill_status == 'Pending Approval' %}
+                    <button class="btn btn-success" onclick="approveBill({{ row.id }})">Approve</button>
+                    <button class="btn status-rejected" onclick="rejectBill({{ row.id }})">Reject</button>
+                {% endif %}
+            </td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+
+<div class="pagination">
+    {% if page > 1 %}
+    <button class="btn" onclick="location.href='?page={{ page - 1 }}&status={{ status_filter or '' }}'">Previous</button>
+    {% endif %}
+    <span style="padding: 5px 10px;">Page {{ page }} of {{ last_page }}</span>
+    {% if page < last_page %}
+    <button class="btn" onclick="location.href='?page={{ page + 1 }}&status={{ status_filter or '' }}'">Next</button>
+    {% endif %}
+</div>
+
+<script>
+addToRecent('FIN01', 'Billing & Invoicing');
+
+async function submitForApproval(id) {
+    if (!confirm('Submit bill for approval?')) return;
+    const res = await fetch('/api/module/FIN01/bill/submit', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({id})
+    });
+    const result = await res.json();
+    if (result.success) {
+        location.reload();
+    } else {
+        alert('Error: ' + result.error);
+    }
+}
+
+async function approveBill(id) {
+    if (!confirm('Approve this bill?')) return;
+    const res = await fetch('/api/module/FIN01/bill/approve', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({id})
+    });
+    const result = await res.json();
+    if (result.success) {
+        location.reload();
+    } else {
+        alert('Error: ' + result.error);
+    }
+}
+
+async function rejectBill(id) {
+    const reason = prompt('Enter rejection reason:');
+    if (!reason) return;
+    const res = await fetch('/api/module/FIN01/bill/reject', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({id, reason})
+    });
+    const result = await res.json();
+    if (result.success) {
+        location.reload();
+    } else {
+        alert('Error: ' + result.error);
+    }
+}
+</script>
+{% endblock %}

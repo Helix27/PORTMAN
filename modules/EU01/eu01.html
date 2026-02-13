@@ -1,0 +1,338 @@
+{% extends "base.html" %}
+
+{% block title %}Equipment Utilization - PORTMAN{% endblock %}
+
+{% block content %}
+<div class="module-header">
+    <h2>Equipment Utilization</h2>
+    <span class="module-code">EU01</span>
+    <span id="saveStatus" class="save-status"></span>
+</div>
+
+<div class="toolbar">
+    {% if permissions.can_add %}<button class="btn btn-add" onclick="addRow()">+ Add Row</button>{% endif %}
+    {% if permissions.can_delete %}<button class="btn btn-delete" onclick="deleteSelected()">Delete Selected</button>{% endif %}
+    {% if permissions.can_add or permissions.can_edit %}<button class="btn btn-save" onclick="saveAll()">Save (Ctrl+S)</button>{% endif %}
+    <div class="row-info">Rows: <span id="rowCount">0</span> / <span id="totalCount">0</span></div>
+</div>
+
+<div id="table"></div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    addToRecent('EU01', 'Equipment Utilization');
+
+    let table;
+    let vcnOptions = [];  // Array of {value, label, type, id}
+    let mbcOptions = [];  // Array of {value, label, type, id}
+    let vexOptions = [];  // Array of {value, label, type, id}
+    let mbcNames = [];    // MBC names from master
+    let equipmentList = [];
+    let delayList = [];
+    let cargoList = [];
+    let operationTypes = [];
+    let uomList = [];
+    let routeList = [];
+
+    const currentUser = '{{ session.username }}';
+    const permissions = {
+        can_read: {{ permissions.can_read|default(0) }},
+        can_add: {{ permissions.can_add|default(0) }},
+        can_edit: {{ permissions.can_edit|default(0) }},
+        can_delete: {{ permissions.can_delete|default(0) }}
+    };
+
+    function getTodayDate() {
+        return new Date().toISOString().split('T')[0];
+    }
+
+    function showStatus(message, type) {
+        const status = document.getElementById('saveStatus');
+        status.textContent = message;
+        status.className = 'save-status ' + type;
+        if (type === 'saved') {
+            setTimeout(() => { status.textContent = ''; status.className = 'save-status'; }, 2000);
+        }
+    }
+
+    async function loadMasterData() {
+        const [vcn, mbc, vex, mbcNamesRes, equip, delays, cargo, ops, uom, routes] = await Promise.all([
+            fetch('/api/module/EU01/vcn-options').then(r => r.json()),
+            fetch('/api/module/EU01/mbc-options').then(r => r.json()),
+            fetch('/api/module/EU01/vex-options').then(r => r.json()),
+            fetch('/api/module/EU01/mbc-names').then(r => r.json()),
+            fetch('/api/module/EU01/equipment').then(r => r.json()),
+            fetch('/api/module/EU01/delays').then(r => r.json()),
+            fetch('/api/module/EU01/cargo').then(r => r.json()),
+            fetch('/api/module/EU01/operation-types').then(r => r.json()),
+            fetch('/api/module/EU01/uom').then(r => r.json()),
+            fetch('/api/module/EU01/routes').then(r => r.json())
+        ]);
+
+        vcnOptions = vcn;
+        mbcOptions = mbc;
+        vexOptions = vex;
+        mbcNames = mbcNamesRes;
+        equipmentList = equip;
+        delayList = delays;
+        cargoList = cargo;
+        operationTypes = ops;
+        uomList = uom;
+        routeList = routes;
+
+        initTable();
+    }
+
+    function toOptions(arr) {
+        const opts = {'': ''};
+        arr.forEach(item => { opts[item] = item; });
+        return opts;
+    }
+
+    function getVcnMbcOptions() {
+        const opts = {'': ''};
+        vcnOptions.forEach(opt => { opts[opt.label] = opt.label; });
+        mbcOptions.forEach(opt => { opts[opt.label] = opt.label; });
+        vexOptions.forEach(opt => { opts[opt.label] = opt.label; });
+        return opts;
+    }
+
+    // Custom datetime editor
+    var datetimeEditor = function(cell, onRendered, success, cancel) {
+        var cellValue = cell.getValue() || '';
+        var input = document.createElement("input");
+        input.type = "datetime-local";
+        input.value = cellValue;
+        input.style.width = "100%";
+        input.style.boxSizing = "border-box";
+        input.style.padding = "4px";
+
+        onRendered(function() {
+            input.focus();
+            input.style.height = "100%";
+        });
+
+        input.addEventListener("change", function() { success(input.value); });
+        input.addEventListener("blur", function() { success(input.value); });
+        input.addEventListener("keydown", function(e) {
+            if (e.key === "Enter") success(input.value);
+            if (e.key === "Escape") cancel();
+        });
+        return input;
+    };
+
+    // Dynamic barge editor based on VCN/MBC/VEX selection
+    var bargeEditor = function(cell, onRendered, success, cancel) {
+        const row = cell.getRow();
+        const rowData = row.getData();
+        const sourceDisplay = rowData.source_display || '';
+
+        // Determine if it's a VCN, MBC, or VEX selection
+        let options = [];
+
+        // Check if it's a VCN selection
+        const vcnMatch = vcnOptions.find(v => v.label === sourceDisplay);
+        if (vcnMatch) {
+            // Fetch barges for this VCN
+            fetch(`/api/module/EU01/barges/${vcnMatch.id}`)
+                .then(r => r.json())
+                .then(barges => {
+                    options = barges;
+                    renderSelect(options);
+                });
+        } else {
+            // Check if it's an MBC selection - use MBC names from master
+            const mbcMatch = mbcOptions.find(m => m.label === sourceDisplay);
+            if (mbcMatch) {
+                options = mbcNames;
+                renderSelect(options);
+            } else {
+                // Check if it's a VEX selection - fetch barges and MBCs
+                const vexMatch = vexOptions.find(v => v.label === sourceDisplay);
+                if (vexMatch) {
+                    Promise.all([
+                        fetch(`/api/module/EU01/vex-barges/${vexMatch.id}`).then(r => r.json()),
+                        fetch(`/api/module/EU01/vex-mbcs/${vexMatch.id}`).then(r => r.json())
+                    ]).then(([barges, mbcs]) => {
+                        options = [...barges, ...mbcs];
+                        renderSelect(options);
+                    });
+                } else {
+                    renderSelect(options);
+                }
+            }
+        }
+
+        var select = document.createElement("select");
+        select.style.width = "100%";
+        select.style.boxSizing = "border-box";
+        select.style.padding = "4px";
+
+        function renderSelect(opts) {
+            select.innerHTML = '<option value=""></option>';
+            opts.forEach(opt => {
+                const option = document.createElement("option");
+                option.value = opt;
+                option.textContent = opt;
+                if (opt === cell.getValue()) option.selected = true;
+                select.appendChild(option);
+            });
+        }
+
+        // Initially render empty, will be populated by fetch or directly
+        renderSelect([]);
+
+        onRendered(function() {
+            select.focus();
+        });
+
+        select.addEventListener("change", function() { success(select.value); });
+        select.addEventListener("blur", function() { success(select.value); });
+        select.addEventListener("keydown", function(e) {
+            if (e.key === "Enter") success(select.value);
+            if (e.key === "Escape") cancel();
+        });
+
+        return select;
+    };
+
+    function initTable() {
+        const canEdit = permissions.can_edit || permissions.can_add;
+
+        const columns = [
+            {formatter: "rowSelection", titleFormatter: "rowSelection", hozAlign: "center", headerSort: false, width: 40},
+            {title: "ID", field: "id", width: 60},
+            {title: "VCN / MBC / VEX", field: "source_display", width: 280, editor: canEdit ? "list" : false,
+                editorParams: {values: getVcnMbcOptions(), autocomplete: true, allowEmpty: true, listOnEmpty: true}},
+            {title: "Barge / MBC Name", field: "barge_name", width: 150, editor: canEdit ? bargeEditor : false},
+            {title: "Equipment", field: "equipment_name", width: 140, editor: canEdit ? "list" : false,
+                editorParams: {values: toOptions(equipmentList), autocomplete: true, allowEmpty: true, listOnEmpty: true}},
+            {title: "Operator", field: "operator_name", width: 120, editor: canEdit ? "input" : false},
+            {title: "Delay", field: "delay_name", width: 140, editor: canEdit ? "list" : false,
+                editorParams: {values: toOptions(delayList), autocomplete: true, allowEmpty: true, listOnEmpty: true}},
+            {title: "Cargo", field: "cargo_name", width: 140, editor: canEdit ? "list" : false,
+                editorParams: {values: toOptions(cargoList), autocomplete: true, allowEmpty: true, listOnEmpty: true}},
+            {title: "Operation", field: "operation_type", width: 120, editor: canEdit ? "list" : false,
+                editorParams: {values: toOptions(operationTypes), autocomplete: true, allowEmpty: true, listOnEmpty: true}},
+            {title: "Qty", field: "quantity", width: 90, hozAlign: "right", editor: canEdit ? "number" : false,
+                editorParams: {min: 0, step: 0.01}},
+            {title: "UOM", field: "quantity_uom", width: 80, editor: canEdit ? "list" : false,
+                editorParams: {values: toOptions(uomList), autocomplete: true, allowEmpty: true, listOnEmpty: true}},
+            {title: "Route", field: "route_name", width: 140, editor: canEdit ? "list" : false,
+                editorParams: {values: toOptions(routeList), autocomplete: true, allowEmpty: true, listOnEmpty: true}},
+            {title: "Start Time", field: "start_time", width: 150, editor: canEdit ? datetimeEditor : false,
+                formatter: function(cell) { return cell.getValue() ? cell.getValue().replace('T', ' ') : ''; }},
+            {title: "End Time", field: "end_time", width: 150, editor: canEdit ? datetimeEditor : false,
+                formatter: function(cell) { return cell.getValue() ? cell.getValue().replace('T', ' ') : ''; }},
+            {title: "Entry Date", field: "entry_date", width: 110, editor: canEdit ? "date" : false},
+            {title: "Created By", field: "created_by", width: 100}
+        ];
+
+        table = new Tabulator("#table", {
+            height: "calc(100vh - 160px)",
+            layout: "fitDataFill",
+            columns: columns,
+            pagination: true,
+            paginationMode: "remote",
+            paginationSize: 20,
+            ajaxURL: "/api/module/EU01/data",
+            ajaxResponse: function(url, params, response) {
+                document.getElementById('rowCount').textContent = response.data.length;
+                document.getElementById('totalCount').textContent = response.total;
+                return response;
+            },
+            selectable: true
+        });
+
+        // Auto-fill barge_name when VCN/MBC changes
+        table.on("cellEdited", function(cell) {
+            if (cell.getField() === "source_display") {
+                const sourceDisplay = cell.getValue() || '';
+                // Check if it's an MBC selection (format: doc_num / mbc_name / doc_date)
+                const mbcMatch = mbcOptions.find(m => m.label === sourceDisplay);
+                if (mbcMatch) {
+                    // Extract MBC name from the display (second part)
+                    const parts = sourceDisplay.split(' / ');
+                    if (parts.length >= 2) {
+                        cell.getRow().update({barge_name: parts[1]});
+                    }
+                } else {
+                    // VCN selected - clear barge_name, user will select from dropdown
+                    cell.getRow().update({barge_name: ''});
+                }
+            }
+        });
+
+        if (localStorage.getItem('theme') === 'dark') {
+            document.getElementById('table').classList.add('tabulator-dark');
+        }
+    }
+
+    function addRow() {
+        table.addRow({
+            created_by: currentUser,
+            entry_date: getTodayDate()
+        }, true);
+    }
+
+    function deleteSelected() {
+        const selected = table.getSelectedRows();
+        if (selected.length === 0) { alert('Select rows to delete'); return; }
+        if (!confirm(`Delete ${selected.length} row(s)?`)) return;
+
+        const ids = selected.map(row => row.getData().id).filter(id => id);
+
+        if (ids.length > 0) {
+            fetch("/api/module/EU01/delete", {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ids: ids})
+            });
+        }
+        selected.forEach(row => row.delete());
+    }
+
+    async function saveAll() {
+        showStatus('Saving...', 'saving');
+        const rows = table.getRows();
+        let savedCount = 0;
+
+        for (const row of rows) {
+            const data = row.getData();
+            // Skip empty rows
+            if (!data.source_display && !data.barge_name && !data.equipment_name && !data.id) continue;
+
+            // Determine source type and id from selection
+            const vcnMatch = vcnOptions.find(v => v.label === data.source_display);
+            const mbcMatch = mbcOptions.find(m => m.label === data.source_display);
+
+            if (vcnMatch) {
+                data.source_type = 'VCN';
+                data.source_id = vcnMatch.id;
+            } else if (mbcMatch) {
+                data.source_type = 'MBC';
+                data.source_id = mbcMatch.id;
+            }
+
+            const res = await fetch("/api/module/EU01/save", {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify(data)
+            });
+            const result = await res.json();
+            if (result.id) {
+                row.update({id: result.id});
+                savedCount++;
+            }
+        }
+        showStatus(`Saved ${savedCount} row(s)`, 'saved');
+    }
+
+    document.addEventListener('keydown', function(e) {
+        if ((e.ctrlKey || e.metaKey) && e.key === 's') { e.preventDefault(); saveAll(); }
+    });
+
+    loadMasterData();
+</script>
+{% endblock %}

@@ -1,0 +1,21 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(powershell -Command:*)",
+      "Bash(ls -la \"d:\\\\PORTMAN\\\\templates\\\\modules\\\\LDUD01\"\" 2>nul || echo \"Directory does not exist \")",
+      "Bash(grep:*)",
+      "Skill(superpowers:brainstorming)",
+      "Skill(superpowers:brainstorming:*)",
+      "Bash(dir:*)",
+      "Bash(python:*)",
+      "Bash(ls:*)",
+      "Bash(sqlite3:*)",
+      "Bash(pip install:*)",
+      "Bash(alembic revision:*)",
+      "Bash(alembic downgrade:*)",
+      "Bash(alembic upgrade:*)",
+      "Bash(timeout /t 4)",
+      "Bash(ping:*)"
+    ]
+  }
+}

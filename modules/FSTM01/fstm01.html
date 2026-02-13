@@ -1,0 +1,385 @@
+{% extends "base.html" %}
+
+{% block title %}Service Type Master - PORTMAN{% endblock %}
+
+{% block content %}
+<style>
+    .toolbar { margin-bottom: 15px; }
+    .btn { padding: 6px 12px; font-size: 11px; border: none; border-radius: 3px; cursor: pointer; margin-right: 5px; }
+    .btn-add { background: #27ae60; color: white; }
+    .btn-save { background: #3498db; color: white; }
+    .btn-delete { background: #e74c3c; color: white; }
+    .btn-fields { background: #8e44ad; color: white; font-size: 10px; padding: 4px 8px; }
+    .data-table { width: 100%; border-collapse: collapse; font-size: 11px; background: white; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+    .data-table th, .data-table td { padding: 8px; text-align: left; border-bottom: 1px solid #ecf0f1; }
+    .data-table th { background: #34495e; color: white; font-weight: 600; font-size: 10px; text-transform: uppercase; }
+    .data-table tr:hover { background: #f8f9fa; }
+    .data-table input, .data-table select { width: 100%; padding: 4px; font-size: 11px; border: 1px solid #ddd; }
+    .pagination { margin-top: 15px; display: flex; gap: 5px; justify-content: center; font-size: 11px; }
+
+    /* Field config panel */
+    .field-panel { background: #f8f9fa; border: 2px solid #8e44ad; border-radius: 4px; padding: 15px; margin-top: 15px; display: none; }
+    .field-panel h3 { margin: 0 0 10px 0; font-size: 13px; color: #8e44ad; border-bottom: 2px solid #8e44ad; padding-bottom: 5px; }
+    .field-table { width: 100%; border-collapse: collapse; font-size: 11px; background: white; }
+    .field-table th, .field-table td { padding: 6px; text-align: left; border-bottom: 1px solid #ecf0f1; }
+    .field-table th { background: #8e44ad; color: white; font-weight: 600; font-size: 10px; }
+    .field-table input, .field-table select { width: 100%; padding: 3px; font-size: 11px; border: 1px solid #ddd; }
+    .field-table input[type="checkbox"] { width: auto; }
+</style>
+
+<div class="module-header">
+    <h2>Service Type Master</h2>
+    <span class="module-code">FSTM01</span>
+</div>
+
+<div class="toolbar">
+    {% if perms.can_add %}
+    <button class="btn btn-add" onclick="addRow()">+ Add Row</button>
+    {% endif %}
+    {% if perms.can_delete %}
+    <button class="btn btn-delete" onclick="deleteRow()">Delete Selected</button>
+    {% endif %}
+    {% if perms.can_edit or perms.can_add %}
+    <button class="btn btn-save" onclick="saveAll()">Save All</button>
+    {% endif %}
+</div>
+
+<form id="dataForm">
+<table class="data-table">
+    <thead>
+        <tr>
+            <th style="width:30px"><input type="checkbox" id="selectAll" onclick="toggleSelectAll()"></th>
+            <th>Service Code</th>
+            <th>Service Name</th>
+            <th>Category</th>
+            <th>GL Code</th>
+            <th>SAC Code</th>
+            <th>GST Rate</th>
+            <th>UOM</th>
+            <th>Billable</th>
+            <th>Status</th>
+            <th>Fields</th>
+        </tr>
+    </thead>
+    <tbody id="tableBody">
+        {% for row in data %}
+        <tr data-id="{{ row.id }}">
+            <td><input type="checkbox" class="row-select"></td>
+            <td><input type="text" name="service_code[]" value="{{ row.service_code }}" {% if row.id and not perms.can_edit %}readonly{% endif %}></td>
+            <td><input type="text" name="service_name[]" value="{{ row.service_name }}" {% if not perms.can_edit %}readonly{% endif %}></td>
+            <td><input type="text" name="service_category[]" value="{{ row.service_category }}" {% if not perms.can_edit %}readonly{% endif %}></td>
+            <td><input type="text" name="gl_code[]" value="{{ row.gl_code }}" {% if not perms.can_edit %}readonly{% endif %}></td>
+            <td><input type="text" name="sac_code[]" value="{{ row.sac_code }}" {% if not perms.can_edit %}readonly{% endif %}></td>
+            <td><select name="gst_rate_id[]" {% if not perms.can_edit %}disabled{% endif %}>
+                <option value="">--Select--</option>
+                {% for gst in gst_rates %}
+                <option value="{{ gst.id }}" {% if row.gst_rate_id == gst.id %}selected{% endif %}>{{ gst.rate_name }}</option>
+                {% endfor %}
+            </select></td>
+            <td><input type="text" name="uom[]" value="{{ row.uom }}" {% if not perms.can_edit %}readonly{% endif %}></td>
+            <td><select name="is_billable[]" {% if not perms.can_edit %}disabled{% endif %}>
+                <option value="1" {% if row.is_billable %}selected{% endif %}>Yes</option>
+                <option value="0" {% if not row.is_billable %}selected{% endif %}>No</option>
+            </select></td>
+            <td><select name="is_active[]" {% if not perms.can_edit %}disabled{% endif %}>
+                <option value="1" {% if row.is_active %}selected{% endif %}>Active</option>
+                <option value="0" {% if not row.is_active %}selected{% endif %}>Inactive</option>
+            </select></td>
+            <td>{% if row.id %}<button type="button" class="btn btn-fields" onclick="openFieldConfig({{ row.id }}, '{{ row.service_name }}')">Configure</button>{% endif %}</td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+</form>
+
+<div class="pagination">
+    {% if page > 1 %}
+    <button class="btn" onclick="location.href='?page={{ page - 1 }}'">Previous</button>
+    {% endif %}
+    <span style="padding: 5px 10px;">Page {{ page }} of {{ last_page }}</span>
+    {% if page < last_page %}
+    <button class="btn" onclick="location.href='?page={{ page + 1 }}'">Next</button>
+    {% endif %}
+</div>
+
+<!-- Field Configuration Panel -->
+<div id="fieldPanel" class="field-panel">
+    <h3>Custom Fields for: <span id="fieldServiceName"></span>
+        <button type="button" class="btn" style="float:right;background:#95a5a6;color:white;" onclick="closeFieldPanel()">Close</button>
+    </h3>
+    <input type="hidden" id="fieldServiceTypeId">
+    <div class="toolbar">
+        <button type="button" class="btn btn-add" onclick="addFieldRow()">+ Add Field</button>
+        <button type="button" class="btn btn-save" onclick="saveAllFields()">Save Fields</button>
+        <button type="button" class="btn btn-delete" onclick="deleteSelectedFields()">Delete Selected</button>
+    </div>
+    <table class="field-table">
+        <thead>
+            <tr>
+                <th style="width:25px"><input type="checkbox" onclick="toggleFieldSelectAll(this)"></th>
+                <th>Field Label</th>
+                <th>Internal Name</th>
+                <th style="width:100px">Type</th>
+                <th>Options / Formula</th>
+                <th style="width:80px">Result Type</th>
+                <th style="width:45px">Req</th>
+                <th style="width:55px">Bill Qty</th>
+                <th style="width:45px">Order</th>
+            </tr>
+        </thead>
+        <tbody id="fieldTableBody"></tbody>
+    </table>
+</div>
+
+<script>
+addToRecent('FSTM01', 'Service Type Master');
+
+function toggleSelectAll() {
+    const checkboxes = document.querySelectorAll('.row-select');
+    const selectAll = document.getElementById('selectAll').checked;
+    checkboxes.forEach(cb => cb.checked = selectAll);
+}
+
+function addRow() {
+    const tbody = document.getElementById('tableBody');
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+        <td><input type="checkbox" class="row-select"></td>
+        <td><input type="text" name="service_code[]" required></td>
+        <td><input type="text" name="service_name[]" required></td>
+        <td><input type="text" name="service_category[]"></td>
+        <td><input type="text" name="gl_code[]"></td>
+        <td><input type="text" name="sac_code[]"></td>
+        <td><select name="gst_rate_id[]">
+            <option value="">--Select--</option>
+            {% for gst in gst_rates %}
+            <option value="{{ gst.id }}">{{ gst.rate_name }}</option>
+            {% endfor %}
+        </select></td>
+        <td><input type="text" name="uom[]"></td>
+        <td><select name="is_billable[]">
+            <option value="1" selected>Yes</option>
+            <option value="0">No</option>
+        </select></td>
+        <td><select name="is_active[]">
+            <option value="1" selected>Active</option>
+            <option value="0">Inactive</option>
+        </select></td>
+        <td></td>
+    `;
+    tbody.appendChild(tr);
+}
+
+async function saveAll() {
+    const rows = document.querySelectorAll('#tableBody tr');
+    let saved = 0;
+
+    for (let row of rows) {
+        const id = row.getAttribute('data-id') || '';
+        const data = {
+            id: id,
+            service_code: row.querySelector('[name="service_code[]"]').value,
+            service_name: row.querySelector('[name="service_name[]"]').value,
+            service_category: row.querySelector('[name="service_category[]"]').value,
+            gl_code: row.querySelector('[name="gl_code[]"]').value,
+            sac_code: row.querySelector('[name="sac_code[]"]').value,
+            gst_rate_id: row.querySelector('[name="gst_rate_id[]"]').value,
+            uom: row.querySelector('[name="uom[]"]').value,
+            is_billable: row.querySelector('[name="is_billable[]"]').value,
+            is_active: row.querySelector('[name="is_active[]"]').value
+        };
+
+        if (!data.service_name) continue;
+
+        const res = await fetch('/api/module/FSTM01/save', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify(data)
+        });
+        const result = await res.json();
+        if (result.success) {
+            saved++;
+            if (!id) row.setAttribute('data-id', result.id);
+        }
+    }
+
+    if (saved > 0) {
+        alert(`Saved ${saved} row(s)`);
+        location.reload();
+    }
+}
+
+async function deleteRow() {
+    const selected = document.querySelectorAll('.row-select:checked');
+    if (selected.length === 0) { alert('Select rows to delete'); return; }
+    if (!confirm(`Delete ${selected.length} row(s)?`)) return;
+
+    for (let checkbox of selected) {
+        const row = checkbox.closest('tr');
+        const id = row.getAttribute('data-id');
+        if (id) {
+            await fetch('/api/module/FSTM01/delete', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({id: id})
+            });
+        }
+        row.remove();
+    }
+    location.reload();
+}
+
+// ===== FIELD CONFIGURATION =====
+
+var currentFieldServiceTypeId = null;
+
+async function openFieldConfig(serviceTypeId, serviceName) {
+    currentFieldServiceTypeId = serviceTypeId;
+    document.getElementById('fieldServiceTypeId').value = serviceTypeId;
+    document.getElementById('fieldServiceName').textContent = serviceName;
+    document.getElementById('fieldPanel').style.display = 'block';
+
+    // Load existing fields
+    const res = await fetch(`/api/module/FSTM01/fields/${serviceTypeId}`);
+    const data = await res.json();
+    renderFieldRows(data.data || []);
+
+    // Scroll to panel
+    document.getElementById('fieldPanel').scrollIntoView({ behavior: 'smooth' });
+}
+
+function closeFieldPanel() {
+    document.getElementById('fieldPanel').style.display = 'none';
+    currentFieldServiceTypeId = null;
+}
+
+function renderFieldRows(fields) {
+    const tbody = document.getElementById('fieldTableBody');
+    tbody.innerHTML = '';
+    fields.forEach(f => {
+        addFieldRowWithData(f);
+    });
+}
+
+function addFieldRow() {
+    addFieldRowWithData({});
+}
+
+function addFieldRowWithData(f) {
+    const tbody = document.getElementById('fieldTableBody');
+    const tr = document.createElement('tr');
+    if (f.id) tr.setAttribute('data-field-id', f.id);
+
+    const typeOptions = ['text', 'number', 'datetime', 'date', 'dropdown', 'checkbox', 'calculated'];
+    const resultTypeOptions = ['', 'hours', 'days', 'number'];
+
+    tr.innerHTML = `
+        <td><input type="checkbox" class="field-select"></td>
+        <td><input type="text" class="f-label" value="${f.field_label || ''}" placeholder="e.g. Grab Hiring Start"></td>
+        <td><input type="text" class="f-name" value="${f.field_name || ''}" placeholder="e.g. grab_hire_start"></td>
+        <td><select class="f-type">
+            ${typeOptions.map(t => `<option value="${t}" ${f.field_type === t ? 'selected' : ''}>${t}</option>`).join('')}
+        </select></td>
+        <td><input type="text" class="f-options" value="${(f.field_options || '').replace(/"/g, '&quot;')}" placeholder="JSON array or formula"></td>
+        <td><select class="f-result-type">
+            ${resultTypeOptions.map(t => `<option value="${t}" ${f.calculation_result_type === t ? 'selected' : ''}>${t || '--'}</option>`).join('')}
+        </select></td>
+        <td style="text-align:center"><input type="checkbox" class="f-required" ${f.is_required ? 'checked' : ''}></td>
+        <td style="text-align:center"><input type="checkbox" class="f-billable" ${f.is_billable_qty ? 'checked' : ''}></td>
+        <td><input type="number" class="f-order" value="${f.display_order || 0}" style="width:40px"></td>
+    `;
+
+    // Auto-generate field_name from label
+    const labelInput = tr.querySelector('.f-label');
+    const nameInput = tr.querySelector('.f-name');
+    labelInput.addEventListener('blur', function() {
+        if (!nameInput.value && labelInput.value) {
+            nameInput.value = labelInput.value.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/(^_|_$)/g, '');
+        }
+    });
+
+    tbody.appendChild(tr);
+}
+
+function toggleFieldSelectAll(masterCheckbox) {
+    document.querySelectorAll('.field-select').forEach(cb => cb.checked = masterCheckbox.checked);
+}
+
+async function saveAllFields() {
+    const serviceTypeId = document.getElementById('fieldServiceTypeId').value;
+    const rows = document.querySelectorAll('#fieldTableBody tr');
+    let saved = 0;
+
+    for (let row of rows) {
+        const fieldId = row.getAttribute('data-field-id') || '';
+        const fieldType = row.querySelector('.f-type').value;
+
+        const data = {
+            id: fieldId,
+            service_type_id: serviceTypeId,
+            field_label: row.querySelector('.f-label').value,
+            field_name: row.querySelector('.f-name').value,
+            field_type: fieldType,
+            is_required: row.querySelector('.f-required').checked ? 1 : 0,
+            is_billable_qty: row.querySelector('.f-billable').checked ? 1 : 0,
+            display_order: parseInt(row.querySelector('.f-order').value) || 0,
+            is_active: 1
+        };
+
+        // For calculated fields, formula goes in calculation_formula; for dropdown, options go in field_options
+        const optionsVal = row.querySelector('.f-options').value;
+        if (fieldType === 'calculated') {
+            data.calculation_formula = optionsVal;
+            data.calculation_result_type = row.querySelector('.f-result-type').value;
+            data.field_options = null;
+        } else if (fieldType === 'dropdown') {
+            data.field_options = optionsVal;
+            data.calculation_formula = null;
+            data.calculation_result_type = null;
+        } else {
+            data.field_options = null;
+            data.calculation_formula = null;
+            data.calculation_result_type = null;
+        }
+
+        if (!data.field_label || !data.field_name) continue;
+
+        const res = await fetch('/api/module/FSTM01/fields/save', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify(data)
+        });
+        const result = await res.json();
+        if (result.success) {
+            saved++;
+            if (!fieldId) row.setAttribute('data-field-id', result.id);
+        }
+    }
+
+    if (saved > 0) {
+        alert(`Saved ${saved} field(s)`);
+        // Reload fields
+        openFieldConfig(serviceTypeId, document.getElementById('fieldServiceName').textContent);
+    }
+}
+
+async function deleteSelectedFields() {
+    const selected = document.querySelectorAll('.field-select:checked');
+    if (selected.length === 0) { alert('Select fields to delete'); return; }
+    if (!confirm(`Delete ${selected.length} field(s)?`)) return;
+
+    for (let checkbox of selected) {
+        const row = checkbox.closest('tr');
+        const id = row.getAttribute('data-field-id');
+        if (id) {
+            await fetch('/api/module/FSTM01/fields/delete', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({id: id})
+            });
+        }
+        row.remove();
+    }
+}
+</script>
+{% endblock %}

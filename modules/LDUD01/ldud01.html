@@ -1,0 +1,735 @@
+{% extends "base.html" %}
+
+{% block title %}Loading Unloading - PORTMAN{% endblock %}
+
+{% block head %}
+<style>
+    .sub-table-container {
+        background: #f8fafc;
+        padding: 15px;
+        border-bottom: 2px solid #3182ce;
+        box-sizing: border-box;
+        width: 100% !important;
+        max-width: 100% !important;
+        overflow: hidden;
+    }
+    .dark-theme .sub-table-container {
+        background: #1e293b;
+        border-color: #334155;
+    }
+    .sub-section {
+        margin-bottom: 15px;
+        border: 1px solid #cbd5e0;
+        border-radius: 6px;
+        overflow: hidden;
+    }
+    .sub-section:last-child {
+        margin-bottom: 0;
+    }
+    .dark-theme .sub-section {
+        border-color: #475569;
+    }
+    .sub-section-header {
+        background: #e2e8f0;
+        padding: 10px 15px;
+        font-weight: 600;
+        font-size: 13px;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        color: #1a202c;
+    }
+    .dark-theme .sub-section-header {
+        background: #334155;
+        color: #e2e8f0;
+    }
+    .sub-section-content {
+        background: white;
+        overflow-x: auto;
+    }
+    .dark-theme .sub-section-content {
+        background: #1e293b;
+    }
+    .sub-tabulator {
+        font-size: 11px;
+        width: 100% !important;
+    }
+    .sub-tabulator .tabulator-header {
+        background: #f1f5f9 !important;
+        border-bottom: 1px solid #cbd5e0 !important;
+    }
+    .sub-tabulator .tabulator-header .tabulator-col {
+        background: #f1f5f9 !important;
+        border-right: 1px solid #e2e8f0 !important;
+    }
+    .sub-tabulator .tabulator-header .tabulator-col-title {
+        color: #374151 !important;
+        font-weight: 600 !important;
+    }
+    .dark-theme .sub-tabulator .tabulator-header {
+        background: #475569 !important;
+        border-bottom: 1px solid #64748b !important;
+    }
+    .dark-theme .sub-tabulator .tabulator-header .tabulator-col {
+        background: #475569 !important;
+        border-right: 1px solid #64748b !important;
+    }
+    .dark-theme .sub-tabulator .tabulator-header .tabulator-col-title {
+        color: #e2e8f0 !important;
+    }
+    .btn-sub-add {
+        background: #48bb78;
+        color: white;
+        border: none;
+        padding: 5px 12px;
+        border-radius: 4px;
+        font-size: 12px;
+        cursor: pointer;
+    }
+    .btn-sub-add:hover {
+        background: #38a169;
+    }
+    .btn-sub-save {
+        background: #3182ce;
+        color: white;
+        border: none;
+        padding: 5px 12px;
+        border-radius: 4px;
+        font-size: 12px;
+        cursor: pointer;
+        font-weight: 500;
+    }
+    .btn-sub-save:hover {
+        background: #2c5282;
+    }
+    .btn-sub-delete {
+        background: #fc8181;
+        color: white;
+        border: none;
+        padding: 3px 10px;
+        border-radius: 3px;
+        font-size: 11px;
+        cursor: pointer;
+    }
+    .btn-sub-delete:hover {
+        background: #f56565;
+    }
+    .sub-section-actions {
+        display: flex;
+        gap: 8px;
+        align-items: center;
+    }
+    .expand-icon {
+        transition: transform 0.2s;
+    }
+    .expand-icon.expanded {
+        transform: rotate(90deg);
+    }
+    .hold-summary {
+        padding: 10px;
+        background: #f1f5f9;
+        border-bottom: 1px solid #cbd5e0;
+        font-size: 12px;
+    }
+    .dark-theme .hold-summary {
+        background: #334155;
+        border-color: #475569;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="module-header">
+    <h2>Loading Unloading</h2>
+    <span class="module-code">LDUD01</span>
+    <span id="saveStatus" class="save-status"></span>
+</div>
+
+<div class="toolbar">
+    {% if permissions.can_add %}<button class="btn btn-add" onclick="addRow()">+ Add Row</button>{% endif %}
+    {% if permissions.can_delete %}<button class="btn btn-delete" onclick="deleteSelected()">Delete Selected</button>{% endif %}
+    {% if permissions.can_add or permissions.can_edit %}<button class="btn btn-save" onclick="saveAll()">Save (Ctrl+S)</button>{% endif %}
+    <div class="row-info">Rows: <span id="rowCount">0</span> / <span id="totalCount">0</span></div>
+</div>
+
+<div id="table"></div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    addToRecent('LDUD01', 'Loading Unloading');
+
+    let table;
+    let vcnList = [];
+    let delayTypes = [];
+    let delayAccountTypes = [];
+    let equipmentList = [];
+    let bargeList = [];
+    let contractorList = [];
+    let cargoNames = [];
+    let subTables = {};
+    let stowagePlanData = {}; // Store stowage plan data per LDUD ID
+
+    const currentUser = '{{ session.username }}';
+    const permissions = {
+        can_read: {{ permissions.can_read|default(0) }},
+        can_add: {{ permissions.can_add|default(0) }},
+        can_edit: {{ permissions.can_edit|default(0) }},
+        can_delete: {{ permissions.can_delete|default(0) }}
+    };
+
+    function getTodayDate() {
+        return new Date().toISOString().split('T')[0];
+    }
+
+    function showStatus(message, type) {
+        const status = document.getElementById('saveStatus');
+        status.textContent = message;
+        status.className = 'save-status ' + type;
+        if (type === 'saved') {
+            setTimeout(() => { status.textContent = ''; status.className = 'save-status'; }, 2000);
+        }
+    }
+
+    async function loadMasterData() {
+        const [vcnRes, delayRes, datRes, eqRes, bargeRes, contractorRes, cargoRes] = await Promise.all([
+            fetch('/api/module/LDUD01/vcn_list'),
+            fetch('/api/module/VDM01/all'),
+            fetch('/api/module/VDAT01/all'),
+            fetch('/api/module/VEM01/all'),
+            fetch('/api/module/VBM01/all'),
+            fetch('/api/module/VCTM01/all'),
+            fetch('/api/module/VCG01/names')
+        ]);
+        vcnList = await vcnRes.json();
+        delayTypes = await delayRes.json();
+        delayAccountTypes = await datRes.json();
+        equipmentList = await eqRes.json();
+        bargeList = await bargeRes.json();
+        contractorList = await contractorRes.json();
+        cargoNames = await cargoRes.json();
+        initTable();
+    }
+
+    // Custom datetime editor
+    var datetimeEditor = function(cell, onRendered, success, cancel) {
+        var cellValue = cell.getValue() || '';
+        var input = document.createElement("input");
+        input.type = "datetime-local";
+        input.value = cellValue;
+        input.style.width = "100%";
+        input.style.boxSizing = "border-box";
+        input.style.padding = "4px";
+
+        onRendered(function() {
+            input.focus();
+            input.style.height = "100%";
+        });
+
+        input.addEventListener("change", function() { success(input.value); });
+        input.addEventListener("blur", function() { success(input.value); });
+        input.addEventListener("keydown", function(e) {
+            if (e.key === "Enter") success(input.value);
+            if (e.key === "Escape") cancel();
+        });
+        return input;
+    };
+
+    function initTable() {
+        const canEdit = permissions.can_edit || permissions.can_add;
+        const vcnOptions = {};
+        vcnList.forEach(v => { vcnOptions[v.value] = v.value; });
+
+        const columns = [
+            {formatter: "rowSelection", titleFormatter: "rowSelection", hozAlign: "center", headerSort: false, width: 40},
+            {
+                formatter: function(cell) {
+                    const data = cell.getRow().getData();
+                    if (!data.id) return '';
+                    return '<span class="expand-icon" style="cursor:pointer;font-size:14px;">&#9654;</span>';
+                },
+                width: 30,
+                hozAlign: "center",
+                headerSort: false,
+                cellClick: function(e, cell) {
+                    const row = cell.getRow();
+                    const data = row.getData();
+                    if (!data.id) return;
+                    toggleSubTables(row);
+                }
+            },
+            {title: "Doc Num", field: "doc_num", width: 80},
+            {title: "VCN / Vessel / Anchored", field: "vcn_display", editor: canEdit ? "list" : false,
+                editorParams: {values: vcnOptions, autocomplete: true, allowEmpty: true}, width: 250,
+                cellEdited: function(cell) {
+                    const val = cell.getValue();
+                    const vcn = vcnList.find(v => v.value === val);
+                    if (vcn) {
+                        cell.getRow().update({
+                            vcn_id: vcn.vcn_id,
+                            vcn_doc_num: vcn.vcn_doc_num,
+                            vessel_name: vcn.vessel_name,
+                            anchored_datetime: vcn.anchored_datetime
+                        });
+                    }
+                }
+            },
+            {title: "Arrival Inner Anch", field: "arrival_inner_anchorage", editor: canEdit ? datetimeEditor : false, width: 140,
+                formatter: function(cell) { return cell.getValue() ? cell.getValue().replace('T', ' ') : ''; }},
+            {title: "Arrival Outer Anch", field: "arrival_outer_anchorage", editor: canEdit ? datetimeEditor : false, width: 140,
+                formatter: function(cell) { return cell.getValue() ? cell.getValue().replace('T', ' ') : ''; }},
+            {title: "Arrived MBPT", field: "arrived_mbpt", editor: canEdit ? datetimeEditor : false, width: 140,
+                formatter: function(cell) { return cell.getValue() ? cell.getValue().replace('T', ' ') : ''; }},
+            {title: "Arrived MFL", field: "arrived_mfl", editor: canEdit ? datetimeEditor : false, width: 140,
+                formatter: function(cell) { return cell.getValue() ? cell.getValue().replace('T', ' ') : ''; }},
+            {title: "Free Pratique", field: "free_pratique_granted", editor: canEdit ? datetimeEditor : false, width: 140,
+                formatter: function(cell) { return cell.getValue() ? cell.getValue().replace('T', ' ') : ''; }},
+            {title: "NOR Tendered", field: "nor_tendered", editor: canEdit ? datetimeEditor : false, width: 140,
+                formatter: function(cell) { return cell.getValue() ? cell.getValue().replace('T', ' ') : ''; }},
+            {title: "NOR Accepted", field: "nor_accepted", editor: canEdit ? datetimeEditor : false, width: 140,
+                formatter: function(cell) { return cell.getValue() ? cell.getValue().replace('T', ' ') : ''; }},
+            {title: "Discharge Start", field: "discharge_commenced", editor: canEdit ? datetimeEditor : false, width: 140,
+                formatter: function(cell) { return cell.getValue() ? cell.getValue().replace('T', ' ') : ''; }},
+            {title: "Discharge End", field: "discharge_completed", editor: canEdit ? datetimeEditor : false, width: 140,
+                formatter: function(cell) { return cell.getValue() ? cell.getValue().replace('T', ' ') : ''; }},
+            {title: "Init Survey From", field: "initial_draft_survey_from", editor: canEdit ? datetimeEditor : false, width: 140,
+                formatter: function(cell) { return cell.getValue() ? cell.getValue().replace('T', ' ') : ''; }},
+            {title: "Init Survey To", field: "initial_draft_survey_to", editor: canEdit ? datetimeEditor : false, width: 140,
+                formatter: function(cell) { return cell.getValue() ? cell.getValue().replace('T', ' ') : ''; }},
+            {title: "Init Survey Qty", field: "initial_draft_survey_quantity", editor: canEdit ? "number" : false, width: 100, hozAlign: "right"},
+            {title: "Final Survey From", field: "final_draft_survey_from", editor: canEdit ? datetimeEditor : false, width: 140,
+                formatter: function(cell) { return cell.getValue() ? cell.getValue().replace('T', ' ') : ''; }},
+            {title: "Final Survey To", field: "final_draft_survey_to", editor: canEdit ? datetimeEditor : false, width: 140,
+                formatter: function(cell) { return cell.getValue() ? cell.getValue().replace('T', ' ') : ''; }},
+            {title: "Status", field: "doc_status", width: 80,
+                formatter: function(cell) {
+                    const val = cell.getValue();
+                    let color = '#718096';
+                    if (val === 'Approved') color = '#38a169';
+                    else if (val === 'Rejected') color = '#e53e3e';
+                    else if (val === 'Pending') color = '#d69e2e';
+                    return `<span style="color:${color};font-weight:500">${val || ''}</span>`;
+                }
+            },
+            {title: "Created By", field: "created_by", width: 90}
+        ];
+
+        table = new Tabulator("#table", {
+            height: "calc(100vh - 160px)",
+            layout: "fitDataFill",
+            columns: columns,
+            pagination: true,
+            paginationMode: "remote",
+            paginationSize: 20,
+            ajaxURL: "/api/module/LDUD01/data",
+            ajaxResponse: function(url, params, response) {
+                // Build display field
+                response.data.forEach(r => {
+                    r.vcn_display = r.vcn_doc_num ? `${r.vcn_doc_num} / ${r.vessel_name || ''}` : '';
+                    if (r.anchored_datetime) r.vcn_display += ` / ${r.anchored_datetime.replace('T', ' ')}`;
+                });
+                document.getElementById('rowCount').textContent = response.data.length;
+                document.getElementById('totalCount').textContent = response.total;
+                return response;
+            },
+            selectable: true,
+            rowFormatter: function(row) {
+                const el = row.getElement();
+                el.querySelector('.expand-icon')?.classList.remove('expanded');
+            }
+        });
+
+        if (localStorage.getItem('theme') === 'dark') {
+            document.getElementById('table').classList.add('tabulator-dark');
+        }
+    }
+
+    async function toggleSubTables(row) {
+        const el = row.getElement();
+        const icon = el.querySelector('.expand-icon');
+        const ldudId = row.getData().id;
+        const containerId = `sub-container-${ldudId}`;
+        const existingContainer = document.getElementById(containerId);
+
+        if (existingContainer) {
+            if (subTables[ldudId]) {
+                Object.values(subTables[ldudId]).forEach(t => t.destroy());
+                delete subTables[ldudId];
+            }
+            existingContainer.remove();
+            icon?.classList.remove('expanded');
+            return;
+        }
+
+        icon?.classList.add('expanded');
+
+        const subContainer = document.createElement('div');
+        subContainer.id = containerId;
+        subContainer.className = 'sub-table-container';
+        subContainer.innerHTML = `
+            <div class="sub-section">
+                <div class="sub-section-header">
+                    <span>Delays</span>
+                    <div class="sub-section-actions">
+                        ${(permissions.can_edit || permissions.can_add) ? `<button class="btn-sub-add" onclick="addSubRow('delays', ${ldudId})">+ Add</button>` : ''}
+                        ${(permissions.can_edit || permissions.can_add) ? `<button class="btn-sub-save" onclick="saveSubTable('delays', ${ldudId})">Save</button>` : ''}
+                    </div>
+                </div>
+                <div class="sub-section-content"><div id="delays-table-${ldudId}" class="sub-tabulator"></div></div>
+            </div>
+            <div class="sub-section">
+                <div class="sub-section-header">
+                    <span>Barge Lines</span>
+                    <div class="sub-section-actions">
+                        ${(permissions.can_edit || permissions.can_add) ? `<button class="btn-sub-add" onclick="addSubRow('barge_lines', ${ldudId})">+ Add</button>` : ''}
+                        ${(permissions.can_edit || permissions.can_add) ? `<button class="btn-sub-save" onclick="saveSubTable('barge_lines', ${ldudId})">Save</button>` : ''}
+                    </div>
+                </div>
+                <div class="sub-section-content">
+                    <div id="hold-summary-${ldudId}" style="padding: 10px; background: #f1f5f9; border-bottom: 1px solid #cbd5e0; font-size: 12px;"></div>
+                    <div id="barge_lines-table-${ldudId}" class="sub-tabulator"></div>
+                </div>
+            </div>`;
+
+        el.after(subContainer);
+        subTables[ldudId] = {};
+        await initSubTables(ldudId);
+    }
+
+    async function initSubTables(ldudId) {
+        const canEdit = permissions.can_edit || permissions.can_add;
+        const isDark = localStorage.getItem('theme') === 'dark';
+
+        // Get VCN ID from current row
+        const currentRow = table.getRows().find(r => r.getData().id === ldudId);
+        const vcnId = currentRow ? currentRow.getData().vcn_id : null;
+
+        // Fetch stowage plan for this VCN
+        let holdOptions = {};
+        if (vcnId) {
+            const stowageRes = await fetch(`/api/module/VCN01/stowage/${vcnId}`);
+            const stowageData = await stowageRes.json();
+            stowagePlanData[ldudId] = stowageData;
+
+            // Build unique holds with their total quantities
+            const holdMap = {};
+            stowageData.forEach(s => {
+                if (s.hold_name) {
+                    if (!holdMap[s.hold_name]) {
+                        holdMap[s.hold_name] = 0;
+                    }
+                    holdMap[s.hold_name] += parseFloat(s.hatchwise_quantity || 0);
+                }
+            });
+            Object.keys(holdMap).forEach(h => { holdOptions[h] = h; });
+        }
+
+        const delayOptions = {};
+        delayTypes.forEach(d => { delayOptions[d] = d; });
+
+        const datOptions = {};
+        delayAccountTypes.forEach(d => { datOptions[d] = d; });
+
+        const eqOptions = {};
+        equipmentList.forEach(e => { eqOptions[e] = e; });
+
+        const bargeOptions = {};
+        bargeList.forEach(b => { bargeOptions[b] = b; });
+
+        const contractorOptions = {};
+        contractorList.forEach(c => { contractorOptions[c] = c; });
+
+        const cargoOptions = {};
+        cargoNames.forEach(c => { cargoOptions[c] = c; });
+
+        const yesNoOptions = {'Yes': 'Yes', 'No': 'No'};
+        const bptBflOptions = {'BPT': 'BPT', 'BFL': 'BFL'};
+
+        // Delays table
+        subTables[ldudId].delays = new Tabulator(`#delays-table-${ldudId}`, {
+            layout: "fitDataFill",
+            height: 200,
+            ajaxURL: `/api/module/LDUD01/delays/${ldudId}`,
+            columns: [
+                {title: "Delay Name", field: "delay_name", width: 120, editor: canEdit ? "list" : false,
+                    editorParams: {values: delayOptions, autocomplete: true, allowEmpty: true}},
+                {title: "Account Type", field: "delay_account_type", width: 120, editor: canEdit ? "list" : false,
+                    editorParams: {values: datOptions, autocomplete: true, allowEmpty: true}},
+                {title: "Equipment", field: "equipment_name", width: 100, editor: canEdit ? "list" : false,
+                    editorParams: {values: eqOptions, autocomplete: true, allowEmpty: true}},
+                {title: "Start", field: "start_datetime", width: 140, editor: canEdit ? datetimeEditor : false,
+                    formatter: function(cell) { return cell.getValue() ? cell.getValue().replace('T', ' ') : ''; }},
+                {title: "End", field: "end_datetime", width: 140, editor: canEdit ? datetimeEditor : false,
+                    formatter: function(cell) { return cell.getValue() ? cell.getValue().replace('T', ' ') : ''; }},
+                {title: "Mins", field: "total_time_mins", width: 60, hozAlign: "right"},
+                {title: "Hrs", field: "total_time_hrs", width: 60, hozAlign: "right"},
+                {title: "To SOF", field: "delays_to_sof", width: 60, editor: canEdit ? "list" : false,
+                    editorParams: {values: yesNoOptions}},
+                {title: "Invoice", field: "invoiceable", width: 60, editor: canEdit ? "list" : false,
+                    editorParams: {values: yesNoOptions}},
+                {title: "Minus Hrs", field: "minus_delay_hours", width: 70, editor: canEdit ? "list" : false,
+                    editorParams: {values: yesNoOptions}},
+                canEdit ? {title: "", field: "actions", formatter: deleteButtonFormatter, width: 50, hozAlign: "center", headerSort: false,
+                    cellClick: function(e, cell) { deleteSubRow('delays', cell.getRow().getData().id, ldudId); }
+                } : null
+            ].filter(Boolean)
+        });
+        if (isDark) document.querySelector(`#delays-table-${ldudId}`).classList.add('tabulator-dark');
+
+        // Barge Lines table
+        subTables[ldudId].barge_lines = new Tabulator(`#barge_lines-table-${ldudId}`, {
+            layout: "fitDataFill",
+            height: 250,
+            ajaxURL: `/api/module/LDUD01/barge_lines/${ldudId}`,
+            ajaxResponse: function(url, params, response) {
+                // Delay to ensure table renders before calculating summary
+                setTimeout(() => updateHoldSummary(ldudId), 100);
+                return response;
+            },
+            columns: [
+                {title: "Trip#", field: "trip_number", width: 50, hozAlign: "center"},
+                {title: "Hold", field: "hold_name", width: 80, editor: canEdit ? "list" : false,
+                    editorParams: {values: holdOptions, autocomplete: true, allowEmpty: true},
+                    cellEdited: function(cell) {
+                        updateHoldSummary(ldudId);
+                    }
+                },
+                {title: "Barge", field: "barge_name", width: 100, editor: canEdit ? "list" : false,
+                    editorParams: {values: bargeOptions, autocomplete: true, allowEmpty: true}},
+                {title: "Contractor", field: "contractor_name", width: 120, editor: canEdit ? "list" : false,
+                    editorParams: {values: contractorOptions, autocomplete: true, allowEmpty: true}},
+                {title: "Cargo", field: "cargo_name", width: 100, editor: canEdit ? "list" : false,
+                    editorParams: {values: cargoOptions, autocomplete: true, allowEmpty: true}},
+                {title: "BPT/BFL", field: "bpt_bfl", width: 70, editor: canEdit ? "list" : false,
+                    editorParams: {values: bptBflOptions}},
+                {title: "Alongside Vessel", field: "along_side_vessel", width: 130, editor: canEdit ? datetimeEditor : false,
+                    formatter: function(cell) { return cell.getValue() ? cell.getValue().replace('T', ' ') : ''; }},
+                {title: "Loading Start", field: "commenced_loading", width: 130, editor: canEdit ? datetimeEditor : false,
+                    formatter: function(cell) { return cell.getValue() ? cell.getValue().replace('T', ' ') : ''; }},
+                {title: "Loading End", field: "completed_loading", width: 130, editor: canEdit ? datetimeEditor : false,
+                    formatter: function(cell) { return cell.getValue() ? cell.getValue().replace('T', ' ') : ''; }},
+                {title: "Cast Off MV", field: "cast_off_mv", width: 130, editor: canEdit ? datetimeEditor : false,
+                    formatter: function(cell) { return cell.getValue() ? cell.getValue().replace('T', ' ') : ''; }},
+                {title: "Anch Gull Island", field: "anchored_gull_island", width: 130, editor: canEdit ? datetimeEditor : false,
+                    formatter: function(cell) { return cell.getValue() ? cell.getValue().replace('T', ' ') : ''; }},
+                {title: "Aweigh Gull Island", field: "aweigh_gull_island", width: 130, editor: canEdit ? datetimeEditor : false,
+                    formatter: function(cell) { return cell.getValue() ? cell.getValue().replace('T', ' ') : ''; }},
+                {title: "Alongside Berth", field: "along_side_berth", width: 130, editor: canEdit ? datetimeEditor : false,
+                    formatter: function(cell) { return cell.getValue() ? cell.getValue().replace('T', ' ') : ''; }},
+                {title: "Discharge Start", field: "commence_discharge_berth", width: 130, editor: canEdit ? datetimeEditor : false,
+                    formatter: function(cell) { return cell.getValue() ? cell.getValue().replace('T', ' ') : ''; }},
+                {title: "Discharge End", field: "completed_discharge_berth", width: 130, editor: canEdit ? datetimeEditor : false,
+                    formatter: function(cell) { return cell.getValue() ? cell.getValue().replace('T', ' ') : ''; }},
+                {title: "Cast Off Berth", field: "cast_off_berth", width: 130, editor: canEdit ? datetimeEditor : false,
+                    formatter: function(cell) { return cell.getValue() ? cell.getValue().replace('T', ' ') : ''; }},
+                {title: "Cast Off NT", field: "cast_off_berth_nt", width: 130, editor: canEdit ? datetimeEditor : false,
+                    formatter: function(cell) { return cell.getValue() ? cell.getValue().replace('T', ' ') : ''; }},
+                {title: "Qty", field: "discharge_quantity", width: 80, editor: canEdit ? "number" : false, hozAlign: "right",
+                    editorParams: {min: 0, step: 0.01},
+                    cellEdited: function(cell) {
+                        updateHoldSummary(ldudId);
+                    }
+                },
+                canEdit ? {title: "", field: "actions", formatter: deleteButtonFormatter, width: 50, hozAlign: "center", headerSort: false,
+                    cellClick: function(e, cell) { deleteSubRow('barge_lines', cell.getRow().getData().id, ldudId); }
+                } : null
+            ].filter(Boolean)
+        });
+        if (isDark) document.querySelector(`#barge_lines-table-${ldudId}`).classList.add('tabulator-dark');
+    }
+
+    function deleteButtonFormatter(cell) {
+        return '<button class="btn-sub-delete">X</button>';
+    }
+
+    function updateHoldSummary(ldudId) {
+        const summaryEl = document.getElementById(`hold-summary-${ldudId}`);
+        if (!summaryEl) return;
+
+        // Calculate stowage quantities per hold
+        const stowageByHold = {};
+        if (stowagePlanData[ldudId]) {
+            stowagePlanData[ldudId].forEach(s => {
+                if (s.hold_name) {
+                    if (!stowageByHold[s.hold_name]) {
+                        stowageByHold[s.hold_name] = 0;
+                    }
+                    stowageByHold[s.hold_name] += parseFloat(s.hatchwise_quantity || 0);
+                }
+            });
+        }
+
+        // Calculate discharged quantities per hold from barge lines
+        const dischargedByHold = {};
+        if (subTables[ldudId] && subTables[ldudId].barge_lines) {
+            const bargeRows = subTables[ldudId].barge_lines.getRows();
+            bargeRows.forEach(row => {
+                const data = row.getData();
+                if (data.hold_name && data.discharge_quantity) {
+                    if (!dischargedByHold[data.hold_name]) {
+                        dischargedByHold[data.hold_name] = 0;
+                    }
+                    dischargedByHold[data.hold_name] += parseFloat(data.discharge_quantity || 0);
+                }
+            });
+        }
+
+        // Build summary HTML
+        const holds = Object.keys(stowageByHold).sort();
+        if (holds.length === 0) {
+            summaryEl.innerHTML = '<span style="color: #718096;">No stowage plan data available for selected VCN</span>';
+            return;
+        }
+
+        let summaryHTML = '<strong>Hold Summary:</strong> ';
+        holds.forEach((hold, index) => {
+            const stowage = stowageByHold[hold] || 0;
+            const discharged = dischargedByHold[hold] || 0;
+            const remaining = stowage - discharged;
+            const percentage = stowage > 0 ? ((discharged / stowage) * 100).toFixed(1) : 0;
+
+            let color = '#38a169'; // green
+            if (discharged > stowage) {
+                color = '#e53e3e'; // red - over discharged
+            } else if (remaining > 0) {
+                color = '#d69e2e'; // yellow - incomplete
+            }
+
+            summaryHTML += `<span style="margin-right: 20px;">
+                <strong>${hold}:</strong>
+                <span style="color: ${color};">${discharged.toFixed(2)} / ${stowage.toFixed(2)}</span>
+                <span style="color: #718096; font-size: 11px;">(${percentage}%)</span>
+            </span>`;
+        });
+
+        summaryEl.innerHTML = summaryHTML;
+    }
+
+    async function addSubRow(type, ldudId) {
+        const res = await fetch(`/api/module/LDUD01/${type}/save`, {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({ldud_id: ldudId})
+        });
+        const data = await res.json();
+        if (data.id && subTables[ldudId] && subTables[ldudId][type]) {
+            const newRow = {id: data.id, ldud_id: ldudId};
+            if (type === 'barge_lines' && data.trip_number) {
+                newRow.trip_number = data.trip_number;
+            }
+            subTables[ldudId][type].addRow(newRow, true);
+        }
+    }
+
+    async function saveSubTable(type, ldudId) {
+        if (!subTables[ldudId] || !subTables[ldudId][type]) return;
+
+        const rows = subTables[ldudId][type].getRows();
+        let savedCount = 0;
+
+        for (const row of rows) {
+            const data = row.getData();
+            if (data.id) {
+                const res = await fetch(`/api/module/LDUD01/${type}/save`, {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({...data, ldud_id: ldudId})
+                });
+                const result = await res.json();
+                if (result.success) {
+                    savedCount++;
+                    // Update calculated fields for delays
+                    if (type === 'delays' && result.total_time_mins !== undefined) {
+                        row.update({total_time_mins: result.total_time_mins, total_time_hrs: result.total_time_hrs});
+                    }
+                    // Update trip number for barge lines
+                    if (type === 'barge_lines' && result.trip_number !== undefined) {
+                        row.update({trip_number: result.trip_number});
+                    }
+                }
+            }
+        }
+
+        // Update hold summary after saving barge lines
+        if (type === 'barge_lines') {
+            updateHoldSummary(ldudId);
+        }
+
+        alert(`Saved ${savedCount} row(s)`);
+    }
+
+    async function deleteSubRow(type, id, ldudId) {
+        if (!confirm('Delete this row?')) return;
+        await fetch(`/api/module/LDUD01/${type}/delete`, {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({id: id})
+        });
+        if (subTables[ldudId] && subTables[ldudId][type]) {
+            const row = subTables[ldudId][type].getRows().find(r => r.getData().id === id);
+            if (row) row.delete();
+
+            // Update hold summary after deleting barge line
+            if (type === 'barge_lines') {
+                updateHoldSummary(ldudId);
+            }
+        }
+    }
+
+    function addRow() {
+        table.addRow({
+            created_by: currentUser,
+            created_date: getTodayDate(),
+            doc_status: 'Pending'
+        }, true);
+    }
+
+    function deleteSelected() {
+        const selected = table.getSelectedRows();
+        if (selected.length === 0) { alert('Select rows to delete'); return; }
+        if (!confirm(`Delete ${selected.length} row(s)?`)) return;
+        selected.forEach(row => {
+            const id = row.getData().id;
+            if (id) {
+                if (subTables[id]) {
+                    Object.values(subTables[id]).forEach(t => t.destroy());
+                    delete subTables[id];
+                }
+                fetch("/api/module/LDUD01/delete", {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({id: id})
+                });
+            }
+            row.delete();
+        });
+    }
+
+    async function saveAll() {
+        showStatus('Saving...', 'saving');
+        const rows = table.getRows();
+        let savedCount = 0;
+        for (const row of rows) {
+            const data = row.getData();
+            const res = await fetch("/api/module/LDUD01/save", {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify(data)
+            });
+            const result = await res.json();
+            if (result.id) {
+                row.update({id: result.id, doc_num: result.doc_num, doc_status: result.doc_status});
+                savedCount++;
+            }
+        }
+        showStatus(`Saved ${savedCount} row(s)`, 'saved');
+        table.setData("/api/module/LDUD01/data");
+    }
+
+    document.addEventListener('keydown', function(e) {
+        if ((e.ctrlKey || e.metaKey) && e.key === 's') { e.preventDefault(); saveAll(); }
+    });
+
+    loadMasterData();
+</script>
+{% endblock %}

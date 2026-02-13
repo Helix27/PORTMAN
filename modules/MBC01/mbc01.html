@@ -1,0 +1,611 @@
+{% extends "base.html" %}
+
+{% block title %}MBC Operation - PORTMAN{% endblock %}
+
+{% block head %}
+<style>
+    .sub-table-container {
+        background: #f8fafc;
+        padding: 15px;
+        border-bottom: 2px solid #3182ce;
+        box-sizing: border-box;
+        width: 100% !important;
+        max-width: 100% !important;
+        overflow: hidden;
+    }
+    .dark-theme .sub-table-container {
+        background: #1e293b;
+        border-color: #334155;
+    }
+    .sub-section {
+        margin-bottom: 15px;
+        border: 1px solid #cbd5e0;
+        border-radius: 6px;
+        overflow: hidden;
+    }
+    .sub-section:last-child {
+        margin-bottom: 0;
+    }
+    .dark-theme .sub-section {
+        border-color: #475569;
+    }
+    .sub-section-header {
+        background: #e2e8f0;
+        padding: 10px 15px;
+        font-weight: 600;
+        font-size: 13px;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        color: #1a202c;
+    }
+    .dark-theme .sub-section-header {
+        background: #334155;
+        color: #e2e8f0;
+    }
+    .sub-section-content {
+        background: white;
+        overflow-x: auto;
+    }
+    .dark-theme .sub-section-content {
+        background: #1e293b;
+    }
+    .sub-tabulator {
+        font-size: 11px;
+        width: 100% !important;
+    }
+    .sub-tabulator .tabulator-header {
+        background: #f1f5f9 !important;
+        border-bottom: 1px solid #cbd5e0 !important;
+    }
+    .sub-tabulator .tabulator-header .tabulator-col {
+        background: #f1f5f9 !important;
+        border-right: 1px solid #e2e8f0 !important;
+    }
+    .sub-tabulator .tabulator-header .tabulator-col-title {
+        color: #374151 !important;
+        font-weight: 600 !important;
+    }
+    .dark-theme .sub-tabulator .tabulator-header {
+        background: #475569 !important;
+        border-bottom: 1px solid #64748b !important;
+    }
+    .dark-theme .sub-tabulator .tabulator-header .tabulator-col {
+        background: #475569 !important;
+        border-right: 1px solid #64748b !important;
+    }
+    .dark-theme .sub-tabulator .tabulator-header .tabulator-col-title {
+        color: #e2e8f0 !important;
+    }
+    .btn-sub-add {
+        background: #48bb78;
+        color: white;
+        border: none;
+        padding: 5px 12px;
+        border-radius: 4px;
+        font-size: 12px;
+        cursor: pointer;
+    }
+    .btn-sub-add:hover {
+        background: #38a169;
+    }
+    .btn-sub-save {
+        background: #3182ce;
+        color: white;
+        border: none;
+        padding: 5px 12px;
+        border-radius: 4px;
+        font-size: 12px;
+        cursor: pointer;
+        font-weight: 500;
+    }
+    .btn-sub-save:hover {
+        background: #2c5282;
+    }
+    .btn-sub-delete {
+        background: #fc8181;
+        color: white;
+        border: none;
+        padding: 3px 10px;
+        border-radius: 3px;
+        font-size: 11px;
+        cursor: pointer;
+    }
+    .btn-sub-delete:hover {
+        background: #f56565;
+    }
+    .sub-section-actions {
+        display: flex;
+        gap: 8px;
+        align-items: center;
+    }
+    .expand-icon {
+        transition: transform 0.2s;
+    }
+    .expand-icon.expanded {
+        transform: rotate(90deg);
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="module-header">
+    <h2>MBC Operation</h2>
+    <span class="module-code">MBC01</span>
+    <span id="saveStatus" class="save-status"></span>
+</div>
+
+<div class="toolbar">
+    {% if permissions.can_add %}<button class="btn btn-add" onclick="addRow()">+ Add Row</button>{% endif %}
+    {% if permissions.can_delete %}<button class="btn btn-delete" onclick="deleteSelected()">Delete Selected</button>{% endif %}
+    {% if permissions.can_add or permissions.can_edit %}<button class="btn btn-save" onclick="saveAll()">Save (Ctrl+S)</button>{% endif %}
+    <div class="row-info">Rows: <span id="rowCount">0</span> / <span id="totalCount">0</span></div>
+</div>
+
+<div id="table"></div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    addToRecent('MBC01', 'MBC Operation');
+
+    let table;
+    let docSeriesList = [];
+    let mbcList = [];
+    let operationTypes = [];
+    let cargoTypes = [];
+    let cargoNames = [];
+    let uomList = [];
+    let berthList = [];
+    let delayTypes = [];
+    let delayAccountTypes = [];
+    let equipmentList = [];
+    let subTables = {};
+
+    const currentUser = '{{ session.username }}';
+    const permissions = {
+        can_read: {{ permissions.can_read|default(0) }},
+        can_add: {{ permissions.can_add|default(0) }},
+        can_edit: {{ permissions.can_edit|default(0) }},
+        can_delete: {{ permissions.can_delete|default(0) }}
+    };
+
+    function getTodayDate() {
+        return new Date().toISOString().split('T')[0];
+    }
+
+    function showStatus(message, type) {
+        const status = document.getElementById('saveStatus');
+        status.textContent = message;
+        status.className = 'save-status ' + type;
+        if (type === 'saved') {
+            setTimeout(() => { status.textContent = ''; status.className = 'save-status'; }, 2000);
+        }
+    }
+
+    async function loadMasterData() {
+        const [dsRes, mbcRes, otRes, ctRes, cnRes, uomRes, berthRes, delayRes, datRes, eqRes] = await Promise.all([
+            fetch('/api/module/MBCDS01/all'),
+            fetch('/api/module/MBCM01/all'),
+            fetch('/api/module/VOT01/all'),
+            fetch('/api/module/VCG01/types'),
+            fetch('/api/module/VCG01/names'),
+            fetch('/api/module/VQM01/all'),
+            fetch('/api/module/PBM01/all'),
+            fetch('/api/module/VDM01/all'),
+            fetch('/api/module/VDAT01/all'),
+            fetch('/api/module/VEM01/all')
+        ]);
+        docSeriesList = await dsRes.json();
+        mbcList = await mbcRes.json();
+        operationTypes = await otRes.json();
+        cargoTypes = await ctRes.json();
+        cargoNames = await cnRes.json();
+        uomList = await uomRes.json();
+        berthList = await berthRes.json();
+        delayTypes = await delayRes.json();
+        delayAccountTypes = await datRes.json();
+        equipmentList = await eqRes.json();
+        initTable();
+    }
+
+    // Custom datetime editor
+    var datetimeEditor = function(cell, onRendered, success, cancel) {
+        var cellValue = cell.getValue() || '';
+        var input = document.createElement("input");
+        input.type = "datetime-local";
+        input.value = cellValue;
+        input.style.width = "100%";
+        input.style.boxSizing = "border-box";
+        input.style.padding = "4px";
+
+        onRendered(function() {
+            input.focus();
+            input.style.height = "100%";
+        });
+
+        input.addEventListener("change", function() { success(input.value); });
+        input.addEventListener("blur", function() { success(input.value); });
+        input.addEventListener("keydown", function(e) {
+            if (e.key === "Enter") success(input.value);
+            if (e.key === "Escape") cancel();
+        });
+        return input;
+    };
+
+    function initTable() {
+        const canEdit = permissions.can_edit || permissions.can_add;
+
+        const dsOptions = {};
+        docSeriesList.forEach(d => { dsOptions[d] = d; });
+
+        const mbcOptions = {};
+        mbcList.forEach(m => { mbcOptions[m] = m; });
+
+        const otOptions = {};
+        operationTypes.forEach(o => { otOptions[o] = o; });
+
+        const ctOptions = {};
+        cargoTypes.forEach(c => { ctOptions[c] = c; });
+
+        const cnOptions = {};
+        cargoNames.forEach(c => { cnOptions[c] = c; });
+
+        const uomOptions = {};
+        uomList.forEach(u => { uomOptions[u] = u; });
+
+        const columns = [
+            {formatter: "rowSelection", titleFormatter: "rowSelection", hozAlign: "center", headerSort: false, width: 40},
+            {
+                formatter: function(cell) {
+                    const data = cell.getRow().getData();
+                    if (!data.id) return '';
+                    return '<span class="expand-icon" style="cursor:pointer;font-size:14px;">&#9654;</span>';
+                },
+                width: 30,
+                hozAlign: "center",
+                headerSort: false,
+                cellClick: function(e, cell) {
+                    const row = cell.getRow();
+                    const data = row.getData();
+                    if (!data.id) return;
+                    toggleSubTables(row);
+                }
+            },
+            {title: "Doc Num", field: "doc_num", width: 100},
+            {title: "Doc Series", field: "doc_series", editor: canEdit ? "list" : false, width: 100,
+                editorParams: {values: dsOptions, autocomplete: true, allowEmpty: true}},
+            {title: "Doc Date", field: "doc_date", width: 100, editor: canEdit ? "date" : false},
+            {title: "MBC Name", field: "mbc_name", editor: canEdit ? "list" : false, width: 120,
+                editorParams: {values: mbcOptions, autocomplete: true, allowEmpty: true}},
+            {title: "Operation Type", field: "operation_type", editor: canEdit ? "list" : false, width: 110,
+                editorParams: {values: otOptions, autocomplete: true, allowEmpty: true}},
+            {title: "Cargo Type", field: "cargo_type", editor: canEdit ? "list" : false, width: 100,
+                editorParams: {values: ctOptions, autocomplete: true, allowEmpty: true}},
+            {title: "Cargo Name", field: "cargo_name", editor: canEdit ? "list" : false, width: 120,
+                editorParams: {values: cnOptions, autocomplete: true, allowEmpty: true}},
+            {title: "BL Qty", field: "bl_quantity", editor: canEdit ? "number" : false, width: 80, hozAlign: "right",
+                editorParams: {min: 0, step: 0.01}},
+            {title: "UOM", field: "quantity_uom", editor: canEdit ? "list" : false, width: 70,
+                editorParams: {values: uomOptions, autocomplete: true, allowEmpty: true}},
+            {title: "Status", field: "doc_status", width: 80,
+                formatter: function(cell) {
+                    const val = cell.getValue();
+                    let color = '#718096';
+                    if (val === 'Approved') color = '#38a169';
+                    else if (val === 'Rejected') color = '#e53e3e';
+                    else if (val === 'Pending') color = '#d69e2e';
+                    return `<span style="color:${color};font-weight:500">${val || ''}</span>`;
+                }
+            },
+            {title: "Created By", field: "created_by", width: 90}
+        ];
+
+        table = new Tabulator("#table", {
+            height: "calc(100vh - 160px)",
+            layout: "fitDataFill",
+            columns: columns,
+            pagination: true,
+            paginationMode: "remote",
+            paginationSize: 20,
+            ajaxURL: "/api/module/MBC01/data",
+            ajaxResponse: function(url, params, response) {
+                document.getElementById('rowCount').textContent = response.data.length;
+                document.getElementById('totalCount').textContent = response.total;
+                return response;
+            },
+            selectable: true,
+            rowFormatter: function(row) {
+                const el = row.getElement();
+                el.querySelector('.expand-icon')?.classList.remove('expanded');
+            }
+        });
+
+        if (localStorage.getItem('theme') === 'dark') {
+            document.getElementById('table').classList.add('tabulator-dark');
+        }
+    }
+
+    async function toggleSubTables(row) {
+        const el = row.getElement();
+        const icon = el.querySelector('.expand-icon');
+        const mbcId = row.getData().id;
+        const containerId = `sub-container-${mbcId}`;
+        const existingContainer = document.getElementById(containerId);
+
+        if (existingContainer) {
+            if (subTables[mbcId]) {
+                Object.values(subTables[mbcId]).forEach(t => t.destroy());
+                delete subTables[mbcId];
+            }
+            existingContainer.remove();
+            icon?.classList.remove('expanded');
+            return;
+        }
+
+        icon?.classList.add('expanded');
+
+        const subContainer = document.createElement('div');
+        subContainer.id = containerId;
+        subContainer.className = 'sub-table-container';
+        subContainer.innerHTML = `
+            <div class="sub-section">
+                <div class="sub-section-header">
+                    <span>Load Port Details</span>
+                    <div class="sub-section-actions">
+                        ${(permissions.can_edit || permissions.can_add) ? `<button class="btn-sub-add" onclick="addSubRow('load_port', ${mbcId})">+ Add</button>` : ''}
+                        ${(permissions.can_edit || permissions.can_add) ? `<button class="btn-sub-save" onclick="saveSubTable('load_port', ${mbcId})">Save</button>` : ''}
+                    </div>
+                </div>
+                <div class="sub-section-content"><div id="load_port-table-${mbcId}" class="sub-tabulator"></div></div>
+            </div>
+            <div class="sub-section">
+                <div class="sub-section-header">
+                    <span>Discharge Port Details</span>
+                    <div class="sub-section-actions">
+                        ${(permissions.can_edit || permissions.can_add) ? `<button class="btn-sub-add" onclick="addSubRow('discharge_port', ${mbcId})">+ Add</button>` : ''}
+                        ${(permissions.can_edit || permissions.can_add) ? `<button class="btn-sub-save" onclick="saveSubTable('discharge_port', ${mbcId})">Save</button>` : ''}
+                    </div>
+                </div>
+                <div class="sub-section-content"><div id="discharge_port-table-${mbcId}" class="sub-tabulator"></div></div>
+            </div>
+            <div class="sub-section">
+                <div class="sub-section-header">
+                    <span>Delays</span>
+                    <div class="sub-section-actions">
+                        ${(permissions.can_edit || permissions.can_add) ? `<button class="btn-sub-add" onclick="addSubRow('delays', ${mbcId})">+ Add</button>` : ''}
+                        ${(permissions.can_edit || permissions.can_add) ? `<button class="btn-sub-save" onclick="saveSubTable('delays', ${mbcId})">Save</button>` : ''}
+                    </div>
+                </div>
+                <div class="sub-section-content"><div id="delays-table-${mbcId}" class="sub-tabulator"></div></div>
+            </div>`;
+
+        el.after(subContainer);
+        subTables[mbcId] = {};
+        await initSubTables(mbcId);
+    }
+
+    async function initSubTables(mbcId) {
+        const canEdit = permissions.can_edit || permissions.can_add;
+        const isDark = localStorage.getItem('theme') === 'dark';
+
+        const delayOptions = {};
+        delayTypes.forEach(d => { delayOptions[d] = d; });
+
+        const datOptions = {};
+        delayAccountTypes.forEach(d => { datOptions[d] = d; });
+
+        const eqOptions = {};
+        equipmentList.forEach(e => { eqOptions[e] = e; });
+
+        const berthOptions = {};
+        berthList.forEach(b => { berthOptions[b] = b; });
+
+        const yesNoOptions = {'Yes': 'Yes', 'No': 'No'};
+
+        // Load Port Details table
+        subTables[mbcId].load_port = new Tabulator(`#load_port-table-${mbcId}`, {
+            layout: "fitDataFill",
+            height: 150,
+            ajaxURL: `/api/module/MBC01/load_port/${mbcId}`,
+            columns: [
+                {title: "Arrived Load Port", field: "arrived_load_port", width: 150, editor: canEdit ? datetimeEditor : false,
+                    formatter: function(cell) { return cell.getValue() ? cell.getValue().replace('T', ' ') : ''; }},
+                {title: "Alongside Berth", field: "alongside_berth", width: 150, editor: canEdit ? datetimeEditor : false,
+                    formatter: function(cell) { return cell.getValue() ? cell.getValue().replace('T', ' ') : ''; }},
+                {title: "Loading Commenced", field: "loading_commenced", width: 150, editor: canEdit ? datetimeEditor : false,
+                    formatter: function(cell) { return cell.getValue() ? cell.getValue().replace('T', ' ') : ''; }},
+                {title: "Loading Completed", field: "loading_completed", width: 150, editor: canEdit ? datetimeEditor : false,
+                    formatter: function(cell) { return cell.getValue() ? cell.getValue().replace('T', ' ') : ''; }},
+                {title: "Cast Off Load Port", field: "cast_off_load_port", width: 150, editor: canEdit ? datetimeEditor : false,
+                    formatter: function(cell) { return cell.getValue() ? cell.getValue().replace('T', ' ') : ''; }},
+                canEdit ? {title: "", field: "actions", formatter: deleteButtonFormatter, width: 50, hozAlign: "center", headerSort: false,
+                    cellClick: function(e, cell) { deleteSubRow('load_port', cell.getRow().getData().id, mbcId); }
+                } : null
+            ].filter(Boolean)
+        });
+        if (isDark) document.querySelector(`#load_port-table-${mbcId}`).classList.add('tabulator-dark');
+
+        // Discharge Port Details table
+        subTables[mbcId].discharge_port = new Tabulator(`#discharge_port-table-${mbcId}`, {
+            layout: "fitDataFill",
+            height: 150,
+            ajaxURL: `/api/module/MBC01/discharge_port/${mbcId}`,
+            columns: [
+                {title: "Arrival Gull Island", field: "arrival_gull_island", width: 140, editor: canEdit ? datetimeEditor : false,
+                    formatter: function(cell) { return cell.getValue() ? cell.getValue().replace('T', ' ') : ''; }},
+                {title: "Departure Gull Island", field: "departure_gull_island", width: 140, editor: canEdit ? datetimeEditor : false,
+                    formatter: function(cell) { return cell.getValue() ? cell.getValue().replace('T', ' ') : ''; }},
+                {title: "Vessel Arrival Port", field: "vessel_arrival_port", width: 140, editor: canEdit ? datetimeEditor : false,
+                    formatter: function(cell) { return cell.getValue() ? cell.getValue().replace('T', ' ') : ''; }},
+                {title: "Vessel All Made Fast", field: "vessel_all_made_fast", width: 140, editor: canEdit ? datetimeEditor : false,
+                    formatter: function(cell) { return cell.getValue() ? cell.getValue().replace('T', ' ') : ''; }},
+                {title: "Unloading Commenced", field: "unloading_commenced", width: 140, editor: canEdit ? datetimeEditor : false,
+                    formatter: function(cell) { return cell.getValue() ? cell.getValue().replace('T', ' ') : ''; }},
+                {title: "Cleaning Commenced", field: "cleaning_commenced", width: 140, editor: canEdit ? datetimeEditor : false,
+                    formatter: function(cell) { return cell.getValue() ? cell.getValue().replace('T', ' ') : ''; }},
+                {title: "Unloading Completed", field: "unloading_completed", width: 140, editor: canEdit ? datetimeEditor : false,
+                    formatter: function(cell) { return cell.getValue() ? cell.getValue().replace('T', ' ') : ''; }},
+                {title: "Vessel Cast Off", field: "vessel_cast_off", width: 140, editor: canEdit ? datetimeEditor : false,
+                    formatter: function(cell) { return cell.getValue() ? cell.getValue().replace('T', ' ') : ''; }},
+                {title: "Unloaded By", field: "vessel_unloaded_by", width: 100, editor: canEdit ? "input" : false},
+                {title: "Unloading Berth", field: "vessel_unloading_berth", width: 110, editor: canEdit ? "list" : false,
+                    editorParams: {values: berthOptions, autocomplete: true, allowEmpty: true}},
+                {title: "Discharge Stop", field: "discharge_stop_shifting", width: 140, editor: canEdit ? datetimeEditor : false,
+                    formatter: function(cell) { return cell.getValue() ? cell.getValue().replace('T', ' ') : ''; }},
+                {title: "Discharge Start", field: "discharge_start_shifting", width: 140, editor: canEdit ? datetimeEditor : false,
+                    formatter: function(cell) { return cell.getValue() ? cell.getValue().replace('T', ' ') : ''; }},
+                canEdit ? {title: "", field: "actions", formatter: deleteButtonFormatter, width: 50, hozAlign: "center", headerSort: false,
+                    cellClick: function(e, cell) { deleteSubRow('discharge_port', cell.getRow().getData().id, mbcId); }
+                } : null
+            ].filter(Boolean)
+        });
+        if (isDark) document.querySelector(`#discharge_port-table-${mbcId}`).classList.add('tabulator-dark');
+
+        // Delays table
+        subTables[mbcId].delays = new Tabulator(`#delays-table-${mbcId}`, {
+            layout: "fitDataFill",
+            height: 200,
+            ajaxURL: `/api/module/MBC01/delays/${mbcId}`,
+            columns: [
+                {title: "Delay Name", field: "delay_name", width: 120, editor: canEdit ? "list" : false,
+                    editorParams: {values: delayOptions, autocomplete: true, allowEmpty: true}},
+                {title: "Account Type", field: "delay_account_type", width: 120, editor: canEdit ? "list" : false,
+                    editorParams: {values: datOptions, autocomplete: true, allowEmpty: true}},
+                {title: "Equipment", field: "equipment_name", width: 100, editor: canEdit ? "list" : false,
+                    editorParams: {values: eqOptions, autocomplete: true, allowEmpty: true}},
+                {title: "Start", field: "start_datetime", width: 140, editor: canEdit ? datetimeEditor : false,
+                    formatter: function(cell) { return cell.getValue() ? cell.getValue().replace('T', ' ') : ''; }},
+                {title: "End", field: "end_datetime", width: 140, editor: canEdit ? datetimeEditor : false,
+                    formatter: function(cell) { return cell.getValue() ? cell.getValue().replace('T', ' ') : ''; }},
+                {title: "Mins", field: "total_time_mins", width: 60, hozAlign: "right"},
+                {title: "Hrs", field: "total_time_hrs", width: 60, hozAlign: "right"},
+                {title: "To SOF", field: "delays_to_sof", width: 60, editor: canEdit ? "list" : false,
+                    editorParams: {values: yesNoOptions}},
+                {title: "Invoice", field: "invoiceable", width: 60, editor: canEdit ? "list" : false,
+                    editorParams: {values: yesNoOptions}},
+                {title: "Minus Hrs", field: "minus_delay_hours", width: 70, editor: canEdit ? "list" : false,
+                    editorParams: {values: yesNoOptions}},
+                canEdit ? {title: "", field: "actions", formatter: deleteButtonFormatter, width: 50, hozAlign: "center", headerSort: false,
+                    cellClick: function(e, cell) { deleteSubRow('delays', cell.getRow().getData().id, mbcId); }
+                } : null
+            ].filter(Boolean)
+        });
+        if (isDark) document.querySelector(`#delays-table-${mbcId}`).classList.add('tabulator-dark');
+    }
+
+    function deleteButtonFormatter(cell) {
+        return '<button class="btn-sub-delete">X</button>';
+    }
+
+    async function addSubRow(type, mbcId) {
+        const res = await fetch(`/api/module/MBC01/${type}/save`, {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({mbc_id: mbcId})
+        });
+        const data = await res.json();
+        if (data.id && subTables[mbcId] && subTables[mbcId][type]) {
+            const newRow = {id: data.id, mbc_id: mbcId};
+            subTables[mbcId][type].addRow(newRow, true);
+        }
+    }
+
+    async function saveSubTable(type, mbcId) {
+        if (!subTables[mbcId] || !subTables[mbcId][type]) return;
+
+        const rows = subTables[mbcId][type].getRows();
+        let savedCount = 0;
+
+        for (const row of rows) {
+            const data = row.getData();
+            if (data.id) {
+                const res = await fetch(`/api/module/MBC01/${type}/save`, {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({...data, mbc_id: mbcId})
+                });
+                const result = await res.json();
+                if (result.success) {
+                    savedCount++;
+                    // Update calculated fields for delays
+                    if (type === 'delays' && result.total_time_mins !== undefined) {
+                        row.update({total_time_mins: result.total_time_mins, total_time_hrs: result.total_time_hrs});
+                    }
+                }
+            }
+        }
+        alert(`Saved ${savedCount} row(s)`);
+    }
+
+    async function deleteSubRow(type, id, mbcId) {
+        if (!confirm('Delete this row?')) return;
+        await fetch(`/api/module/MBC01/${type}/delete`, {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({id: id})
+        });
+        if (subTables[mbcId] && subTables[mbcId][type]) {
+            const row = subTables[mbcId][type].getRows().find(r => r.getData().id === id);
+            if (row) row.delete();
+        }
+    }
+
+    function addRow() {
+        table.addRow({
+            created_by: currentUser,
+            created_date: getTodayDate(),
+            doc_date: getTodayDate(),
+            doc_status: 'Pending'
+        }, true);
+    }
+
+    function deleteSelected() {
+        const selected = table.getSelectedRows();
+        if (selected.length === 0) { alert('Select rows to delete'); return; }
+        if (!confirm(`Delete ${selected.length} row(s)?`)) return;
+        selected.forEach(row => {
+            const id = row.getData().id;
+            if (id) {
+                if (subTables[id]) {
+                    Object.values(subTables[id]).forEach(t => t.destroy());
+                    delete subTables[id];
+                }
+                fetch("/api/module/MBC01/delete", {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({id: id})
+                });
+            }
+            row.delete();
+        });
+    }
+
+    async function saveAll() {
+        showStatus('Saving...', 'saving');
+        const rows = table.getRows();
+        let savedCount = 0;
+        for (const row of rows) {
+            const data = row.getData();
+            const res = await fetch("/api/module/MBC01/save", {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify(data)
+            });
+            const result = await res.json();
+            if (result.id) {
+                row.update({id: result.id, doc_num: result.doc_num, doc_status: result.doc_status});
+                savedCount++;
+            }
+        }
+        showStatus(`Saved ${savedCount} row(s)`, 'saved');
+        table.setData("/api/module/MBC01/data");
+    }
+
+    document.addEventListener('keydown', function(e) {
+        if ((e.ctrlKey || e.metaKey) && e.key === 's') { e.preventDefault(); saveAll(); }
+    });
+
+    loadMasterData();
+</script>
+{% endblock %}

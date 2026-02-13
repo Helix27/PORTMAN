@@ -1,0 +1,443 @@
+{% extends "base.html" %}
+
+{% block title %}Vessel Export - PORTMAN{% endblock %}
+
+{% block head %}
+<style>
+    .sub-table-container {
+        background: #f8fafc;
+        padding: 15px;
+        border-bottom: 2px solid #3182ce;
+        box-sizing: border-box;
+        width: 100% !important;
+        max-width: 100% !important;
+        overflow: hidden;
+    }
+    .dark-theme .sub-table-container {
+        background: #1e293b;
+        border-color: #334155;
+    }
+    .sub-section {
+        margin-bottom: 15px;
+        border: 1px solid #cbd5e0;
+        border-radius: 6px;
+        overflow: hidden;
+    }
+    .sub-section:last-child {
+        margin-bottom: 0;
+    }
+    .dark-theme .sub-section {
+        border-color: #475569;
+    }
+    .sub-section-header {
+        background: #e2e8f0;
+        padding: 10px 15px;
+        font-weight: 600;
+        font-size: 13px;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        color: #1a202c;
+    }
+    .dark-theme .sub-section-header {
+        background: #334155;
+        color: #e2e8f0;
+    }
+    .sub-section-content {
+        background: white;
+    }
+    .dark-theme .sub-section-content {
+        background: #1e293b;
+    }
+    .sub-tabulator {
+        font-size: 12px;
+        width: 100% !important;
+        max-width: 100% !important;
+    }
+    .btn-sub-add {
+        background: #48bb78;
+        color: white;
+        border: none;
+        padding: 5px 12px;
+        border-radius: 4px;
+        font-size: 12px;
+        cursor: pointer;
+    }
+    .btn-sub-add:hover {
+        background: #38a169;
+    }
+    .btn-sub-save {
+        background: #3182ce;
+        color: white;
+        border: none;
+        padding: 5px 12px;
+        border-radius: 4px;
+        font-size: 12px;
+        cursor: pointer;
+        font-weight: 500;
+    }
+    .btn-sub-save:hover {
+        background: #2c5282;
+    }
+    .sub-section-actions {
+        display: flex;
+        gap: 8px;
+        align-items: center;
+    }
+    .expand-icon {
+        transition: transform 0.2s;
+    }
+    .expand-icon.expanded {
+        transform: rotate(90deg);
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="module-header">
+    <h2>Vessel Export</h2>
+    <span class="module-code">VEX01</span>
+    <span id="saveStatus" class="save-status"></span>
+</div>
+
+<div class="toolbar">
+    {% if permissions.can_add %}<button class="btn btn-add" onclick="addRow()">+ Add Row</button>{% endif %}
+    {% if permissions.can_delete %}<button class="btn btn-delete" onclick="deleteSelected()">Delete Selected</button>{% endif %}
+    {% if permissions.can_add or permissions.can_edit %}<button class="btn btn-save" onclick="saveAll()">Save (Ctrl+S)</button>{% endif %}
+    <div class="row-info">Rows: <span id="rowCount">0</span> / <span id="totalCount">0</span></div>
+</div>
+
+<div id="table"></div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    addToRecent('VEX01', 'Vessel Export');
+
+    let table;
+    let docSeries = [];
+    let vessels = [];
+    let customers = [];
+    let cargoNames = [];
+    let quantityUoms = [];
+    let barges = [];
+    let mbcs = [];
+    let moduleConfig = {};
+
+    let subTables = {};
+
+    const currentUser = '{{ session.username }}';
+    const permissions = {
+        can_read: {{ permissions.can_read|default(0) }},
+        can_add: {{ permissions.can_add|default(0) }},
+        can_edit: {{ permissions.can_edit|default(0) }},
+        can_delete: {{ permissions.can_delete|default(0) }}
+    };
+
+    function getTodayDate() {
+        return new Date().toISOString().split('T')[0];
+    }
+
+    function showStatus(message, type) {
+        const status = document.getElementById('saveStatus');
+        status.textContent = message;
+        status.className = 'save-status ' + type;
+        if (type === 'saved') {
+            setTimeout(() => { status.textContent = ''; status.className = 'save-status'; }, 2000);
+        }
+    }
+
+    async function loadMasterData() {
+        const [dsRes, vesselsRes, custRes, cnRes, uomRes, bargesRes, mbcsRes, configRes] = await Promise.all([
+            fetch('/api/module/VEXDS01/all'),
+            fetch('/api/module/VC01/data?size=1000'),
+            fetch('/api/module/VCUM01/all'),
+            fetch('/api/module/VCG01/names'),
+            fetch('/api/module/VQM01/all'),
+            fetch('/api/module/VBM01/all'),
+            fetch('/api/module/MBCM01/all'),
+            fetch('/admin/api/config/VEX01')
+        ]);
+        docSeries = await dsRes.json();
+        const vesselsData = await vesselsRes.json();
+        vessels = vesselsData.data.map(v => v.vessel_name);
+        customers = await custRes.json();
+        cargoNames = await cnRes.json();
+        quantityUoms = await uomRes.json();
+        barges = await bargesRes.json();
+        mbcs = await mbcsRes.json();
+        moduleConfig = await configRes.json();
+        initTable();
+    }
+
+    function toOptions(arr) {
+        const opts = {'': ''};
+        arr.forEach(item => { opts[item] = item; });
+        return opts;
+    }
+
+    function initTable() {
+        const isApprover = moduleConfig.approver_id == '{{ session.user_id }}';
+        const needsApproval = moduleConfig.approval_add || moduleConfig.approval_edit;
+        const canEditStatus = isApprover || !needsApproval;
+        const canEdit = permissions.can_edit || permissions.can_add;
+
+        const columns = [
+            {formatter: "rowSelection", titleFormatter: "rowSelection", hozAlign: "center", headerSort: false, width: 40},
+            {
+                formatter: function(cell) {
+                    const data = cell.getRow().getData();
+                    if (!data.id) return '';
+                    return '<span class="expand-icon" style="cursor:pointer;font-size:14px;">&#9654;</span>';
+                },
+                width: 30,
+                hozAlign: "center",
+                headerSort: false,
+                cellClick: function(e, cell) {
+                    const row = cell.getRow();
+                    const data = row.getData();
+                    if (!data.id) return;
+                    toggleSubTables(row);
+                }
+            },
+            {title: "VEX Doc#", field: "vex_doc_num", width: 90},
+            {title: "Doc Series", field: "doc_series", width: 120, editor: canEdit ? "list" : false,
+                editorParams: {values: toOptions(docSeries), autocomplete: true, allowEmpty: true}},
+            {title: "Vessel Name", field: "vessel_name", width: 140, editor: canEdit ? "list" : false,
+                editorParams: {values: toOptions(vessels), autocomplete: true, allowEmpty: true}},
+            {title: "Customer", field: "customer_name", width: 140, editor: canEdit ? "list" : false,
+                editorParams: {values: toOptions(customers), autocomplete: true, allowEmpty: true}},
+            {title: "Cargo Name", field: "cargo_name", width: 130, editor: canEdit ? "list" : false,
+                editorParams: {values: toOptions(cargoNames), autocomplete: true, allowEmpty: true}},
+            {title: "Bill of Coastal Goods Date", field: "bill_of_coastal_goods_date", width: 160, editor: canEdit ? "date" : false},
+            {title: "Bill of Coastal Goods Qty", field: "bill_of_coastal_goods_qty", width: 160, hozAlign: "right", editor: canEdit ? "number" : false},
+            {title: "Quantity UOM", field: "quantity_uom", width: 100, editor: canEdit ? "list" : false,
+                editorParams: {values: toOptions(quantityUoms), autocomplete: true, allowEmpty: true}},
+            {title: "Created By", field: "created_by", width: 100},
+            {title: "Doc Status", field: "doc_status",
+                editor: (canEdit && canEditStatus) ? "select" : false,
+                editorParams: {values: {"Pending": "Pending", "Approved": "Approved", "Rejected": "Rejected"}},
+                width: 100,
+                formatter: function(cell) {
+                    const val = cell.getValue();
+                    let color = '#718096';
+                    if (val === 'Approved') color = '#38a169';
+                    else if (val === 'Rejected') color = '#e53e3e';
+                    else if (val === 'Pending') color = '#d69e2e';
+                    return `<span style="color:${color};font-weight:500">${val || ''}</span>`;
+                }
+            }
+        ];
+
+        table = new Tabulator("#table", {
+            height: "calc(100vh - 160px)",
+            layout: "fitData",
+            columns: columns,
+            pagination: true,
+            paginationMode: "remote",
+            paginationSize: 20,
+            ajaxURL: "/api/module/VEX01/data",
+            ajaxResponse: function(url, params, response) {
+                document.getElementById('rowCount').textContent = response.data.length;
+                document.getElementById('totalCount').textContent = response.total;
+                return response;
+            },
+            selectable: true
+        });
+
+        if (localStorage.getItem('theme') === 'dark') {
+            document.getElementById('table').classList.add('tabulator-dark');
+        }
+    }
+
+    function addRow() {
+        table.addRow({
+            created_by: currentUser,
+            created_date: getTodayDate(),
+            doc_status: 'Pending'
+        }, true);
+    }
+
+    function deleteSelected() {
+        const selected = table.getSelectedRows();
+        if (selected.length === 0) { alert('Select rows to delete'); return; }
+        if (!confirm(`Delete ${selected.length} row(s)?`)) return;
+
+        selected.forEach(async row => {
+            const id = row.getData().id;
+            if (id) {
+                await fetch("/api/module/VEX01/delete", {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({id: id})
+                });
+            }
+            row.delete();
+        });
+    }
+
+    async function saveAll() {
+        showStatus('Saving...', 'saving');
+        const rows = table.getRows();
+        for (const row of rows) {
+            const data = row.getData();
+            if (!data.created_by) data.created_by = currentUser;
+            if (!data.created_date) data.created_date = getTodayDate();
+
+            const res = await fetch("/api/module/VEX01/save", {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify(data)
+            });
+            const result = await res.json();
+            if (result.id) {
+                row.update({
+                    id: result.id,
+                    vex_doc_num: result.vex_doc_num,
+                    doc_status: result.doc_status
+                });
+            }
+        }
+        showStatus('Saved', 'saved');
+        table.setData("/api/module/VEX01/data");
+    }
+
+    function toggleSubTables(row) {
+        const existingContainer = row.getElement().nextSibling;
+        const icon = row.getElement().querySelector('.expand-icon');
+
+        if (existingContainer && existingContainer.classList && existingContainer.classList.contains('sub-table-container')) {
+            existingContainer.remove();
+            icon.classList.remove('expanded');
+            return;
+        }
+
+        icon.classList.add('expanded');
+        const data = row.getData();
+        const container = document.createElement('div');
+        container.className = 'sub-table-container';
+        container.innerHTML = `
+            <div class="sub-section">
+                <div class="sub-section-header">
+                    <span>Barge Lines</span>
+                    <div class="sub-section-actions">
+                        <button class="btn-sub-add" onclick="addBargeLine(${data.id})">+ Add Barge</button>
+                        <button class="btn-sub-save" onclick="saveBargeLines(${data.id})">Save Barges</button>
+                    </div>
+                </div>
+                <div class="sub-section-content">
+                    <div id="bargeTable_${data.id}"></div>
+                </div>
+            </div>
+            <div class="sub-section">
+                <div class="sub-section-header">
+                    <span>MBC Lines</span>
+                    <div class="sub-section-actions">
+                        <button class="btn-sub-add" onclick="addMbcLine(${data.id})">+ Add MBC</button>
+                        <button class="btn-sub-save" onclick="saveMbcLines(${data.id})">Save MBCs</button>
+                    </div>
+                </div>
+                <div class="sub-section-content">
+                    <div id="mbcTable_${data.id}"></div>
+                </div>
+            </div>
+        `;
+
+        row.getElement().parentNode.insertBefore(container, row.getElement().nextSibling);
+        loadSubTables(data.id);
+    }
+
+    async function loadSubTables(vexId) {
+        const canEdit = permissions.can_edit || permissions.can_add;
+
+        // Barge Lines Table
+        const bargeTable = new Tabulator(`#bargeTable_${vexId}`, {
+            height: 150,
+            layout: "fitData",
+            columns: [
+                {title: "Barge Name", field: "barge_name", width: 200, editor: canEdit ? "list" : false,
+                    editorParams: {values: toOptions(barges), autocomplete: true, allowEmpty: true}}
+            ],
+            ajaxURL: `/api/module/VEX01/barge_lines/${vexId}`,
+            placeholder: "No barge lines"
+        });
+
+        subTables[`barge_${vexId}`] = bargeTable;
+
+        // MBC Lines Table
+        const mbcTable = new Tabulator(`#mbcTable_${vexId}`, {
+            height: 150,
+            layout: "fitData",
+            columns: [
+                {title: "MBC Name", field: "mbc_name", width: 200, editor: canEdit ? "list" : false,
+                    editorParams: {values: toOptions(mbcs), autocomplete: true, allowEmpty: true}}
+            ],
+            ajaxURL: `/api/module/VEX01/mbc_lines/${vexId}`,
+            placeholder: "No MBC lines"
+        });
+
+        subTables[`mbc_${vexId}`] = mbcTable;
+
+        if (localStorage.getItem('theme') === 'dark') {
+            document.getElementById(`bargeTable_${vexId}`).classList.add('tabulator-dark');
+            document.getElementById(`mbcTable_${vexId}`).classList.add('tabulator-dark');
+        }
+    }
+
+    function addBargeLine(vexId) {
+        const tbl = subTables[`barge_${vexId}`];
+        if (tbl) tbl.addRow({vex_id: vexId}, true);
+    }
+
+    function addMbcLine(vexId) {
+        const tbl = subTables[`mbc_${vexId}`];
+        if (tbl) tbl.addRow({vex_id: vexId}, true);
+    }
+
+    async function saveBargeLines(vexId) {
+        const tbl = subTables[`barge_${vexId}`];
+        if (!tbl) return;
+
+        const rows = tbl.getRows();
+        for (const row of rows) {
+            const data = row.getData();
+            data.vex_id = vexId;
+            const res = await fetch("/api/module/VEX01/barge_lines/save", {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify(data)
+            });
+            const result = await res.json();
+            if (result.id) row.update({id: result.id});
+        }
+        tbl.setData(`/api/module/VEX01/barge_lines/${vexId}`);
+        alert('Barge lines saved');
+    }
+
+    async function saveMbcLines(vexId) {
+        const tbl = subTables[`mbc_${vexId}`];
+        if (!tbl) return;
+
+        const rows = tbl.getRows();
+        for (const row of rows) {
+            const data = row.getData();
+            data.vex_id = vexId;
+            const res = await fetch("/api/module/VEX01/mbc_lines/save", {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify(data)
+            });
+            const result = await res.json();
+            if (result.id) row.update({id: result.id});
+        }
+        tbl.setData(`/api/module/VEX01/mbc_lines/${vexId}`);
+        alert('MBC lines saved');
+    }
+
+    document.addEventListener('keydown', function(e) {
+        if ((e.ctrlKey || e.metaKey) && e.key === 's') { e.preventDefault(); saveAll(); }
+    });
+
+    loadMasterData();
+</script>
+{% endblock %}

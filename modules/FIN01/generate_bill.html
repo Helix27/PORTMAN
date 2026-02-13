@@ -1,0 +1,760 @@
+{% extends "base.html" %}
+
+{% block title %}Generate Bill - PORTMAN{% endblock %}
+
+{% block content %}
+<style>
+    .form-section { background: white; padding: 15px; margin-bottom: 15px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+    .form-section h3 { margin: 0 0 10px 0; font-size: 13px; color: #333; border-bottom: 2px solid #d90429; padding-bottom: 5px; }
+    .form-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 10px; margin-bottom: 10px; }
+    .form-field { display: flex; flex-direction: column; }
+    .form-field label { font-size: 11px; font-weight: 600; margin-bottom: 3px; color: #555; }
+    .form-field input, .form-field select { padding: 6px; font-size: 11px; border: 1px solid #ddd; border-radius: 3px; }
+    .data-table { width: 100%; border-collapse: collapse; font-size: 11px; background: white; }
+    .data-table th, .data-table td { padding: 8px; text-align: left; border-bottom: 1px solid #ecf0f1; }
+    .data-table th { background: #34495e; color: white; font-weight: 600; font-size: 10px; text-transform: uppercase; }
+    .data-table tr:hover { background: #f8f9fa; }
+    .data-table input[type="checkbox"] { cursor: pointer; }
+    .btn { padding: 6px 12px; font-size: 11px; border: none; border-radius: 3px; cursor: pointer; margin-right: 5px; }
+    .btn-primary { background: #3498db; color: white; }
+    .btn-success { background: #27ae60; color: white; }
+    .btn-secondary { background: #95a5a6; color: white; }
+</style>
+
+<div class="module-header">
+    <h2>Billing and Invoicing - Generate Bill</h2>
+    <span class="module-code">FIN01</span>
+</div>
+
+<form id="billForm">
+    <div class="form-section">
+        <h3>Bill Header</h3>
+        <div class="form-grid">
+            <div class="form-field">
+                <label>Source Type</label>
+                <select id="sourceType" onchange="loadSource()">
+                    <option value="">--Select--</option>
+                    <option value="VCN">Vessel Call (VCN)</option>
+                    <option value="MBC">Mini Bulk Carrier (MBC)</option>
+                    <option value="VEX">Vessel Export (VEX)</option>
+                </select>
+            </div>
+            <div class="form-field">
+                <label>Source Document</label>
+                <select id="sourceDoc" onchange="loadEULines()">
+                    <option value="">--Select Source First--</option>
+                </select>
+            </div>
+            <div class="form-field">
+                <label>Bill Date</label>
+                <input type="date" id="billDate" value="{{ current_date }}" required>
+            </div>
+        </div>
+        <div class="form-grid">
+            <div class="form-field">
+                <label>Customer Type</label>
+                <select id="customerType" onchange="loadCustomers()">
+                    <option value="">--Select--</option>
+                    <option value="Customer">Customer</option>
+                    <option value="Importer/Exporter">Importer/Exporter</option>
+                </select>
+            </div>
+            <div class="form-field">
+                <label>Customer Name</label>
+                <select id="customerName" onchange="onCustomerChange()">
+                    <option value="">--Select Customer Type First--</option>
+                </select>
+            </div>
+            <div class="form-field">
+                <label>Agreement</label>
+                <select id="agreementSelect" onchange="onAgreementChange()">
+                    <option value="">--Select Customer First--</option>
+                </select>
+            </div>
+        </div>
+        <div class="form-grid">
+            <div class="form-field">
+                <label>Currency</label>
+                <select id="currency">
+                    <option value="INR">INR</option>
+                </select>
+            </div>
+            <div class="form-field">
+                <label>GST Type</label>
+                <input type="text" id="gstType" readonly value="" style="background:#f0f0f0;">
+            </div>
+            <div class="form-field">
+                <label>Remarks</label>
+                <input type="text" id="remarks">
+            </div>
+        </div>
+    </div>
+
+    <div class="form-section">
+        <h3>Equipment Utilization Lines <span style="font-size:10px;color:#666;">(Select lines to include in bill)</span></h3>
+        <table class="data-table">
+            <thead>
+                <tr>
+                    <th style="width:30px"><input type="checkbox" id="selectAll" onclick="toggleSelectAll()"></th>
+                    <th>EU Doc</th>
+                    <th>Equipment</th>
+                    <th>Service Type</th>
+                    <th>Start Date/Time</th>
+                    <th>End Date/Time</th>
+                    <th>Quantity</th>
+                    <th>UOM</th>
+                    <th>Rate</th>
+                    <th>Amount</th>
+                </tr>
+            </thead>
+            <tbody id="euLinesBody">
+                <tr>
+                    <td colspan="10" style="text-align:center;color:#999;padding:20px;">Select source document to load EU lines</td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+
+    <div class="form-section">
+        <h3>Service Records <span style="font-size:10px;color:#666;">(Approved unbilled service records for this source)</span></h3>
+        <table class="data-table">
+            <thead>
+                <tr>
+                    <th style="width:30px"><input type="checkbox" id="selectAllSrv" onclick="toggleSelectAllSrv()"></th>
+                    <th>Record #</th>
+                    <th>Service Type</th>
+                    <th>Details</th>
+                    <th>Billable Qty</th>
+                    <th>UOM</th>
+                    <th>Rate</th>
+                    <th>Amount</th>
+                </tr>
+            </thead>
+            <tbody id="srvLinesBody">
+                <tr>
+                    <td colspan="8" style="text-align:center;color:#999;padding:20px;">Select source document to load service records</td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+
+    <div class="form-section">
+        <h3>Bill Summary</h3>
+        <table class="data-table" style="width:400px;">
+            <tr>
+                <td style="font-weight:600;">Subtotal</td>
+                <td style="text-align:right;"><span id="subtotal">0.00</span></td>
+            </tr>
+            <tr>
+                <td style="font-weight:600;">CGST</td>
+                <td style="text-align:right;"><span id="cgst">0.00</span></td>
+            </tr>
+            <tr>
+                <td style="font-weight:600;">SGST</td>
+                <td style="text-align:right;"><span id="sgst">0.00</span></td>
+            </tr>
+            <tr>
+                <td style="font-weight:600;">IGST</td>
+                <td style="text-align:right;"><span id="igst">0.00</span></td>
+            </tr>
+            <tr style="border-top:2px solid #333;">
+                <td style="font-weight:600;font-size:12px;">Total Amount</td>
+                <td style="text-align:right;font-weight:600;font-size:12px;"><span id="totalAmount">0.00</span></td>
+            </tr>
+        </table>
+    </div>
+
+    <div style="margin-top:15px;">
+        {% if perms.can_add %}
+        <button type="button" class="btn btn-success" onclick="generateBill()">Generate Bill</button>
+        {% endif %}
+        <button type="button" class="btn btn-secondary" onclick="location.href='/module/FIN01/bills'">Cancel</button>
+    </div>
+</form>
+
+<script>
+// === State variables ===
+var serviceTypes = [];
+var serviceTypesLoaded = false;
+var portGstStateCode = '';
+var isIntraState = true; // default to intra-state
+var selectedAgreementId = '';
+
+// Source data from server
+var vcnOptions = {{ vcn_options | tojson }};
+var mbcOptions = {{ mbc_options | tojson }};
+var vexOptions = {{ vex_options | tojson }};
+
+// === Initialization ===
+setTimeout(async function() {
+    if (typeof addToRecent !== 'undefined') {
+        addToRecent('FIN01', 'Billing & Invoicing');
+    }
+    await loadServiceTypes();
+    await loadPortConfig();
+}, 100);
+
+async function loadServiceTypes() {
+    if (serviceTypesLoaded) return;
+    try {
+        const res = await fetch('/api/module/FIN01/service-types');
+        const data = await res.json();
+        serviceTypes = data.data || [];
+        serviceTypesLoaded = true;
+    } catch (error) {
+        console.error('Error loading service types:', error);
+        serviceTypes = [];
+        serviceTypesLoaded = true;
+    }
+}
+
+async function loadPortConfig() {
+    try {
+        const res = await fetch('/api/module/FIN01/port-config');
+        const data = await res.json();
+        portGstStateCode = data.port_gst_state_code || '';
+    } catch (error) {
+        console.error('Error loading port config:', error);
+    }
+}
+
+// === Helper: get GST rates for a service type ===
+function getServiceTypeGst(serviceTypeId) {
+    const st = serviceTypes.find(s => s.id === parseInt(serviceTypeId));
+    if (!st) return { cgst_rate: 0, sgst_rate: 0, igst_rate: 0 };
+    return {
+        cgst_rate: st.cgst_rate || 0,
+        sgst_rate: st.sgst_rate || 0,
+        igst_rate: st.igst_rate || 0
+    };
+}
+
+// === Helper: compute GST for a line amount based on state logic ===
+function computeLineGst(lineAmount, serviceTypeId) {
+    const gstRates = getServiceTypeGst(serviceTypeId);
+    if (isIntraState) {
+        const cgst = lineAmount * (gstRates.cgst_rate / 100);
+        const sgst = lineAmount * (gstRates.sgst_rate / 100);
+        return { cgst_rate: gstRates.cgst_rate, sgst_rate: gstRates.sgst_rate, igst_rate: 0,
+                 cgst_amount: cgst, sgst_amount: sgst, igst_amount: 0, tax_total: cgst + sgst };
+    } else {
+        const igst = lineAmount * (gstRates.igst_rate / 100);
+        return { cgst_rate: 0, sgst_rate: 0, igst_rate: gstRates.igst_rate,
+                 cgst_amount: 0, sgst_amount: 0, igst_amount: igst, tax_total: igst };
+    }
+}
+
+// === Determine intra/inter state ===
+function updateGstType() {
+    const customerSelect = document.getElementById('customerName');
+    const selectedOption = customerSelect.options[customerSelect.selectedIndex];
+    const gstTypeField = document.getElementById('gstType');
+
+    if (!selectedOption || !selectedOption.dataset.customerData || !portGstStateCode) {
+        gstTypeField.value = '';
+        isIntraState = true;
+        return;
+    }
+
+    const customer = JSON.parse(selectedOption.dataset.customerData);
+    const customerStateCode = customer.gst_state_code || '';
+
+    if (!customerStateCode || !portGstStateCode) {
+        gstTypeField.value = 'State code not configured';
+        isIntraState = true;
+    } else if (customerStateCode === portGstStateCode) {
+        gstTypeField.value = 'Intra-State (CGST + SGST)';
+        isIntraState = true;
+    } else {
+        gstTypeField.value = 'Inter-State (IGST)';
+        isIntraState = false;
+    }
+}
+
+// === Source document loading ===
+function toggleSelectAll() {
+    const checkboxes = document.querySelectorAll('#euLinesBody input[type="checkbox"]:not(:disabled)');
+    const selectAll = document.getElementById('selectAll').checked;
+    checkboxes.forEach(cb => cb.checked = selectAll);
+    calculateTotals();
+}
+
+function loadSource() {
+    const sourceType = document.getElementById('sourceType').value;
+    const sourceDoc = document.getElementById('sourceDoc');
+
+    if (!sourceType) {
+        sourceDoc.innerHTML = '<option value="">--Select Source First--</option>';
+        return;
+    }
+
+    let sourceData;
+    if (sourceType === 'VCN') sourceData = vcnOptions;
+    else if (sourceType === 'MBC') sourceData = mbcOptions;
+    else if (sourceType === 'VEX') sourceData = vexOptions;
+
+    sourceDoc.innerHTML = '<option value="">--Select--</option>';
+    sourceData.forEach(row => {
+        let docNum, vessel, date, displayText;
+        if (sourceType === 'VCN') {
+            docNum = row.vcn_doc_num; vessel = row.vessel_name;
+            date = row.anchored_time ? row.anchored_time.substring(0, 10) : '';
+        } else if (sourceType === 'MBC') {
+            docNum = row.doc_num; vessel = row.mbc_name; date = row.doc_date || '';
+        } else if (sourceType === 'VEX') {
+            docNum = row.vex_doc_num; vessel = row.vessel_name; date = row.bill_of_coastal_goods_date || '';
+        }
+        displayText = date ? `${docNum} - ${vessel} - ${date}` : `${docNum} - ${vessel}`;
+        sourceDoc.innerHTML += `<option value="${row.id}">${displayText}</option>`;
+    });
+}
+
+// === Customer loading ===
+async function loadCustomers() {
+    const customerType = document.getElementById('customerType').value;
+    const customerName = document.getElementById('customerName');
+    const agreementSelect = document.getElementById('agreementSelect');
+
+    agreementSelect.innerHTML = '<option value="">--Select Customer First--</option>';
+    selectedAgreementId = '';
+
+    if (!customerType) {
+        customerName.innerHTML = '<option value="">--Select Customer Type First--</option>';
+        return;
+    }
+
+    customerName.innerHTML = '<option value="">--Loading...--</option>';
+
+    try {
+        const res = await fetch(`/api/module/FIN01/customers/${encodeURIComponent(customerType)}`);
+        const data = await res.json();
+
+        if (data.error) {
+            alert('Error loading customers: ' + data.error);
+            customerName.innerHTML = '<option value="">--Error Loading--</option>';
+            return;
+        }
+
+        const customerList = data.data || [];
+        customerName.innerHTML = '<option value="">--Select--</option>';
+        customerList.forEach(c => {
+            const opt = document.createElement('option');
+            opt.value = c.id;
+            opt.textContent = c.name;
+            opt.dataset.customerData = JSON.stringify(c);
+            customerName.appendChild(opt);
+        });
+    } catch (error) {
+        console.error('Error loading customers:', error);
+        customerName.innerHTML = '<option value="">--Error--</option>';
+    }
+}
+
+// === Customer changed: load agreements + update GST type ===
+async function onCustomerChange() {
+    const customerId = document.getElementById('customerName').value;
+    updateGstType();
+
+    if (!customerId) {
+        document.getElementById('agreementSelect').innerHTML = '<option value="">--Select Customer First--</option>';
+        selectedAgreementId = '';
+        return;
+    }
+
+    // Load agreements for this customer
+    await loadAgreements(customerId);
+
+    // Refresh rates for existing lines
+    await refreshAllRates();
+    calculateTotals();
+}
+
+async function loadAgreements(customerId) {
+    const agreementSelect = document.getElementById('agreementSelect');
+    agreementSelect.innerHTML = '<option value="">--Loading...--</option>';
+
+    try {
+        const res = await fetch(`/api/module/FIN01/customer-agreements/${customerId}`);
+        const data = await res.json();
+        const agreements = data.data || [];
+
+        agreementSelect.innerHTML = '<option value="">--Select Agreement--</option>';
+        agreements.forEach(a => {
+            const opt = document.createElement('option');
+            opt.value = a.id;
+            const validRange = a.valid_to ? `${a.valid_from} to ${a.valid_to}` : `from ${a.valid_from}`;
+            opt.textContent = `${a.agreement_code} - ${a.agreement_name} (${validRange})`;
+            agreementSelect.appendChild(opt);
+        });
+
+        // Auto-select if only one agreement
+        if (agreements.length === 1) {
+            agreementSelect.value = agreements[0].id;
+            selectedAgreementId = agreements[0].id;
+        } else {
+            selectedAgreementId = '';
+        }
+    } catch (error) {
+        console.error('Error loading agreements:', error);
+        agreementSelect.innerHTML = '<option value="">--Error--</option>';
+    }
+}
+
+async function onAgreementChange() {
+    selectedAgreementId = document.getElementById('agreementSelect').value;
+    await refreshAllRates();
+    calculateTotals();
+}
+
+// === Refresh rates for all visible lines (EU + service records) ===
+async function refreshAllRates() {
+    const allRows = [
+        ...document.querySelectorAll('#euLinesBody tr'),
+        ...document.querySelectorAll('#srvLinesBody tr')
+    ];
+
+    for (const row of allRows) {
+        const serviceTypeDropdown = row.querySelector('.service-type-select');
+        const rateInput = row.querySelector('.line-rate');
+
+        if (serviceTypeDropdown && rateInput) {
+            const serviceTypeId = serviceTypeDropdown.value;
+            if (serviceTypeId) {
+                await fetchAndSetRate(serviceTypeId, rateInput, row);
+            }
+        }
+    }
+}
+
+// === EU Lines + Service Records loading ===
+async function loadEULines() {
+    const sourceType = document.getElementById('sourceType').value;
+    const sourceId = document.getElementById('sourceDoc').value;
+
+    if (!sourceType || !sourceId) return;
+
+    if (!serviceTypesLoaded) await loadServiceTypes();
+
+    // Load EU lines and service records in parallel
+    const [euRes, srvRes] = await Promise.all([
+        fetch(`/api/module/FIN01/eu-lines/${sourceType}/${sourceId}`),
+        fetch(`/api/module/FIN01/service-records/${sourceType}/${sourceId}`)
+    ]);
+    const euData = await euRes.json();
+    const srvData = await srvRes.json();
+
+    renderEULines(euData.data || []);
+    renderServiceRecords(srvData.data || []);
+}
+
+function renderEULines(lines) {
+    const tbody = document.getElementById('euLinesBody');
+
+    if (lines.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="10" style="text-align:center;color:#999;padding:20px;">No EU lines found</td></tr>';
+        return;
+    }
+
+    tbody.innerHTML = '';
+    lines.forEach((line, idx) => {
+        const tr = document.createElement('tr');
+        tr.dataset.lineData = JSON.stringify(line);
+        tr.dataset.lineType = 'eu';
+
+        const isBilled = line.is_billed === 1;
+        const billedBadge = isBilled ? '<span style="color:green;font-size:9px;background:#e8f5e9;padding:2px 4px;border-radius:3px;">Billed</span>' : '';
+
+        let serviceTypeSelect = `<select class="service-type-select" style="width:140px;font-size:10px;" ${isBilled ? 'disabled' : ''}>`;
+        serviceTypeSelect += '<option value="">--Select--</option>';
+        serviceTypes.forEach(st => {
+            const selected = st.id === line.service_type_id ? 'selected' : '';
+            serviceTypeSelect += `<option value="${st.id}" ${selected}>${st.service_name}</option>`;
+        });
+        serviceTypeSelect += '</select>';
+
+        tr.innerHTML = `
+            <td><input type="checkbox" class="line-select" ${isBilled ? 'checked disabled' : ''} onchange="calculateTotals()"></td>
+            <td>${line.source_display || '-'} ${billedBadge}</td>
+            <td>${line.equipment_name || '-'}</td>
+            <td>${serviceTypeSelect}</td>
+            <td>${line.start_time || '-'}</td>
+            <td>${line.end_time || '-'}</td>
+            <td style="text-align:right;">${line.quantity || 0}</td>
+            <td>${line.quantity_uom || '-'}</td>
+            <td style="text-align:right;"><input type="number" step="0.01" value="0.00" class="line-rate" style="width:80px;" ${isBilled ? 'disabled' : ''} onchange="calculateTotals()"></td>
+            <td style="text-align:right;"><span class="line-amount">0.00</span></td>
+        `;
+        tbody.appendChild(tr);
+
+        if (!isBilled) {
+            const serviceTypeDropdown = tr.querySelector('.service-type-select');
+            const rateInput = tr.querySelector('.line-rate');
+
+            serviceTypeDropdown.addEventListener('change', async function() {
+                const serviceTypeId = this.value;
+                if (serviceTypeId) {
+                    await fetchAndSetRate(serviceTypeId, rateInput, tr);
+                } else {
+                    rateInput.value = '0.00';
+                }
+                calculateTotals();
+            });
+
+            // Auto-fetch rate if service type and agreement are already selected
+            if (line.service_type_id && selectedAgreementId) {
+                fetchAndSetRate(line.service_type_id, rateInput, tr);
+            }
+        }
+    });
+
+    calculateTotals();
+}
+
+// === Service Records rendering ===
+function toggleSelectAllSrv() {
+    const checkboxes = document.querySelectorAll('#srvLinesBody input[type="checkbox"]');
+    const selectAll = document.getElementById('selectAllSrv').checked;
+    checkboxes.forEach(cb => cb.checked = selectAll);
+    calculateTotals();
+}
+
+function renderServiceRecords(records) {
+    const tbody = document.getElementById('srvLinesBody');
+
+    if (records.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;color:#999;padding:20px;">No service records found</td></tr>';
+        return;
+    }
+
+    tbody.innerHTML = '';
+    records.forEach(rec => {
+        const tr = document.createElement('tr');
+        tr.dataset.lineData = JSON.stringify(rec);
+        tr.dataset.lineType = 'srv';
+
+        // Build details string from field values
+        const details = (rec.field_values || [])
+            .map(fv => `${fv.field_label}: ${fv.field_value || '-'}`)
+            .join(' | ');
+
+        // Find the service type to get its GST info
+        const serviceTypeId = rec.service_type_id;
+        let serviceTypeSelect = `<select class="service-type-select" style="width:140px;font-size:10px;" disabled>`;
+        serviceTypes.forEach(st => {
+            const selected = st.id === serviceTypeId ? 'selected' : '';
+            serviceTypeSelect += `<option value="${st.id}" ${selected}>${st.service_name}</option>`;
+        });
+        serviceTypeSelect += '</select>';
+
+        tr.innerHTML = `
+            <td><input type="checkbox" class="line-select" onchange="calculateTotals()"></td>
+            <td>${rec.record_number}</td>
+            <td>${serviceTypeSelect}</td>
+            <td style="font-size:10px;max-width:250px;overflow:hidden;text-overflow:ellipsis;" title="${details}">${details || '-'}</td>
+            <td style="text-align:right;">${rec.billable_quantity || 0}</td>
+            <td>${rec.billable_uom || '-'}</td>
+            <td style="text-align:right;"><input type="number" step="0.01" value="0.00" class="line-rate" style="width:80px;" onchange="calculateTotals()"></td>
+            <td style="text-align:right;"><span class="line-amount">0.00</span></td>
+        `;
+        tbody.appendChild(tr);
+
+        // Auto-fetch rate if agreement is selected
+        const rateInput = tr.querySelector('.line-rate');
+        if (serviceTypeId && selectedAgreementId) {
+            fetchAndSetRate(serviceTypeId, rateInput, tr);
+        }
+    });
+
+    calculateTotals();
+}
+
+// === Rate fetching from agreement ===
+async function fetchAndSetRate(serviceTypeId, rateInput, rowElement) {
+    const customerId = document.getElementById('customerName').value;
+    if (!customerId) { rateInput.value = '0.00'; return; }
+
+    try {
+        let url = `/api/module/FIN01/agreement-rate/${customerId}/${serviceTypeId}`;
+        if (selectedAgreementId) url += `?agreement_id=${selectedAgreementId}`;
+
+        const res = await fetch(url);
+        const result = await res.json();
+
+        if (result.success) {
+            rateInput.value = result.data.rate.toFixed(2);
+            const lineData = JSON.parse(rowElement.dataset.lineData);
+            lineData.agreed_rate = result.data.rate;
+            lineData.agreement_code = result.data.agreement_code;
+            rowElement.dataset.lineData = JSON.stringify(lineData);
+        } else {
+            rateInput.value = '0.00';
+        }
+    } catch (error) {
+        console.error('Error fetching rate:', error);
+        rateInput.value = '0.00';
+    }
+}
+
+// === Totals calculation with per-line GST from master ===
+function calculateTotals() {
+    let subtotal = 0;
+    let cgstTotal = 0;
+    let sgstTotal = 0;
+    let igstTotal = 0;
+
+    const selected = document.querySelectorAll('.line-select:checked');
+
+    selected.forEach(cb => {
+        const row = cb.closest('tr');
+        const lineData = JSON.parse(row.dataset.lineData);
+        const rateInput = row.querySelector('.line-rate');
+        const amountSpan = row.querySelector('.line-amount');
+        const serviceTypeDropdown = row.querySelector('.service-type-select');
+
+        const rate = parseFloat(rateInput.value) || 0;
+        const quantity = parseFloat(lineData.quantity) || parseFloat(lineData.billable_quantity) || 0;
+        const lineAmount = rate * quantity;
+
+        amountSpan.textContent = lineAmount.toFixed(2);
+        subtotal += lineAmount;
+
+        // Per-line GST from service type master
+        const serviceTypeId = serviceTypeDropdown ? serviceTypeDropdown.value : '';
+        if (serviceTypeId) {
+            const gst = computeLineGst(lineAmount, serviceTypeId);
+            cgstTotal += gst.cgst_amount;
+            sgstTotal += gst.sgst_amount;
+            igstTotal += gst.igst_amount;
+        }
+    });
+
+    document.getElementById('subtotal').textContent = subtotal.toFixed(2);
+    document.getElementById('cgst').textContent = cgstTotal.toFixed(2);
+    document.getElementById('sgst').textContent = sgstTotal.toFixed(2);
+    document.getElementById('igst').textContent = igstTotal.toFixed(2);
+    document.getElementById('totalAmount').textContent = (subtotal + cgstTotal + sgstTotal + igstTotal).toFixed(2);
+}
+
+// === Generate bill ===
+async function generateBill() {
+    const sourceType = document.getElementById('sourceType').value;
+    const sourceId = document.getElementById('sourceDoc').value;
+    const billDate = document.getElementById('billDate').value;
+    const customerType = document.getElementById('customerType').value;
+    const customerName = document.getElementById('customerName').value;
+    const currency = document.getElementById('currency').value;
+    const remarks = document.getElementById('remarks').value;
+
+    if (!sourceType || !sourceId || !billDate || !customerType || !customerName) {
+        alert('Please fill all required fields');
+        return;
+    }
+
+    const selected = document.querySelectorAll('.line-select:checked');
+    if (selected.length === 0) {
+        alert('Please select at least one line');
+        return;
+    }
+
+    const customerSelect = document.getElementById('customerName');
+    const selectedOption = customerSelect.options[customerSelect.selectedIndex];
+    if (!selectedOption || !selectedOption.dataset.customerData) {
+        alert('Please select a valid customer');
+        return;
+    }
+    const customer = JSON.parse(selectedOption.dataset.customerData);
+
+    const billLines = [];
+    let hasError = false;
+
+    selected.forEach(cb => {
+        if (hasError) return;
+        const row = cb.closest('tr');
+        const line = JSON.parse(row.dataset.lineData);
+        const rateInput = row.querySelector('.line-rate');
+        const serviceTypeDropdown = row.querySelector('.service-type-select');
+
+        const rate = parseFloat(rateInput.value) || 0;
+        const quantity = parseFloat(line.quantity) || parseFloat(line.billable_quantity) || 0;
+        const serviceTypeId = serviceTypeDropdown ? parseInt(serviceTypeDropdown.value) : null;
+
+        if (!serviceTypeId) {
+            alert('Please select service type for all selected lines');
+            hasError = true;
+            return;
+        }
+
+        const serviceType = serviceTypes.find(st => st.id === serviceTypeId);
+        const serviceName = serviceType ? serviceType.service_name : '';
+
+        const lineAmount = rate * quantity;
+        const gst = computeLineGst(lineAmount, serviceTypeId);
+        const lineTotal = lineAmount + gst.tax_total;
+
+        const lineEntry = {
+            service_type_id: serviceTypeId,
+            service_name: serviceName,
+            quantity: quantity,
+            uom: line.quantity_uom || line.billable_uom || '',
+            rate: rate,
+            line_amount: lineAmount,
+            line_total: lineTotal,
+            gst_rate_id: serviceType ? serviceType.gst_rate_id : null,
+            cgst_rate: gst.cgst_rate,
+            sgst_rate: gst.sgst_rate,
+            igst_rate: gst.igst_rate,
+            cgst_amount: gst.cgst_amount,
+            sgst_amount: gst.sgst_amount,
+            igst_amount: gst.igst_amount,
+            gl_code: serviceType ? serviceType.gl_code : '',
+            sac_code: serviceType ? serviceType.sac_code : ''
+        };
+
+        // Determine if EU line or service record
+        const lineType = row.dataset.lineType || 'eu';
+        if (lineType === 'eu') {
+            lineEntry.eu_line_id = line.id;
+            lineEntry.service_description = `${line.equipment_name || ''} - ${line.cargo_name || ''}`.trim();
+        } else if (lineType === 'srv') {
+            lineEntry.service_record_id = line.id;
+            lineEntry.service_description = serviceName;
+        }
+
+        billLines.push(lineEntry);
+    });
+
+    if (hasError) return;
+
+    const billData = {
+        bill_date: billDate,
+        bill_series: 'BILL',
+        source_type: sourceType,
+        source_id: parseInt(sourceId),
+        customer_type: customerType,
+        customer_id: customer.id,
+        customer_name: customer.name,
+        customer_gstin: customer.gstin,
+        customer_gst_state_code: customer.gst_state_code,
+        customer_gl_code: customer.gl_code,
+        currency_code: currency,
+        agreement_id: selectedAgreementId ? parseInt(selectedAgreementId) : null,
+        remarks: remarks,
+        lines: billLines
+    };
+
+    const res = await fetch('/api/module/FIN01/bill/save', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(billData)
+    });
+
+    const result = await res.json();
+    if (result.success) {
+        alert(`Bill ${result.bill_number} generated successfully!`);
+        location.href = '/module/FIN01/bills';
+    } else {
+        alert('Error: ' + (result.error || 'Failed to generate bill'));
+    }
+}
+</script>
+{% endblock %}

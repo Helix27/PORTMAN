@@ -1,0 +1,319 @@
+{% extends "base.html" %}
+
+{% block title %}Customer Agreement Entry - PORTMAN{% endblock %}
+
+{% block content %}
+<style>
+    .form-section { background: white; padding: 15px; margin-bottom: 15px; border-radius: 4px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+    .form-section h3 { margin: 0 0 10px 0; font-size: 14px; border-bottom: 2px solid #d90429; padding-bottom: 5px; }
+    .form-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 10px; }
+    .form-group { display: flex; flex-direction: column; }
+    .form-group label { font-size: 11px; font-weight: 600; margin-bottom: 3px; }
+    .form-group input, .form-group select { padding: 6px; font-size: 11px; border: 1px solid #ddd; border-radius: 3px; }
+    .btn { padding: 6px 12px; font-size: 11px; border: none; border-radius: 3px; cursor: pointer; margin-right: 5px; }
+    .btn-primary { background: #3498db; color: white; }
+    .btn-success { background: #27ae60; color: white; }
+    .btn-danger { background: #e74c3c; color: white; }
+    .btn-secondary { background: #95a5a6; color: white; }
+    .data-table { width: 100%; border-collapse: collapse; font-size: 11px; background: white; }
+    .data-table th, .data-table td { padding: 8px; text-align: left; border-bottom: 1px solid #ecf0f1; }
+    .data-table th { background: #34495e; color: white; font-weight: 600; font-size: 10px; }
+    .data-table input, .data-table select { width: 100%; padding: 4px; font-size: 11px; border: 1px solid #ddd; }
+    .toolbar { margin-bottom: 10px; }
+</style>
+
+<div class="module-header">
+    <h2>Customer Agreement Entry</h2>
+    <div>
+        <span class="module-code" style="margin-right: 10px;">FCAM01</span>
+        <button class="btn btn-secondary" onclick="location.href='/module/FCAM01/'">Back to List</button>
+    </div>
+</div>
+
+<div class="form-section">
+    <h3>Agreement Header</h3>
+    <form id="headerForm">
+        <input type="hidden" id="agreement_id" value="{{ header.id if header else '' }}">
+        <div class="form-row">
+            <div class="form-group">
+                <label>Agreement Code</label>
+                <input type="text" id="agreement_code" value="{{ header.agreement_code if header else '' }}" readonly>
+            </div>
+            <div class="form-group">
+                <label>Agreement Name *</label>
+                <input type="text" id="agreement_name" value="{{ header.agreement_name if header else '' }}" required>
+            </div>
+            <div class="form-group">
+                <label>Customer Type *</label>
+                <select id="customer_type" required onchange="loadCustomers()">
+                    <option value="">--Select--</option>
+                    <option value="Customer" {% if header and header.customer_type == 'Customer' %}selected{% endif %}>Customer</option>
+                    <option value="Importer/Exporter" {% if header and header.customer_type == 'Importer/Exporter' %}selected{% endif %}>Importer/Exporter</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label>Customer *</label>
+                <select id="customer_id" required>
+                    <option value="">--Select--</option>
+                </select>
+            </div>
+        </div>
+        <div class="form-row">
+            <div class="form-group">
+                <label>Currency</label>
+                <select id="currency_code">
+                    {% for curr in currencies %}
+                    <option value="{{ curr.currency_code }}" {% if header and header.currency_code == curr.currency_code %}selected{% endif %}>{{ curr.currency_code }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="form-group">
+                <label>Valid From *</label>
+                <input type="date" id="valid_from" value="{{ header.valid_from if header else '' }}" required>
+            </div>
+            <div class="form-group">
+                <label>Valid To</label>
+                <input type="date" id="valid_to" value="{{ header.valid_to if header else '' }}">
+            </div>
+            <div class="form-group">
+                <label>Status</label>
+                <select id="is_active">
+                    <option value="1" {% if not header or header.is_active %}selected{% endif %}>Active</option>
+                    <option value="0" {% if header and not header.is_active %}selected{% endif %}>Inactive</option>
+                </select>
+            </div>
+        </div>
+        <div class="form-row">
+            <div class="form-group" style="grid-column: span 4;">
+                <label>Remarks</label>
+                <input type="text" id="remarks" value="{{ header.remarks if header else '' }}">
+            </div>
+        </div>
+        <button type="submit" class="btn btn-primary">Save Header</button>
+    </form>
+</div>
+
+<div class="form-section">
+    <h3>Agreement Lines</h3>
+    <div class="toolbar">
+        <button class="btn btn-success" onclick="addLine()">+ Add Service</button>
+        <button class="btn btn-danger" onclick="deleteSelectedLines()">Delete Selected</button>
+    </div>
+    <table class="data-table" id="linesTable">
+        <thead>
+            <tr>
+                <th style="width:30px"><input type="checkbox" onclick="toggleSelectAll(this)"></th>
+                <th>Service Type *</th>
+                <th>Rate *</th>
+                <th>UOM</th>
+                <th>Currency</th>
+                <th>Min Charge</th>
+                <th>Max Charge</th>
+                <th>Remarks</th>
+            </tr>
+        </thead>
+        <tbody id="linesBody">
+            {% for line in lines %}
+            <tr data-id="{{ line.id }}">
+                <td><input type="checkbox" class="line-select"></td>
+                <td>
+                    <select name="service_type_id[]" required>
+                        {% for svc in service_types %}
+                        <option value="{{ svc.id }}" {% if line.service_type_id == svc.id %}selected{% endif %}>{{ svc.service_name }}</option>
+                        {% endfor %}
+                    </select>
+                </td>
+                <td><input type="number" step="0.01" name="rate[]" value="{{ line.rate }}" required></td>
+                <td><input type="text" name="uom[]" value="{{ line.uom }}"></td>
+                <td><input type="text" name="currency[]" value="{{ line.currency_code }}"></td>
+                <td><input type="number" step="0.01" name="min_charge[]" value="{{ line.min_charge }}"></td>
+                <td><input type="number" step="0.01" name="max_charge[]" value="{{ line.max_charge }}"></td>
+                <td><input type="text" name="remarks[]" value="{{ line.remarks }}"></td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    <button class="btn btn-primary" onclick="saveAllLines()" style="margin-top: 10px;">Save All Lines</button>
+</div>
+
+<script>
+try {
+    addToRecent('FCAM01', 'Customer Agreements');
+} catch(e) {
+    console.error('Error in addToRecent:', e);
+}
+
+console.log('Script starting...');
+
+var importers = {{ importers|tojson|safe }} || [];
+var customers = {{ customers|tojson|safe }} || [];
+var serviceTypes = {{ service_types|tojson|safe }} || [];
+var currencies = {{ currencies|tojson|safe }} || [];
+var currentAgreementId = document.getElementById('agreement_id').value;
+
+console.log('Variables declared');
+console.log('Importers type:', typeof importers, 'length:', importers.length);
+console.log('Customers type:', typeof customers, 'length:', customers.length);
+console.log('Service Types loaded:', serviceTypes.length);
+console.log('First customer:', customers[0]);
+
+function loadCustomers() {
+    const type = document.getElementById('customer_type').value;
+    const customerSelect = document.getElementById('customer_id');
+    customerSelect.innerHTML = '<option value="">--Select--</option>';
+
+    console.log('Loading customers for type:', type);
+    const list = type === 'Customer' ? customers : importers;
+    console.log('Selected list:', list);
+    console.log('Is array?', Array.isArray(list));
+    console.log('List length:', list ? list.length : 0);
+
+    if (list && Array.isArray(list)) {
+        list.forEach(c => {
+            const opt = document.createElement('option');
+            opt.value = c.id;
+            opt.textContent = c.name;
+            customerSelect.appendChild(opt);
+        });
+        console.log('Added', list.length, 'options to dropdown');
+    } else {
+        console.error('List is not an array or is null/undefined');
+    }
+}
+
+// Load customers on page load if customer type is already selected
+if (document.getElementById('customer_type').value) {
+    loadCustomers();
+}
+
+{% if header %}
+// Set the selected customer value after loading customers
+document.getElementById('customer_id').value = {{ header.customer_id }};
+{% endif %}
+
+document.getElementById('headerForm').onsubmit = async function(e) {
+    e.preventDefault();
+
+    const data = {
+        id: currentAgreementId || '',
+        agreement_name: document.getElementById('agreement_name').value,
+        customer_type: document.getElementById('customer_type').value,
+        customer_id: document.getElementById('customer_id').value,
+        customer_name: document.getElementById('customer_id').selectedOptions[0].textContent,
+        currency_code: document.getElementById('currency_code').value,
+        valid_from: document.getElementById('valid_from').value,
+        valid_to: document.getElementById('valid_to').value,
+        is_active: document.getElementById('is_active').value,
+        remarks: document.getElementById('remarks').value
+    };
+
+    const res = await fetch('/api/module/FCAM01/save-header', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(data)
+    });
+    const result = await res.json();
+    if (result.success) {
+        alert('Header saved successfully');
+        currentAgreementId = result.id;
+        document.getElementById('agreement_id').value = result.id;
+        document.getElementById('agreement_code').value = result.agreement_code;
+    } else {
+        alert('Error: ' + result.error);
+    }
+};
+
+function addLine() {
+    if (!currentAgreementId) {
+        alert('Please save header first');
+        return;
+    }
+    const tbody = document.getElementById('linesBody');
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+        <td><input type="checkbox" class="line-select"></td>
+        <td>
+            <select name="service_type_id[]" required>
+                ${serviceTypes.map(s => `<option value="${s.id}">${s.service_name}</option>`).join('')}
+            </select>
+        </td>
+        <td><input type="number" step="0.01" name="rate[]" required></td>
+        <td><input type="text" name="uom[]"></td>
+        <td><input type="text" name="currency[]" value="${document.getElementById('currency_code').value}"></td>
+        <td><input type="number" step="0.01" name="min_charge[]"></td>
+        <td><input type="number" step="0.01" name="max_charge[]"></td>
+        <td><input type="text" name="remarks[]"></td>
+    `;
+    tbody.appendChild(tr);
+}
+
+async function saveAllLines() {
+    if (!currentAgreementId) {
+        alert('Please save header first');
+        return;
+    }
+
+    const rows = document.querySelectorAll('#linesBody tr');
+    let saved = 0;
+
+    for (let row of rows) {
+        const id = row.getAttribute('data-id') || '';
+        const data = {
+            id: id,
+            agreement_id: currentAgreementId,
+            service_type_id: row.querySelector('[name="service_type_id[]"]').value,
+            rate: row.querySelector('[name="rate[]"]').value,
+            uom: row.querySelector('[name="uom[]"]').value,
+            currency_code: row.querySelector('[name="currency[]"]').value,
+            min_charge: row.querySelector('[name="min_charge[]"]').value,
+            max_charge: row.querySelector('[name="max_charge[]"]').value,
+            remarks: row.querySelector('[name="remarks[]"]').value
+        };
+
+        if (!data.rate) continue;
+
+        const res = await fetch('/api/module/FCAM01/save-line', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify(data)
+        });
+        const result = await res.json();
+        if (result.success) {
+            saved++;
+            if (!id) row.setAttribute('data-id', result.id);
+        }
+    }
+
+    if (saved > 0) {
+        alert(`Saved ${saved} line(s)`);
+        location.reload();
+    }
+}
+
+function toggleSelectAll(checkbox) {
+    document.querySelectorAll('.line-select').forEach(cb => cb.checked = checkbox.checked);
+}
+
+async function deleteSelectedLines() {
+    const selected = document.querySelectorAll('.line-select:checked');
+    if (selected.length === 0) {
+        alert('Select lines to delete');
+        return;
+    }
+    if (!confirm(`Delete ${selected.length} line(s)?`)) return;
+
+    for (let checkbox of selected) {
+        const row = checkbox.closest('tr');
+        const id = row.getAttribute('data-id');
+        if (id) {
+            await fetch('/api/module/FCAM01/delete-line', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({id})
+            });
+        }
+        row.remove();
+    }
+}
+</script>
+{% endblock %}

@@ -1,0 +1,142 @@
+{% extends "base.html" %}
+
+{% block title %}Bill {{ bill.bill_number }} - PORTMAN{% endblock %}
+
+{% block content %}
+<style>
+    .bill-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; border-bottom: 2px solid #d90429; padding-bottom: 15px; }
+    .bill-info { background: #f8f9fa; padding: 15px; border-radius: 4px; margin-bottom: 20px; }
+    .info-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 15px; font-size: 12px; }
+    .info-item label { font-weight: 600; color: #666; display: block; margin-bottom: 3px; }
+    .info-item div { color: #333; }
+    .data-table { width: 100%; border-collapse: collapse; font-size: 11px; background: white; box-shadow: 0 1px 3px rgba(0,0,0,0.1); margin-bottom: 20px; }
+    .data-table th, .data-table td { padding: 8px; text-align: left; border-bottom: 1px solid #ecf0f1; }
+    .data-table th { background: #34495e; color: white; font-weight: 600; font-size: 10px; text-transform: uppercase; }
+    .text-right { text-align: right !important; }
+    .totals-section { width: 400px; margin-left: auto; background: #f8f9fa; padding: 15px; border-radius: 4px; }
+    .total-row { display: flex; justify-content: space-between; padding: 5px 0; font-size: 12px; }
+    .total-row.grand { font-weight: bold; font-size: 14px; border-top: 2px solid #333; margin-top: 10px; padding-top: 10px; }
+    .btn { padding: 8px 16px; font-size: 11px; border: none; border-radius: 3px; cursor: pointer; margin-right: 5px; }
+    .btn-primary { background: #3498db; color: white; }
+    .btn-secondary { background: #95a5a6; color: white; }
+    .status-badge { padding: 4px 12px; border-radius: 3px; font-size: 11px; color: white; font-weight: 600; }
+    .status-draft { background: #95a5a6; }
+    .status-pending { background: #f39c12; }
+    .status-approved { background: #27ae60; }
+    .status-rejected { background: #e74c3c; }
+</style>
+
+<div class="bill-header">
+    <div>
+        <h2 style="margin: 0; font-size: 18px;">Bill Details</h2>
+        <p style="margin: 5px 0 0 0; color: #666; font-size: 12px;">Bill Number: <strong>{{ bill.bill_number }}</strong></p>
+    </div>
+    <div>
+        <span class="status-badge status-{{ bill.bill_status|lower|replace(' ', '-') }}">{{ bill.bill_status }}</span>
+    </div>
+</div>
+
+<div class="bill-info">
+    <div class="info-grid">
+        <div class="info-item">
+            <label>Bill Date</label>
+            <div>{{ bill.bill_date }}</div>
+        </div>
+        <div class="info-item">
+            <label>Bill Series</label>
+            <div>{{ bill.bill_series or 'BILL' }}</div>
+        </div>
+        <div class="info-item">
+            <label>Source</label>
+            <div>{{ bill.source_display or 'N/A' }}</div>
+        </div>
+        <div class="info-item">
+            <label>Customer Type</label>
+            <div>{{ bill.customer_type }}</div>
+        </div>
+        <div class="info-item">
+            <label>Customer Name</label>
+            <div>{{ bill.customer_name }}</div>
+        </div>
+        <div class="info-item">
+            <label>GSTIN</label>
+            <div>{{ bill.customer_gstin or 'N/A' }}</div>
+        </div>
+        <div class="info-item">
+            <label>Created By</label>
+            <div>{{ bill.created_by }}</div>
+        </div>
+        <div class="info-item">
+            <label>Created Date</label>
+            <div>{{ bill.created_date }}</div>
+        </div>
+        {% if bill.approved_by %}
+        <div class="info-item">
+            <label>Approved By</label>
+            <div>{{ bill.approved_by }} on {{ bill.approved_date }}</div>
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+<h3 style="font-size: 14px; margin: 20px 0 10px 0;">Bill Line Items</h3>
+<table class="data-table">
+    <thead>
+        <tr>
+            <th style="width: 40px;">S.No</th>
+            <th>Service Name</th>
+            <th class="text-right" style="width: 80px;">Quantity</th>
+            <th style="width: 60px;">UOM</th>
+            <th class="text-right" style="width: 100px;">Rate</th>
+            <th class="text-right" style="width: 100px;">Amount</th>
+            <th class="text-right" style="width: 80px;">CGST</th>
+            <th class="text-right" style="width: 80px;">SGST</th>
+            <th class="text-right" style="width: 100px;">Total</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for line in bill_lines %}
+        <tr>
+            <td class="text-right">{{ loop.index }}</td>
+            <td>{{ line.service_name }}</td>
+            <td class="text-right">{{ "%.2f"|format(line.quantity) }}</td>
+            <td>{{ line.uom }}</td>
+            <td class="text-right">{{ "%.2f"|format(line.rate) }}</td>
+            <td class="text-right">{{ "%.2f"|format(line.line_amount) }}</td>
+            <td class="text-right">{{ "%.2f"|format(line.cgst_amount) }}</td>
+            <td class="text-right">{{ "%.2f"|format(line.sgst_amount) }}</td>
+            <td class="text-right">{{ "%.2f"|format(line.line_total) }}</td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+
+<div class="totals-section">
+    <div class="total-row">
+        <span>Subtotal:</span>
+        <span>{{ "%.2f"|format(bill.subtotal) }}</span>
+    </div>
+    <div class="total-row">
+        <span>CGST:</span>
+        <span>{{ "%.2f"|format(bill.cgst_amount) }}</span>
+    </div>
+    <div class="total-row">
+        <span>SGST:</span>
+        <span>{{ "%.2f"|format(bill.sgst_amount) }}</span>
+    </div>
+    <div class="total-row">
+        <span>IGST:</span>
+        <span>{{ "%.2f"|format(bill.igst_amount) }}</span>
+    </div>
+    <div class="total-row grand">
+        <span>Total Amount:</span>
+        <span>₹ {{ "%.2f"|format(bill.total_amount) }}</span>
+    </div>
+</div>
+
+<div style="margin-top: 30px;">
+    <button class="btn btn-primary" onclick="window.print()">Print Bill</button>
+    <button class="btn btn-secondary" onclick="location.href='/module/FIN01/bills'">Back to Bills</button>
+</div>
+
+{% endblock %}

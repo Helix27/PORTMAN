@@ -1,0 +1,941 @@
+{% extends "base.html" %}
+
+{% block title %}Vessel Call Number - PORTMAN{% endblock %}
+
+{% block head %}
+<style>
+    .detail-modal {
+        display: none;
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: rgba(0, 0, 0, 0.5);
+        z-index: 9999;
+        overflow: auto;
+    }
+    .detail-modal.active {
+        display: flex;
+        align-items: flex-start;
+        justify-content: center;
+        padding: 20px;
+    }
+    .detail-modal-content {
+        background: white;
+        border-radius: 8px;
+        width: 95%;
+        max-width: 1400px;
+        margin: 20px auto;
+        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+        position: relative;
+        max-height: 90vh;
+        overflow-y: auto;
+    }
+    .dark-theme .detail-modal-content {
+        background: #1e293b;
+        color: #e2e8f0;
+    }
+    .detail-modal-header {
+        padding: 20px;
+        border-bottom: 2px solid #3182ce;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        position: sticky;
+        top: 0;
+        background: white;
+        z-index: 10;
+    }
+    .dark-theme .detail-modal-header {
+        background: #1e293b;
+        border-color: #334155;
+    }
+    .detail-modal-header h3 {
+        margin: 0;
+        font-size: 18px;
+        font-weight: 600;
+    }
+    .detail-modal-close {
+        background: #e53e3e;
+        color: white;
+        border: none;
+        padding: 8px 16px;
+        border-radius: 4px;
+        cursor: pointer;
+        font-size: 14px;
+        font-weight: 500;
+    }
+    .detail-modal-close:hover {
+        background: #c53030;
+    }
+    .detail-modal-body {
+        padding: 20px;
+    }
+    .sub-table-container {
+        background: #f8fafc;
+        padding: 15px;
+        border-bottom: 2px solid #3182ce;
+        box-sizing: border-box;
+        width: 100% !important;
+        overflow: hidden;
+        display: block;
+        margin: 0;
+    }
+    .btn-open-details {
+        background: #3182ce;
+        color: white;
+        border: none;
+        padding: 4px 10px;
+        border-radius: 4px;
+        cursor: pointer;
+        font-size: 12px;
+        font-weight: 500;
+    }
+    .btn-open-details:hover {
+        background: #2c5282;
+    }
+    .dark-theme .sub-table-container {
+        background: #1e293b;
+        border-color: #334155;
+    }
+    .sub-section {
+        margin-bottom: 15px;
+        border: 1px solid #cbd5e0;
+        border-radius: 6px;
+        overflow: hidden;
+    }
+    .sub-section:last-child {
+        margin-bottom: 0;
+    }
+    .dark-theme .sub-section {
+        border-color: #475569;
+    }
+    .sub-section-header {
+        background: #e2e8f0;
+        padding: 10px 15px;
+        font-weight: 600;
+        font-size: 13px;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        color: #1a202c;
+    }
+    .dark-theme .sub-section-header {
+        background: #334155;
+        color: #e2e8f0;
+    }
+    .sub-section-content {
+        background: white;
+    }
+    .dark-theme .sub-section-content {
+        background: #1e293b;
+    }
+    .sub-tabulator {
+        font-size: 12px;
+        width: 100% !important;
+        max-width: 100% !important;
+    }
+    .sub-tabulator .tabulator-header {
+        background: #f1f5f9 !important;
+        border-bottom: 1px solid #cbd5e0 !important;
+    }
+    .sub-tabulator .tabulator-header .tabulator-col {
+        background: #f1f5f9 !important;
+        border-right: 1px solid #e2e8f0 !important;
+    }
+    .sub-tabulator .tabulator-header .tabulator-col-title {
+        color: #374151 !important;
+        font-weight: 600 !important;
+    }
+    .sub-tabulator .tabulator-tableHolder {
+        overflow-x: hidden !important;
+    }
+    .dark-theme .sub-tabulator .tabulator-header {
+        background: #475569 !important;
+        border-bottom: 1px solid #64748b !important;
+    }
+    .dark-theme .sub-tabulator .tabulator-header .tabulator-col {
+        background: #475569 !important;
+        border-right: 1px solid #64748b !important;
+    }
+    .dark-theme .sub-tabulator .tabulator-header .tabulator-col-title {
+        color: #e2e8f0 !important;
+    }
+    .btn-sub-add {
+        background: #48bb78;
+        color: white;
+        border: none;
+        padding: 5px 12px;
+        border-radius: 4px;
+        font-size: 12px;
+        cursor: pointer;
+    }
+    .btn-sub-add:hover {
+        background: #38a169;
+    }
+    .btn-sub-delete {
+        background: #fc8181;
+        color: white;
+        border: none;
+        padding: 3px 10px;
+        border-radius: 3px;
+        font-size: 11px;
+        cursor: pointer;
+    }
+    .btn-sub-delete:hover {
+        background: #f56565;
+    }
+    .btn-sub-save {
+        background: #3182ce;
+        color: white;
+        border: none;
+        padding: 5px 12px;
+        border-radius: 4px;
+        font-size: 12px;
+        cursor: pointer;
+        font-weight: 500;
+    }
+    .btn-sub-save:hover {
+        background: #2c5282;
+    }
+    .sub-section-actions {
+        display: flex;
+        gap: 8px;
+        align-items: center;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="module-header">
+    <h2>Vessel Call Number</h2>
+    <span class="module-code">VCN01</span>
+    <span id="saveStatus" class="save-status"></span>
+</div>
+
+<div class="toolbar">
+    {% if permissions.can_add %}<button class="btn btn-add" onclick="addRow()">+ Add Row</button>{% endif %}
+    {% if permissions.can_delete %}<button class="btn btn-delete" onclick="deleteSelected()">Delete Selected</button>{% endif %}
+    {% if permissions.can_add or permissions.can_edit %}<button class="btn btn-save" onclick="saveAll()">Save (Ctrl+S)</button>{% endif %}
+    <div class="row-info">Rows: <span id="rowCount">0</span> / <span id="totalCount">0</span></div>
+</div>
+
+<div id="table"></div>
+
+<!-- Details Modal -->
+<div id="detailsModal" class="detail-modal">
+    <div class="detail-modal-content">
+        <div class="detail-modal-header">
+            <h3 id="modalTitle">VCN Details</h3>
+            <button class="detail-modal-close" onclick="closeDetailsModal()">Close</button>
+        </div>
+        <div class="detail-modal-body">
+            <div id="modalSubTables"></div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    addToRecent('VCN01', 'Vessel Call Number');
+
+    let table;
+    let vessels = [];
+    let vesselAgents = [];
+    let importerExporters = [];
+    let customers = [];
+    let operationTypes = [];
+    let cargoTypes = [];
+    let docSeries = [];
+    let dischargeTypes = [];
+    let runTypes = [];
+    let delayTypes = [];
+    let cargoNames = [];
+    let quantityUoms = [];
+    let hatches = [];
+    let holds = [];
+    let moduleConfig = {};
+
+    // Store sub-table instances
+    let subTables = {};
+    let currentVcnId = null;
+
+    const currentUser = '{{ session.username }}';
+    const permissions = {
+        can_read: {{ permissions.can_read|default(0) }},
+        can_add: {{ permissions.can_add|default(0) }},
+        can_edit: {{ permissions.can_edit|default(0) }},
+        can_delete: {{ permissions.can_delete|default(0) }}
+    };
+
+    function getTodayDate() {
+        return new Date().toISOString().split('T')[0];
+    }
+
+    function showStatus(message, type) {
+        const status = document.getElementById('saveStatus');
+        status.textContent = message;
+        status.className = 'save-status ' + type;
+        if (type === 'saved') {
+            setTimeout(() => { status.textContent = ''; status.className = 'save-status'; }, 2000);
+        }
+    }
+
+    async function loadMasterData() {
+        const [vesselsRes, agentsRes, ieRes, custRes, opRes, cargoRes, dsRes, todRes, rtRes, dmRes, cnRes, uomRes, hatchRes, holdRes, configRes] = await Promise.all([
+            fetch('/api/module/VCN01/vessels'),
+            fetch('/api/module/VAM01/all'),
+            fetch('/api/module/VIEM01/all'),
+            fetch('/api/module/VCUM01/all'),
+            fetch('/api/module/VOT01/all'),
+            fetch('/api/module/VCG01/types'),
+            fetch('/api/module/VCDS01/all'),
+            fetch('/api/module/VTOD01/all'),
+            fetch('/api/module/VRT01/all'),
+            fetch('/api/module/VDM01/all'),
+            fetch('/api/module/VCG01/names'),
+            fetch('/api/module/VQM01/all'),
+            fetch('/api/module/VHM01/all'),
+            fetch('/api/module/VHO01/all'),
+            fetch('/admin/api/config/VCN01')
+        ]);
+        vessels = await vesselsRes.json();
+        vesselAgents = await agentsRes.json();
+        importerExporters = await ieRes.json();
+        customers = await custRes.json();
+        operationTypes = await opRes.json();
+        cargoTypes = await cargoRes.json();
+        docSeries = await dsRes.json();
+        dischargeTypes = await todRes.json();
+        runTypes = await rtRes.json();
+        delayTypes = await dmRes.json();
+        cargoNames = await cnRes.json();
+        quantityUoms = await uomRes.json();
+        hatches = await hatchRes.json();
+        holds = await holdRes.json();
+        moduleConfig = await configRes.json();
+        initTable();
+    }
+
+    function initTable() {
+        const isApprover = moduleConfig.approver_id == '{{ session.user_id }}';
+        const needsApproval = moduleConfig.approval_add || moduleConfig.approval_edit;
+        const canEditStatus = isApprover || !needsApproval;
+        const canEdit = permissions.can_edit || permissions.can_add;
+
+        const vesselOptions = {};
+        vessels.forEach(v => { vesselOptions[v.value] = v.value; });
+
+        const columns = [
+            {formatter: "rowSelection", titleFormatter: "rowSelection", hozAlign: "center", headerSort: false, width: 40},
+            {
+                title: "Details",
+                formatter: function(cell) {
+                    const data = cell.getRow().getData();
+                    if (!data.id) return '';
+                    return '<button class="btn-open-details">+</button>';
+                },
+                width: 70,
+                hozAlign: "center",
+                headerSort: false,
+                cellClick: function(e, cell) {
+                    const row = cell.getRow();
+                    const data = row.getData();
+                    if (!data.id) return;
+                    openDetailsModal(data);
+                }
+            },
+            {title: "VCN Doc", field: "vcn_doc_num", width: 80},
+            {title: "Vessel Master Doc", field: "vessel_master_doc", editor: canEdit ? "list" : false,
+                editorParams: {values: vesselOptions, autocomplete: true, allowEmpty: true}, width: 160,
+                cellEdited: function(cell) {
+                    const val = cell.getValue();
+                    const vessel = vessels.find(v => v.value === val);
+                    if (vessel) {
+                        cell.getRow().update({vessel_name: vessel.vessel_name});
+                    }
+                }
+            },
+            {title: "Vessel Name", field: "vessel_name", width: 130},
+            {title: "Vessel Agent", field: "vessel_agent_name", editor: canEdit ? "list" : false,
+                editorParams: {values: vesselAgents, autocomplete: true, allowEmpty: true}, width: 120},
+            {title: "Importer/Exporter", field: "importer_exporter_name", editor: canEdit ? "list" : false,
+                editorParams: {values: importerExporters, autocomplete: true, allowEmpty: true}, width: 130},
+            {title: "Customer", field: "customer_name", editor: canEdit ? "list" : false,
+                editorParams: {values: customers, autocomplete: true, allowEmpty: true}, width: 120},
+            {title: "Operation Type", field: "operation_type", editor: canEdit ? "list" : false,
+                editorParams: {values: operationTypes, autocomplete: true, allowEmpty: true}, width: 110},
+            {title: "Cargo Type", field: "cargo_type", editor: canEdit ? "list" : false,
+                editorParams: {values: cargoTypes, autocomplete: true, allowEmpty: true}, width: 100},
+            {title: "Doc Series", field: "vcn_doc_series", editor: canEdit ? "list" : false,
+                editorParams: {values: docSeries, autocomplete: true, allowEmpty: true}, width: 100},
+            {title: "Discharge Type", field: "type_of_discharge", editor: canEdit ? "list" : false,
+                editorParams: {values: dischargeTypes, autocomplete: true, allowEmpty: true}, width: 110},
+            {title: "Doc Date", field: "doc_date", width: 100},
+            {title: "Created By", field: "created_by", width: 90},
+            {title: "Doc Status", field: "doc_status",
+                editor: (canEdit && canEditStatus) ? "select" : false,
+                editorParams: {values: {"Pending": "Pending", "Approved": "Approved", "Rejected": "Rejected"}},
+                width: 90,
+                formatter: function(cell) {
+                    const val = cell.getValue();
+                    let color = '#718096';
+                    if (val === 'Approved') color = '#38a169';
+                    else if (val === 'Rejected') color = '#e53e3e';
+                    else if (val === 'Pending') color = '#d69e2e';
+                    return `<span style="color:${color};font-weight:500">${val || ''}</span>`;
+                }
+            }
+        ];
+
+        table = new Tabulator("#table", {
+            height: "calc(100vh - 160px)",
+            layout: "fitDataFill",
+            columns: columns,
+            pagination: true,
+            paginationMode: "remote",
+            paginationSize: 20,
+            ajaxURL: "/api/module/VCN01/data",
+            ajaxResponse: function(url, params, response) {
+                document.getElementById('rowCount').textContent = response.data.length;
+                document.getElementById('totalCount').textContent = response.total;
+                return response;
+            },
+            selectable: true
+        });
+
+        if (localStorage.getItem('theme') === 'dark') {
+            document.getElementById('table').classList.add('tabulator-dark');
+        }
+
+    }
+
+    async function openDetailsModal(data) {
+        const vcnId = data.id;
+        currentVcnId = vcnId;
+
+        // Set modal title
+        document.getElementById('modalTitle').textContent = `Details for ${data.vcn_doc_num || 'VCN'}`;
+
+        // Clear previous content
+        const modalBody = document.getElementById('modalSubTables');
+        modalBody.innerHTML = '';
+
+        // Create the sub-table container
+        const subContainer = document.createElement('div');
+        subContainer.className = 'sub-table-container';
+        subContainer.innerHTML = `
+            <div class="sub-section">
+                <div class="sub-section-header">
+                    <span>Nomination Details</span>
+                    <div class="sub-section-actions">
+                        ${(permissions.can_edit || permissions.can_add) ? `<button class="btn-sub-add" onclick="addSubRow('nominations', ${vcnId})">+ Add</button>` : ''}
+                        ${(permissions.can_edit || permissions.can_add) ? `<button class="btn-sub-save" onclick="saveSubTable('nominations', ${vcnId})">Save</button>` : ''}
+                    </div>
+                </div>
+                <div class="sub-section-content"><div id="nominations-table-${vcnId}" class="sub-tabulator"></div></div>
+            </div>
+            <div class="sub-section">
+                <div class="sub-section-header">
+                    <span>Anchorage Details</span>
+                    <div class="sub-section-actions">
+                        ${(permissions.can_edit || permissions.can_add) ? `<button class="btn-sub-add" onclick="addSubRow('anchorage', ${vcnId})">+ Add</button>` : ''}
+                        ${(permissions.can_edit || permissions.can_add) ? `<button class="btn-sub-save" onclick="saveSubTable('anchorage', ${vcnId})">Save</button>` : ''}
+                    </div>
+                </div>
+                <div class="sub-section-content"><div id="anchorage-table-${vcnId}" class="sub-tabulator"></div></div>
+            </div>
+            <div class="sub-section">
+                <div class="sub-section-header">
+                    <span>Anchoring Delays</span>
+                    <div class="sub-section-actions">
+                        ${(permissions.can_edit || permissions.can_add) ? `<button class="btn-sub-add" onclick="addSubRow('delays', ${vcnId})">+ Add</button>` : ''}
+                        ${(permissions.can_edit || permissions.can_add) ? `<button class="btn-sub-save" onclick="saveSubTable('delays', ${vcnId})">Save</button>` : ''}
+                    </div>
+                </div>
+                <div class="sub-section-content"><div id="delays-table-${vcnId}" class="sub-tabulator"></div></div>
+            </div>
+            <div class="sub-section">
+                <div class="sub-section-header">
+                    <span>Cargo Declaration</span>
+                    <div class="sub-section-actions">
+                        ${(permissions.can_edit || permissions.can_add) ? `<button class="btn-sub-add" onclick="addSubRow('cargo', ${vcnId})">+ Add</button>` : ''}
+                        ${(permissions.can_edit || permissions.can_add) ? `<button class="btn-sub-save" onclick="saveSubTable('cargo', ${vcnId})">Save</button>` : ''}
+                    </div>
+                </div>
+                <div class="sub-section-content"><div id="cargo-table-${vcnId}" class="sub-tabulator"></div></div>
+            </div>
+            <div class="sub-section">
+                <div class="sub-section-header">
+                    <span>IGM (Import General Manifest)</span>
+                    <div class="sub-section-actions">
+                        ${(permissions.can_edit || permissions.can_add) ? `<button class="btn-sub-add" onclick="addSubRow('igm', ${vcnId})">+ Add</button>` : ''}
+                        ${(permissions.can_edit || permissions.can_add) ? `<button class="btn-sub-save" onclick="saveSubTable('igm', ${vcnId})">Save</button>` : ''}
+                    </div>
+                </div>
+                <div class="sub-section-content"><div id="igm-table-${vcnId}" class="sub-tabulator"></div></div>
+            </div>
+            <div class="sub-section">
+                <div class="sub-section-header">
+                    <span>Stowage Plan</span>
+                    <span id="stowage-total-${vcnId}" style="font-size:11px;color:#666;margin-left:10px;"></span>
+                    <div class="sub-section-actions">
+                        ${(permissions.can_edit || permissions.can_add) ? `<button class="btn-sub-add" onclick="addSubRow('stowage', ${vcnId})">+ Add</button>` : ''}
+                        ${(permissions.can_edit || permissions.can_add) ? `<button class="btn-sub-save" onclick="saveSubTable('stowage', ${vcnId})">Save</button>` : ''}
+                    </div>
+                </div>
+                <div class="sub-section-content"><div id="stowage-table-${vcnId}" class="sub-tabulator"></div></div>
+            </div>`;
+
+        // Append to modal body
+        modalBody.appendChild(subContainer);
+
+        // Show the modal
+        document.getElementById('detailsModal').classList.add('active');
+
+        // Initialize sub-tables
+        subTables[vcnId] = {};
+        await initSubTables(vcnId);
+    }
+
+    function closeDetailsModal() {
+        const modal = document.getElementById('detailsModal');
+        modal.classList.remove('active');
+
+        // Clean up sub-tables
+        if (currentVcnId && subTables[currentVcnId]) {
+            Object.values(subTables[currentVcnId]).forEach(t => {
+                if (t && typeof t.destroy === 'function') {
+                    t.destroy();
+                }
+            });
+            delete subTables[currentVcnId];
+        }
+
+        // Clear modal content
+        document.getElementById('modalSubTables').innerHTML = '';
+        currentVcnId = null;
+    }
+
+    // Close modal when clicking outside
+    document.addEventListener('DOMContentLoaded', function() {
+        const modal = document.getElementById('detailsModal');
+        modal.addEventListener('click', function(e) {
+            if (e.target === modal) {
+                closeDetailsModal();
+            }
+        });
+
+        // Close on escape key
+        document.addEventListener('keydown', function(e) {
+            if (e.key === 'Escape' && modal.classList.contains('active')) {
+                closeDetailsModal();
+            }
+        });
+    });
+
+
+    // Custom datetime editor using HTML5 datetime-local input
+    var datetimeEditor = function(cell, onRendered, success, cancel) {
+        var cellValue = cell.getValue() || '';
+        var input = document.createElement("input");
+        input.type = "datetime-local";
+        input.value = cellValue;
+        input.style.width = "100%";
+        input.style.boxSizing = "border-box";
+        input.style.padding = "4px";
+
+        onRendered(function() {
+            input.focus();
+            input.style.height = "100%";
+        });
+
+        input.addEventListener("change", function() {
+            success(input.value);
+        });
+
+        input.addEventListener("blur", function() {
+            success(input.value);
+        });
+
+        input.addEventListener("keydown", function(e) {
+            if (e.key === "Enter") success(input.value);
+            if (e.key === "Escape") cancel();
+        });
+
+        return input;
+    };
+
+    // Custom date editor using HTML5 date input
+    var dateEditor = function(cell, onRendered, success, cancel) {
+        var cellValue = cell.getValue() || '';
+        var input = document.createElement("input");
+        input.type = "date";
+        input.value = cellValue;
+        input.style.width = "100%";
+        input.style.boxSizing = "border-box";
+        input.style.padding = "4px";
+
+        onRendered(function() {
+            input.focus();
+            input.style.height = "100%";
+        });
+
+        input.addEventListener("change", function() {
+            success(input.value);
+        });
+
+        input.addEventListener("blur", function() {
+            success(input.value);
+        });
+
+        input.addEventListener("keydown", function(e) {
+            if (e.key === "Enter") success(input.value);
+            if (e.key === "Escape") cancel();
+        });
+
+        return input;
+    };
+
+    async function initSubTables(vcnId) {
+        const canEdit = permissions.can_edit || permissions.can_add;
+        const isDark = localStorage.getItem('theme') === 'dark';
+
+        // Run type options for nominations
+        const runTypeOptions = {};
+        runTypes.forEach(r => { runTypeOptions[r] = r; });
+
+        // Delay type options
+        const delayOptions = {};
+        delayTypes.forEach(d => { delayOptions[d] = d; });
+
+        // Cargo name options
+        const cargoOptions = {};
+        cargoNames.forEach(c => { cargoOptions[c] = c; });
+
+        // Nominations table
+        subTables[vcnId].nominations = new Tabulator(`#nominations-table-${vcnId}`, {
+            layout: "fitColumns",
+            height: 150,
+            ajaxURL: `/api/module/VCN01/nominations/${vcnId}`,
+            columns: [
+                {title: "ETA", field: "eta", widthGrow: 1, editor: canEdit ? datetimeEditor : false,
+                    formatter: function(cell) { return cell.getValue() ? cell.getValue().replace('T', ' ') : ''; }
+                },
+                {title: "ETD", field: "etd", widthGrow: 1, editor: canEdit ? datetimeEditor : false,
+                    formatter: function(cell) { return cell.getValue() ? cell.getValue().replace('T', ' ') : ''; }
+                },
+                {title: "Vessel Run Type", field: "vessel_run_type", widthGrow: 1, editor: canEdit ? "list" : false,
+                    editorParams: {values: runTypeOptions, autocomplete: true, allowEmpty: true}
+                },
+                canEdit ? {title: "", field: "actions", formatter: deleteButtonFormatter, width: 60, widthGrow: 0, hozAlign: "center", headerSort: false,
+                    cellClick: function(e, cell) { deleteSubRow('nominations', cell.getRow().getData().id, vcnId); }
+                } : null
+            ].filter(Boolean)
+        });
+        if (isDark) document.querySelector(`#nominations-table-${vcnId}`).classList.add('tabulator-dark');
+
+        // Anchorage table
+        subTables[vcnId].anchorage = new Tabulator(`#anchorage-table-${vcnId}`, {
+            layout: "fitColumns",
+            height: 150,
+            ajaxURL: `/api/module/VCN01/anchorage/${vcnId}`,
+            columns: [
+                {title: "Latitude", field: "latitude", widthGrow: 1, editor: canEdit ? "input" : false},
+                {title: "Longitude", field: "longitude", widthGrow: 1, editor: canEdit ? "input" : false},
+                {title: "Anchored Time", field: "anchored_time", widthGrow: 1, editor: canEdit ? datetimeEditor : false,
+                    formatter: function(cell) { return cell.getValue() ? cell.getValue().replace('T', ' ') : ''; }
+                },
+                canEdit ? {title: "", field: "actions", formatter: deleteButtonFormatter, width: 60, widthGrow: 0, hozAlign: "center", headerSort: false,
+                    cellClick: function(e, cell) { deleteSubRow('anchorage', cell.getRow().getData().id, vcnId); }
+                } : null
+            ].filter(Boolean)
+        });
+        if (isDark) document.querySelector(`#anchorage-table-${vcnId}`).classList.add('tabulator-dark');
+
+        // Delays table
+        subTables[vcnId].delays = new Tabulator(`#delays-table-${vcnId}`, {
+            layout: "fitColumns",
+            height: 150,
+            ajaxURL: `/api/module/VCN01/delays/${vcnId}`,
+            columns: [
+                {title: "Delay Name", field: "delay_name", widthGrow: 1, editor: canEdit ? "list" : false,
+                    editorParams: {values: delayOptions, autocomplete: true, allowEmpty: true}
+                },
+                {title: "Start Time", field: "delay_start", widthGrow: 1, editor: canEdit ? datetimeEditor : false,
+                    formatter: function(cell) { return cell.getValue() ? cell.getValue().replace('T', ' ') : ''; }
+                },
+                {title: "End Time", field: "delay_end", widthGrow: 1, editor: canEdit ? datetimeEditor : false,
+                    formatter: function(cell) { return cell.getValue() ? cell.getValue().replace('T', ' ') : ''; }
+                },
+                canEdit ? {title: "", field: "actions", formatter: deleteButtonFormatter, width: 60, widthGrow: 0, hozAlign: "center", headerSort: false,
+                    cellClick: function(e, cell) { deleteSubRow('delays', cell.getRow().getData().id, vcnId); }
+                } : null
+            ].filter(Boolean)
+        });
+        if (isDark) document.querySelector(`#delays-table-${vcnId}`).classList.add('tabulator-dark');
+
+        // Quantity UOM options
+        const uomOptions = {};
+        quantityUoms.forEach(u => { uomOptions[u] = u; });
+
+        // Cargo table (updated with BL Quantity and Quantity UOM)
+        subTables[vcnId].cargo = new Tabulator(`#cargo-table-${vcnId}`, {
+            layout: "fitColumns",
+            height: 150,
+            ajaxURL: `/api/module/VCN01/cargo/${vcnId}`,
+            columns: [
+                {title: "Cargo Name", field: "cargo_name", widthGrow: 1, editor: canEdit ? "list" : false,
+                    editorParams: {values: cargoOptions, autocomplete: true, allowEmpty: true}
+                },
+                {title: "BL No", field: "bl_no", widthGrow: 1, editor: canEdit ? "input" : false},
+                {title: "BL Date", field: "bl_date", widthGrow: 1, editor: canEdit ? dateEditor : false},
+                {title: "BL Quantity", field: "bl_quantity", widthGrow: 1, editor: canEdit ? "number" : false, hozAlign: "right",
+                    editorParams: {min: 0, step: 0.01}
+                },
+                {title: "Quantity UOM", field: "quantity_uom", widthGrow: 1, editor: canEdit ? "list" : false,
+                    editorParams: {values: uomOptions, autocomplete: true, allowEmpty: true}
+                },
+                canEdit ? {title: "", field: "actions", formatter: deleteButtonFormatter, width: 60, widthGrow: 0, hozAlign: "center", headerSort: false,
+                    cellClick: function(e, cell) { deleteSubRow('cargo', cell.getRow().getData().id, vcnId); }
+                } : null
+            ].filter(Boolean)
+        });
+        if (isDark) document.querySelector(`#cargo-table-${vcnId}`).classList.add('tabulator-dark');
+
+        // IGM table
+        subTables[vcnId].igm = new Tabulator(`#igm-table-${vcnId}`, {
+            layout: "fitColumns",
+            height: 150,
+            ajaxURL: `/api/module/VCN01/igm/${vcnId}`,
+            columns: [
+                {title: "IGM Number", field: "igm_number", widthGrow: 1, editor: false},
+                {title: "IGM Manual No", field: "igm_manual_number", widthGrow: 1, editor: canEdit ? "input" : false},
+                {title: "IGM Date", field: "igm_date", widthGrow: 1, editor: canEdit ? dateEditor : false},
+                {title: "DWT", field: "dwt", widthGrow: 1, editor: canEdit ? "number" : false, hozAlign: "right",
+                    editorParams: {min: 0, step: 0.01}
+                },
+                {title: "BL Quantity", field: "bl_quantity", widthGrow: 1, editor: canEdit ? "number" : false, hozAlign: "right",
+                    editorParams: {min: 0, step: 0.01}
+                },
+                canEdit ? {title: "", field: "actions", formatter: deleteButtonFormatter, width: 60, widthGrow: 0, hozAlign: "center", headerSort: false,
+                    cellClick: function(e, cell) { deleteSubRow('igm', cell.getRow().getData().id, vcnId); }
+                } : null
+            ].filter(Boolean)
+        });
+        if (isDark) document.querySelector(`#igm-table-${vcnId}`).classList.add('tabulator-dark');
+
+        // Hatch options
+        const hatchOptions = {};
+        hatches.forEach(h => { hatchOptions[h] = h; });
+
+        // Hold options
+        const holdOptions = {};
+        holds.forEach(h => { holdOptions[h] = h; });
+
+        // Fetch cargo names for this specific VCN for stowage plan dropdown
+        const vcnCargoRes = await fetch(`/api/module/VCN01/cargo_names/${vcnId}`);
+        const vcnCargoNames = await vcnCargoRes.json();
+        const vcnCargoOptions = {};
+        vcnCargoNames.forEach(c => { vcnCargoOptions[c] = c; });
+
+        // Stowage Plan table
+        subTables[vcnId].stowage = new Tabulator(`#stowage-table-${vcnId}`, {
+            layout: "fitColumns",
+            height: 150,
+            ajaxURL: `/api/module/VCN01/stowage/${vcnId}`,
+            columns: [
+                {title: "Cargo Name", field: "cargo_name", widthGrow: 1, editor: canEdit ? "list" : false,
+                    editorParams: {values: vcnCargoOptions, autocomplete: true, allowEmpty: true}
+                },
+                {title: "Hatch Name", field: "hatch_name", widthGrow: 1, editor: canEdit ? "list" : false,
+                    editorParams: {values: hatchOptions, autocomplete: true, allowEmpty: true}
+                },
+                {title: "Hold Name", field: "hold_name", widthGrow: 1, editor: canEdit ? "list" : false,
+                    editorParams: {values: holdOptions, autocomplete: true, allowEmpty: true}
+                },
+                {title: "Hatchwise Qty", field: "hatchwise_quantity", widthGrow: 1, editor: canEdit ? "number" : false, hozAlign: "right",
+                    editorParams: {min: 0, step: 0.01}
+                },
+                canEdit ? {title: "", field: "actions", formatter: deleteButtonFormatter, width: 60, widthGrow: 0, hozAlign: "center", headerSort: false,
+                    cellClick: function(e, cell) { deleteSubRow('stowage', cell.getRow().getData().id, vcnId); }
+                } : null
+            ].filter(Boolean)
+        });
+        if (isDark) document.querySelector(`#stowage-table-${vcnId}`).classList.add('tabulator-dark');
+
+        // Update totals display
+        updateStowageTotals(vcnId);
+    }
+
+    async function updateStowageTotals(vcnId) {
+        const res = await fetch(`/api/module/VCN01/stowage/total/${vcnId}`);
+        const totals = await res.json();
+        const totalEl = document.getElementById(`stowage-total-${vcnId}`);
+        if (totalEl) {
+            totalEl.textContent = `Stowage: ${totals.stowage_total || 0} / IGM: ${totals.igm_total || 0}`;
+            if (totals.stowage_total > totals.igm_total) {
+                totalEl.style.color = '#e53e3e';
+            } else {
+                totalEl.style.color = '#38a169';
+            }
+        }
+    }
+
+    function deleteButtonFormatter(cell) {
+        return '<button class="btn-sub-delete">X</button>';
+    }
+
+    async function addSubRow(type, vcnId) {
+        const res = await fetch(`/api/module/VCN01/${type}/save`, {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({vcn_id: vcnId})
+        });
+        const data = await res.json();
+        if (!data.success && data.error) {
+            alert(data.error);
+            return;
+        }
+        if (data.id && subTables[vcnId] && subTables[vcnId][type]) {
+            const newRow = {id: data.id, vcn_id: vcnId};
+            // Include IGM number for IGM rows
+            if (type === 'igm' && data.igm_number) {
+                newRow.igm_number = data.igm_number;
+            }
+            subTables[vcnId][type].addRow(newRow, true);
+            // Update totals after adding igm
+            if (type === 'igm') {
+                updateStowageTotals(vcnId);
+            }
+        }
+    }
+
+    async function saveSubTable(type, vcnId) {
+        if (!subTables[vcnId] || !subTables[vcnId][type]) return;
+
+        const rows = subTables[vcnId][type].getRows();
+        let savedCount = 0;
+        let hasError = false;
+
+        for (const row of rows) {
+            const data = row.getData();
+            if (data.id) {
+                try {
+                    const res = await fetch(`/api/module/VCN01/${type}/save`, {
+                        method: 'POST',
+                        headers: {'Content-Type': 'application/json'},
+                        body: JSON.stringify(data)
+                    });
+                    const result = await res.json();
+                    if (!result.success && result.error) {
+                        alert(`Error: ${result.error}`);
+                        hasError = true;
+                    } else {
+                        savedCount++;
+                    }
+                } catch (err) {
+                    console.error(`Error saving ${type}:`, err);
+                    hasError = true;
+                }
+            }
+        }
+
+        // Update stowage totals after saving IGM or stowage
+        if (type === 'igm' || type === 'stowage') {
+            updateStowageTotals(vcnId);
+        }
+
+        if (!hasError) {
+            alert(`Saved ${savedCount} row(s)`);
+        }
+    }
+
+    async function deleteSubRow(type, id, vcnId) {
+        if (!confirm('Delete this row?')) return;
+        await fetch(`/api/module/VCN01/${type}/delete`, {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({id: id})
+        });
+        if (subTables[vcnId] && subTables[vcnId][type]) {
+            const row = subTables[vcnId][type].getRows().find(r => r.getData().id === id);
+            if (row) row.delete();
+        }
+        // Update totals after deleting stowage or igm
+        if (type === 'stowage' || type === 'igm') {
+            updateStowageTotals(vcnId);
+        }
+    }
+
+    function addRow() {
+        table.addRow({
+            created_by: currentUser,
+            created_date: getTodayDate(),
+            doc_date: getTodayDate(),
+            doc_status: 'Pending'
+        }, true);
+    }
+
+    function deleteSelected() {
+        const selected = table.getSelectedRows();
+        if (selected.length === 0) { alert('Select rows to delete'); return; }
+        if (!confirm(`Delete ${selected.length} row(s)?`)) return;
+        selected.forEach(row => {
+            const id = row.getData().id;
+            if (id) {
+                // Close modal if this VCN is open
+                if (currentVcnId === id) {
+                    closeDetailsModal();
+                }
+
+                // Clean up sub-tables if they exist
+                if (subTables[id]) {
+                    Object.values(subTables[id]).forEach(t => {
+                        if (t && typeof t.destroy === 'function') {
+                            t.destroy();
+                        }
+                    });
+                    delete subTables[id];
+                }
+
+                fetch("/api/module/VCN01/delete", {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({id: id})
+                });
+            }
+            row.delete();
+        });
+    }
+
+    async function saveAll() {
+        showStatus('Saving...', 'saving');
+        const rows = table.getRows();
+        let savedCount = 0;
+        for (const row of rows) {
+            const data = row.getData();
+            const res = await fetch("/api/module/VCN01/save", {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify(data)
+            });
+            const result = await res.json();
+            if (result.id) {
+                row.update({id: result.id, vcn_doc_num: result.vcn_doc_num, doc_status: result.doc_status});
+                savedCount++;
+            }
+        }
+        showStatus(`Saved ${savedCount} row(s)`, 'saved');
+        table.setData("/api/module/VCN01/data");
+    }
+
+    document.addEventListener('keydown', function(e) {
+        if ((e.ctrlKey || e.metaKey) && e.key === 's') { e.preventDefault(); saveAll(); }
+    });
+
+    loadMasterData();
+</script>
+{% endblock %}
