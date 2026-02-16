@@ -257,6 +257,7 @@
     let quantityUoms = [];
     let hatches = [];
     let holds = [];
+    let anchorageNames = [];
     let moduleConfig = {};
 
     // Store sub-table instances
@@ -285,7 +286,7 @@
     }
 
     async function loadMasterData() {
-        const [vesselsRes, agentsRes, ieRes, custRes, opRes, cargoRes, dsRes, todRes, rtRes, dmRes, cnRes, uomRes, hatchRes, holdRes, configRes] = await Promise.all([
+        const [vesselsRes, agentsRes, ieRes, custRes, opRes, cargoRes, dsRes, todRes, rtRes, dmRes, cnRes, uomRes, hatchRes, holdRes, ancRes, configRes] = await Promise.all([
             fetch('/api/module/VCN01/vessels'),
             fetch('/api/module/VAM01/all'),
             fetch('/api/module/VIEM01/all'),
@@ -300,6 +301,7 @@
             fetch('/api/module/VQM01/all'),
             fetch('/api/module/VHM01/all'),
             fetch('/api/module/VHO01/all'),
+            fetch('/api/module/VANM01/all'),
             fetch('/admin/api/config/VCN01')
         ]);
         vessels = await vesselsRes.json();
@@ -319,6 +321,7 @@
         quantityUoms = await uomRes.json();
         hatches = await hatchRes.json();
         holds = await holdRes.json();
+        anchorageNames = await ancRes.json();
         moduleConfig = await configRes.json();
         initTable();
     }
@@ -634,6 +637,12 @@
                 {title: "Vessel Run Type", field: "vessel_run_type", widthGrow: 1, editor: canEdit ? "list" : false,
                     editorParams: {values: runTypeOptions, autocomplete: true, allowEmpty: true}
                 },
+                {title: "Arrival Fore Draft", field: "arrival_fore_draft", widthGrow: 1, hozAlign: "right",
+                    editor: canEdit ? "number" : false, editorParams: {min: 0, step: 0.01}
+                },
+                {title: "Arrival After Draft", field: "arrival_after_draft", widthGrow: 1, hozAlign: "right",
+                    editor: canEdit ? "number" : false, editorParams: {min: 0, step: 0.01}
+                },
                 canEdit ? {title: "", field: "actions", formatter: deleteButtonFormatter, width: 60, widthGrow: 0, hozAlign: "center", headerSort: false,
                     cellClick: function(e, cell) { deleteSubRow('nominations', cell.getRow().getData().id, vcnId); }
                 } : null
@@ -641,15 +650,23 @@
         });
         if (isDark) document.querySelector(`#nominations-table-${vcnId}`).classList.add('tabulator-dark');
 
+        // Anchorage name options
+        const anchorageOptions = {};
+        anchorageNames.forEach(a => { anchorageOptions[a] = a; });
+
         // Anchorage table
         subTables[vcnId].anchorage = new Tabulator(`#anchorage-table-${vcnId}`, {
             layout: "fitColumns",
             height: 150,
             ajaxURL: `/api/module/VCN01/anchorage/${vcnId}`,
             columns: [
-                {title: "Latitude", field: "latitude", widthGrow: 1, editor: canEdit ? "input" : false},
-                {title: "Longitude", field: "longitude", widthGrow: 1, editor: canEdit ? "input" : false},
-                {title: "Anchored Time", field: "anchored_time", widthGrow: 1, editor: canEdit ? datetimeEditor : false,
+                {title: "Anchorage Name", field: "anchorage_name", widthGrow: 1, editor: canEdit ? "list" : false,
+                    editorParams: {values: anchorageOptions, autocomplete: true, allowEmpty: true}
+                },
+                {title: "Anchorage Arrival", field: "anchorage_arrival", widthGrow: 1, editor: canEdit ? datetimeEditor : false,
+                    formatter: function(cell) { return cell.getValue() ? cell.getValue().replace('T', ' ') : ''; }
+                },
+                {title: "Anchorage Departure", field: "anchorage_departure", widthGrow: 1, editor: canEdit ? datetimeEditor : false,
                     formatter: function(cell) { return cell.getValue() ? cell.getValue().replace('T', ' ') : ''; }
                 },
                 canEdit ? {title: "", field: "actions", formatter: deleteButtonFormatter, width: 60, widthGrow: 0, hozAlign: "center", headerSort: false,

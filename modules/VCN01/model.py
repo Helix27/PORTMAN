@@ -77,12 +77,16 @@ def save_nomination(data):
     conn = get_db()
     cur = get_cursor(conn)
     if data.get('id'):
-        cur.execute('UPDATE vcn_nominations SET eta=%s, etd=%s, vessel_run_type=%s WHERE id=%s',
-                   [data.get('eta'), data.get('etd'), data.get('vessel_run_type'), data['id']])
+        cur.execute('''UPDATE vcn_nominations SET eta=%s, etd=%s, vessel_run_type=%s,
+                       arrival_fore_draft=%s, arrival_after_draft=%s WHERE id=%s''',
+                   [data.get('eta'), data.get('etd'), data.get('vessel_run_type'),
+                    data.get('arrival_fore_draft'), data.get('arrival_after_draft'), data['id']])
         row_id = data['id']
     else:
-        cur.execute('INSERT INTO vcn_nominations (vcn_id, eta, etd, vessel_run_type) VALUES (%s, %s, %s, %s) RETURNING id',
-                   [data['vcn_id'], data.get('eta'), data.get('etd'), data.get('vessel_run_type')])
+        cur.execute('''INSERT INTO vcn_nominations (vcn_id, eta, etd, vessel_run_type, arrival_fore_draft, arrival_after_draft)
+                       VALUES (%s, %s, %s, %s, %s, %s) RETURNING id''',
+                   [data['vcn_id'], data.get('eta'), data.get('etd'), data.get('vessel_run_type'),
+                    data.get('arrival_fore_draft'), data.get('arrival_after_draft')])
         row_id = cur.fetchone()['id']
     conn.commit()
     conn.close()
@@ -108,12 +112,13 @@ def save_anchorage(data):
     conn = get_db()
     cur = get_cursor(conn)
     if data.get('id'):
-        cur.execute('UPDATE vcn_anchorage SET latitude=%s, longitude=%s, anchored_time=%s WHERE id=%s',
-                   [data.get('latitude'), data.get('longitude'), data.get('anchored_time'), data['id']])
+        cur.execute('''UPDATE vcn_anchorage SET anchorage_name=%s, anchorage_arrival=%s, anchorage_departure=%s WHERE id=%s''',
+                   [data.get('anchorage_name'), data.get('anchorage_arrival'), data.get('anchorage_departure'), data['id']])
         row_id = data['id']
     else:
-        cur.execute('INSERT INTO vcn_anchorage (vcn_id, latitude, longitude, anchored_time) VALUES (%s, %s, %s, %s) RETURNING id',
-                   [data['vcn_id'], data.get('latitude'), data.get('longitude'), data.get('anchored_time')])
+        cur.execute('''INSERT INTO vcn_anchorage (vcn_id, anchorage_name, anchorage_arrival, anchorage_departure)
+                       VALUES (%s, %s, %s, %s) RETURNING id''',
+                   [data['vcn_id'], data.get('anchorage_name'), data.get('anchorage_arrival'), data.get('anchorage_departure')])
         row_id = cur.fetchone()['id']
     conn.commit()
     conn.close()
