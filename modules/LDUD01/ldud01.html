@@ -4,14 +4,96 @@
 
 {% block head %}
 <style>
+    .detail-modal {
+        display: none;
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: rgba(0, 0, 0, 0.5);
+        z-index: 9999;
+        overflow: auto;
+    }
+    .detail-modal.active {
+        display: flex;
+        align-items: flex-start;
+        justify-content: center;
+        padding: 20px;
+    }
+    .detail-modal-content {
+        background: white;
+        border-radius: 8px;
+        width: 95%;
+        max-width: 1400px;
+        margin: 20px auto;
+        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+        position: relative;
+        max-height: 90vh;
+        overflow-y: auto;
+    }
+    .dark-theme .detail-modal-content {
+        background: #1e293b;
+        color: #e2e8f0;
+    }
+    .detail-modal-header {
+        padding: 20px;
+        border-bottom: 2px solid #3182ce;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        position: sticky;
+        top: 0;
+        background: white;
+        z-index: 10;
+    }
+    .dark-theme .detail-modal-header {
+        background: #1e293b;
+        border-color: #334155;
+    }
+    .detail-modal-header h3 {
+        margin: 0;
+        font-size: 18px;
+        font-weight: 600;
+    }
+    .detail-modal-close {
+        background: #e53e3e;
+        color: white;
+        border: none;
+        padding: 8px 16px;
+        border-radius: 4px;
+        cursor: pointer;
+        font-size: 14px;
+        font-weight: 500;
+    }
+    .detail-modal-close:hover {
+        background: #c53030;
+    }
+    .detail-modal-body {
+        padding: 20px;
+    }
     .sub-table-container {
         background: #f8fafc;
         padding: 15px;
         border-bottom: 2px solid #3182ce;
         box-sizing: border-box;
         width: 100% !important;
-        max-width: 100% !important;
         overflow: hidden;
+        display: block;
+        margin: 0;
+    }
+    .btn-open-details {
+        background: #3182ce;
+        color: white;
+        border: none;
+        padding: 4px 10px;
+        border-radius: 4px;
+        cursor: pointer;
+        font-size: 12px;
+        font-weight: 500;
+    }
+    .btn-open-details:hover {
+        background: #2c5282;
     }
     .dark-theme .sub-table-container {
         background: #1e293b;
@@ -45,7 +127,6 @@
     }
     .sub-section-content {
         background: white;
-        overflow-x: auto;
     }
     .dark-theme .sub-section-content {
         background: #1e293b;
@@ -53,6 +134,7 @@
     .sub-tabulator {
         font-size: 11px;
         width: 100% !important;
+        max-width: 100% !important;
     }
     .sub-tabulator .tabulator-header {
         background: #f1f5f9 !important;
@@ -65,6 +147,9 @@
     .sub-tabulator .tabulator-header .tabulator-col-title {
         color: #374151 !important;
         font-weight: 600 !important;
+    }
+    .sub-tabulator .tabulator-tableHolder {
+        overflow-x: hidden !important;
     }
     .dark-theme .sub-tabulator .tabulator-header {
         background: #475569 !important;
@@ -89,6 +174,18 @@
     .btn-sub-add:hover {
         background: #38a169;
     }
+    .btn-sub-delete {
+        background: #fc8181;
+        color: white;
+        border: none;
+        padding: 3px 10px;
+        border-radius: 3px;
+        font-size: 11px;
+        cursor: pointer;
+    }
+    .btn-sub-delete:hover {
+        background: #f56565;
+    }
     .btn-sub-save {
         background: #3182ce;
         color: white;
@@ -102,38 +199,10 @@
     .btn-sub-save:hover {
         background: #2c5282;
     }
-    .btn-sub-delete {
-        background: #fc8181;
-        color: white;
-        border: none;
-        padding: 3px 10px;
-        border-radius: 3px;
-        font-size: 11px;
-        cursor: pointer;
-    }
-    .btn-sub-delete:hover {
-        background: #f56565;
-    }
     .sub-section-actions {
         display: flex;
         gap: 8px;
         align-items: center;
-    }
-    .expand-icon {
-        transition: transform 0.2s;
-    }
-    .expand-icon.expanded {
-        transform: rotate(90deg);
-    }
-    .hold-summary {
-        padding: 10px;
-        background: #f1f5f9;
-        border-bottom: 1px solid #cbd5e0;
-        font-size: 12px;
-    }
-    .dark-theme .hold-summary {
-        background: #334155;
-        border-color: #475569;
     }
 </style>
 {% endblock %}
@@ -153,6 +222,19 @@
 </div>
 
 <div id="table"></div>
+
+<!-- Details Modal -->
+<div id="detailsModal" class="detail-modal">
+    <div class="detail-modal-content">
+        <div class="detail-modal-header">
+            <h3 id="modalTitle">LDUD Details</h3>
+            <button class="detail-modal-close" onclick="closeDetailsModal()">Close</button>
+        </div>
+        <div class="detail-modal-body">
+            <div id="modalSubTables"></div>
+        </div>
+    </div>
+</div>
 {% endblock %}
 
 {% block scripts %}
@@ -167,8 +249,10 @@
     let bargeList = [];
     let contractorList = [];
     let cargoNames = [];
+    let anchorageNames = [];
     let subTables = {};
     let stowagePlanData = {}; // Store stowage plan data per LDUD ID
+    let currentLdudId = null;
 
     const currentUser = '{{ session.username }}';
     const permissions = {
@@ -192,14 +276,15 @@
     }
 
     async function loadMasterData() {
-        const [vcnRes, delayRes, datRes, eqRes, bargeRes, contractorRes, cargoRes] = await Promise.all([
+        const [vcnRes, delayRes, datRes, eqRes, bargeRes, contractorRes, cargoRes, ancRes] = await Promise.all([
             fetch('/api/module/LDUD01/vcn_list'),
             fetch('/api/module/VDM01/all'),
             fetch('/api/module/VDAT01/all'),
             fetch('/api/module/VEM01/all'),
             fetch('/api/module/VBM01/all'),
             fetch('/api/module/VCTM01/all'),
-            fetch('/api/module/VCG01/names')
+            fetch('/api/module/VCG01/names'),
+            fetch('/api/module/VANM01/all')
         ]);
         vcnList = await vcnRes.json();
         delayTypes = await delayRes.json();
@@ -208,6 +293,7 @@
         bargeList = await bargeRes.json();
         contractorList = await contractorRes.json();
         cargoNames = await cargoRes.json();
+        anchorageNames = await ancRes.json();
         initTable();
     }
 
@@ -243,19 +329,20 @@
         const columns = [
             {formatter: "rowSelection", titleFormatter: "rowSelection", hozAlign: "center", headerSort: false, width: 40},
             {
+                title: "Details",
                 formatter: function(cell) {
                     const data = cell.getRow().getData();
                     if (!data.id) return '';
-                    return '<span class="expand-icon" style="cursor:pointer;font-size:14px;">&#9654;</span>';
+                    return '<button class="btn-open-details">+</button>';
                 },
-                width: 30,
+                width: 70,
                 hozAlign: "center",
                 headerSort: false,
                 cellClick: function(e, cell) {
                     const row = cell.getRow();
                     const data = row.getData();
                     if (!data.id) return;
-                    toggleSubTables(row);
+                    openDetailsModal(data);
                 }
             },
             {title: "Doc Num", field: "doc_num", width: 80},
@@ -332,11 +419,7 @@
                 document.getElementById('totalCount').textContent = response.total;
                 return response;
             },
-            selectable: true,
-            rowFormatter: function(row) {
-                const el = row.getElement();
-                el.querySelector('.expand-icon')?.classList.remove('expanded');
-            }
+            selectable: true
         });
 
         if (localStorage.getItem('theme') === 'dark') {
@@ -344,27 +427,19 @@
         }
     }
 
-    async function toggleSubTables(row) {
-        const el = row.getElement();
-        const icon = el.querySelector('.expand-icon');
-        const ldudId = row.getData().id;
-        const containerId = `sub-container-${ldudId}`;
-        const existingContainer = document.getElementById(containerId);
+    async function openDetailsModal(data) {
+        const ldudId = data.id;
+        currentLdudId = ldudId;
 
-        if (existingContainer) {
-            if (subTables[ldudId]) {
-                Object.values(subTables[ldudId]).forEach(t => t.destroy());
-                delete subTables[ldudId];
-            }
-            existingContainer.remove();
-            icon?.classList.remove('expanded');
-            return;
-        }
+        // Set modal title
+        document.getElementById('modalTitle').textContent = `Details for ${data.doc_num || 'LDUD'}`;
 
-        icon?.classList.add('expanded');
+        // Clear previous content
+        const modalBody = document.getElementById('modalSubTables');
+        modalBody.innerHTML = '';
 
+        // Create the sub-table container
         const subContainer = document.createElement('div');
-        subContainer.id = containerId;
         subContainer.className = 'sub-table-container';
         subContainer.innerHTML = `
             <div class="sub-section">
@@ -376,6 +451,16 @@
                     </div>
                 </div>
                 <div class="sub-section-content"><div id="delays-table-${ldudId}" class="sub-tabulator"></div></div>
+            </div>
+            <div class="sub-section">
+                <div class="sub-section-header">
+                    <span>Anchorage Recording</span>
+                    <div class="sub-section-actions">
+                        ${(permissions.can_edit || permissions.can_add) ? `<button class="btn-sub-add" onclick="addSubRow('anchorage', ${ldudId})">+ Add</button>` : ''}
+                        ${(permissions.can_edit || permissions.can_add) ? `<button class="btn-sub-save" onclick="saveSubTable('anchorage', ${ldudId})">Save</button>` : ''}
+                    </div>
+                </div>
+                <div class="sub-section-content"><div id="anchorage-table-${ldudId}" class="sub-tabulator"></div></div>
             </div>
             <div class="sub-section">
                 <div class="sub-section-header">
@@ -391,18 +476,60 @@
                 </div>
             </div>`;
 
-        el.after(subContainer);
+        // Append to modal body
+        modalBody.appendChild(subContainer);
+
+        // Show the modal
+        document.getElementById('detailsModal').classList.add('active');
+
+        // Initialize sub-tables
         subTables[ldudId] = {};
         await initSubTables(ldudId);
     }
+
+    function closeDetailsModal() {
+        const modal = document.getElementById('detailsModal');
+        modal.classList.remove('active');
+
+        // Clean up sub-tables
+        if (currentLdudId && subTables[currentLdudId]) {
+            Object.values(subTables[currentLdudId]).forEach(t => {
+                if (t && typeof t.destroy === 'function') {
+                    t.destroy();
+                }
+            });
+            delete subTables[currentLdudId];
+        }
+
+        // Clear modal content
+        document.getElementById('modalSubTables').innerHTML = '';
+        currentLdudId = null;
+    }
+
+    // Close modal when clicking outside
+    document.addEventListener('DOMContentLoaded', function() {
+        const modal = document.getElementById('detailsModal');
+        modal.addEventListener('click', function(e) {
+            if (e.target === modal) {
+                closeDetailsModal();
+            }
+        });
+
+        // Close on escape key
+        document.addEventListener('keydown', function(e) {
+            if (e.key === 'Escape' && modal.classList.contains('active')) {
+                closeDetailsModal();
+            }
+        });
+    });
 
     async function initSubTables(ldudId) {
         const canEdit = permissions.can_edit || permissions.can_add;
         const isDark = localStorage.getItem('theme') === 'dark';
 
-        // Get VCN ID from current row
-        const currentRow = table.getRows().find(r => r.getData().id === ldudId);
-        const vcnId = currentRow ? currentRow.getData().vcn_id : null;
+        // Get VCN ID from main table row
+        const mainRow = table.getRows().find(r => r.getData().id === ldudId);
+        const vcnId = mainRow ? mainRow.getData().vcn_id : null;
 
         // Fetch stowage plan for this VCN
         let holdOptions = {};
@@ -475,6 +602,34 @@
             ].filter(Boolean)
         });
         if (isDark) document.querySelector(`#delays-table-${ldudId}`).classList.add('tabulator-dark');
+
+        // Anchorage Recording table
+        const anchorageOptions = {};
+        anchorageNames.forEach(a => { anchorageOptions[a] = a; });
+
+        subTables[ldudId].anchorage = new Tabulator(`#anchorage-table-${ldudId}`, {
+            layout: "fitColumns",
+            height: 200,
+            ajaxURL: `/api/module/LDUD01/anchorage/${ldudId}`,
+            columns: [
+                {title: "Anchorage Name", field: "anchorage_name", widthGrow: 1, editor: canEdit ? "list" : false,
+                    editorParams: {values: anchorageOptions, autocomplete: true, allowEmpty: true}},
+                {title: "Anchored", field: "anchored", widthGrow: 1, editor: canEdit ? datetimeEditor : false,
+                    formatter: function(cell) { return cell.getValue() ? cell.getValue().replace('T', ' ') : ''; }},
+                {title: "Discharge Started", field: "discharge_started", widthGrow: 1, editor: canEdit ? datetimeEditor : false,
+                    formatter: function(cell) { return cell.getValue() ? cell.getValue().replace('T', ' ') : ''; }},
+                {title: "Discharge Commenced", field: "discharge_commenced", widthGrow: 1, editor: canEdit ? datetimeEditor : false,
+                    formatter: function(cell) { return cell.getValue() ? cell.getValue().replace('T', ' ') : ''; }},
+                {title: "Anchor Aweigh", field: "anchor_aweigh", widthGrow: 1, editor: canEdit ? datetimeEditor : false,
+                    formatter: function(cell) { return cell.getValue() ? cell.getValue().replace('T', ' ') : ''; }},
+                {title: "Cargo Quantity", field: "cargo_quantity", widthGrow: 1, editor: canEdit ? "number" : false, hozAlign: "right",
+                    editorParams: {min: 0, step: 0.01}},
+                canEdit ? {title: "", field: "actions", formatter: deleteButtonFormatter, width: 50, widthGrow: 0, hozAlign: "center", headerSort: false,
+                    cellClick: function(e, cell) { deleteSubRow('anchorage', cell.getRow().getData().id, ldudId); }
+                } : null
+            ].filter(Boolean)
+        });
+        if (isDark) document.querySelector(`#anchorage-table-${ldudId}`).classList.add('tabulator-dark');
 
         // Barge Lines table
         subTables[ldudId].barge_lines = new Tabulator(`#barge_lines-table-${ldudId}`, {
@@ -691,10 +846,21 @@
         selected.forEach(row => {
             const id = row.getData().id;
             if (id) {
+                // Close modal if this LDUD is open
+                if (currentLdudId === id) {
+                    closeDetailsModal();
+                }
+
+                // Clean up sub-tables if they exist
                 if (subTables[id]) {
-                    Object.values(subTables[id]).forEach(t => t.destroy());
+                    Object.values(subTables[id]).forEach(t => {
+                        if (t && typeof t.destroy === 'function') {
+                            t.destroy();
+                        }
+                    });
                     delete subTables[id];
                 }
+
                 fetch("/api/module/LDUD01/delete", {
                     method: 'POST',
                     headers: {'Content-Type': 'application/json'},

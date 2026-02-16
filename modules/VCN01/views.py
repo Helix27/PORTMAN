@@ -100,30 +100,6 @@ def delete_nomination():
     model.delete_nomination(request.json.get('id'))
     return jsonify({'success': True})
 
-# Anchorage endpoints
-@bp.route('/api/module/VCN01/anchorage/<int:vcn_id>')
-@login_required
-def get_anchorage(vcn_id):
-    return jsonify(model.get_anchorage(vcn_id))
-
-@bp.route('/api/module/VCN01/anchorage/save', methods=['POST'])
-@login_required
-def save_anchorage():
-    perms = get_perms()
-    if not perms.get('can_add') and not perms.get('can_edit'):
-        return jsonify({'error': 'No permission'}), 403
-    row_id = model.save_anchorage(request.json)
-    return jsonify({'success': True, 'id': row_id})
-
-@bp.route('/api/module/VCN01/anchorage/delete', methods=['POST'])
-@login_required
-def delete_anchorage():
-    perms = get_perms()
-    if not perms.get('can_delete'):
-        return jsonify({'error': 'No permission to delete'}), 403
-    model.delete_anchorage(request.json.get('id'))
-    return jsonify({'success': True})
-
 # Delays endpoints
 @bp.route('/api/module/VCN01/delays/<int:vcn_id>')
 @login_required

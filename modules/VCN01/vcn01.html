@@ -257,7 +257,6 @@
     let quantityUoms = [];
     let hatches = [];
     let holds = [];
-    let anchorageNames = [];
     let portNames = [];
     let moduleConfig = {};
 
@@ -287,7 +286,7 @@
     }
 
     async function loadMasterData() {
-        const [vesselsRes, agentsRes, ieRes, custRes, opRes, cargoRes, dsRes, todRes, rtRes, dmRes, cnRes, uomRes, hatchRes, holdRes, ancRes, portRes, configRes] = await Promise.all([
+        const [vesselsRes, agentsRes, ieRes, custRes, opRes, cargoRes, dsRes, todRes, rtRes, dmRes, cnRes, uomRes, hatchRes, holdRes, portRes, configRes] = await Promise.all([
             fetch('/api/module/VCN01/vessels'),
             fetch('/api/module/VAM01/all'),
             fetch('/api/module/VIEM01/all'),
@@ -302,7 +301,6 @@
             fetch('/api/module/VQM01/all'),
             fetch('/api/module/VHM01/all'),
             fetch('/api/module/VHO01/all'),
-            fetch('/api/module/VANM01/all'),
             fetch('/api/module/VPM01/all'),
             fetch('/admin/api/config/VCN01')
         ]);
@@ -323,7 +321,6 @@
         quantityUoms = await uomRes.json();
         hatches = await hatchRes.json();
         holds = await holdRes.json();
-        anchorageNames = await ancRes.json();
         portNames = await portRes.json();
         moduleConfig = await configRes.json();
         initTable();
@@ -453,16 +450,6 @@
                     </div>
                 </div>
                 <div class="sub-section-content"><div id="nominations-table-${vcnId}" class="sub-tabulator"></div></div>
-            </div>
-            <div class="sub-section">
-                <div class="sub-section-header">
-                    <span>Anchorage Details</span>
-                    <div class="sub-section-actions">
-                        ${(permissions.can_edit || permissions.can_add) ? `<button class="btn-sub-add" onclick="addSubRow('anchorage', ${vcnId})">+ Add</button>` : ''}
-                        ${(permissions.can_edit || permissions.can_add) ? `<button class="btn-sub-save" onclick="saveSubTable('anchorage', ${vcnId})">Save</button>` : ''}
-                    </div>
-                </div>
-                <div class="sub-section-content"><div id="anchorage-table-${vcnId}" class="sub-tabulator"></div></div>
             </div>
             <div class="sub-section">
                 <div class="sub-section-header">
@@ -660,32 +647,6 @@
         });
         if (isDark) document.querySelector(`#nominations-table-${vcnId}`).classList.add('tabulator-dark');
 
-        // Anchorage name options
-        const anchorageOptions = {};
-        anchorageNames.forEach(a => { anchorageOptions[a] = a; });
-
-        // Anchorage table
-        subTables[vcnId].anchorage = new Tabulator(`#anchorage-table-${vcnId}`, {
-            layout: "fitColumns",
-            height: 150,
-            ajaxURL: `/api/module/VCN01/anchorage/${vcnId}`,
-            columns: [
-                {title: "Anchorage Name", field: "anchorage_name", widthGrow: 1, editor: canEdit ? "list" : false,
-                    editorParams: {values: anchorageOptions, autocomplete: true, allowEmpty: true}
-                },
-                {title: "Anchorage Arrival", field: "anchorage_arrival", widthGrow: 1, editor: canEdit ? datetimeEditor : false,
-                    formatter: function(cell) { return cell.getValue() ? cell.getValue().replace('T', ' ') : ''; }
-                },
-                {title: "Anchorage Departure", field: "anchorage_departure", widthGrow: 1, editor: canEdit ? datetimeEditor : false,
-                    formatter: function(cell) { return cell.getValue() ? cell.getValue().replace('T', ' ') : ''; }
-                },
-                canEdit ? {title: "", field: "actions", formatter: deleteButtonFormatter, width: 60, widthGrow: 0, hozAlign: "center", headerSort: false,
-                    cellClick: function(e, cell) { deleteSubRow('anchorage', cell.getRow().getData().id, vcnId); }
-                } : null
-            ].filter(Boolean)
-        });
-        if (isDark) document.querySelector(`#anchorage-table-${vcnId}`).classList.add('tabulator-dark');
-
         // Delays table
         subTables[vcnId].delays = new Tabulator(`#delays-table-${vcnId}`, {
             layout: "fitColumns",
@@ -712,7 +673,11 @@
         const uomOptions = {};
         quantityUoms.forEach(u => { uomOptions[u] = u; });
 
-        // Cargo table (updated with BL Quantity and Quantity UOM)
+        // Customer options
+        const customerOptions = {};
+        customers.forEach(c => { customerOptions[c] = c; });
+
+        // Cargo table (updated with BL Quantity, Quantity UOM, and Customer)
         subTables[vcnId].cargo = new Tabulator(`#cargo-table-${vcnId}`, {
             layout: "fitColumns",
             height: 150,
@@ -720,6 +685,9 @@
             columns: [
                 {title: "Cargo Name", field: "cargo_name", widthGrow: 1, editor: canEdit ? "list" : false,
                     editorParams: {values: cargoOptions, autocomplete: true, allowEmpty: true}
+                },
+                {title: "Customer", field: "customer_name", widthGrow: 1, editor: canEdit ? "list" : false,
+                    editorParams: {values: customerOptions, autocomplete: true, allowEmpty: true}
                 },
                 {title: "BL No", field: "bl_no", widthGrow: 1, editor: canEdit ? "input" : false},
                 {title: "BL Date", field: "bl_date", widthGrow: 1, editor: canEdit ? dateEditor : false},

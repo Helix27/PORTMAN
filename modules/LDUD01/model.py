@@ -196,3 +196,39 @@ def delete_barge_line(row_id):
     cur.execute('DELETE FROM ldud_barge_lines WHERE id=%s', (row_id,))
     conn.commit()
     conn.close()
+
+# Anchorage Recording sub-table operations
+def get_anchorage(ldud_id):
+    conn = get_db()
+    cur = get_cursor(conn)
+    cur.execute('SELECT * FROM ldud_anchorage WHERE ldud_id=%s ORDER BY id DESC', (ldud_id,))
+    rows = cur.fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
+
+def save_anchorage(data):
+    conn = get_db()
+    cur = get_cursor(conn)
+    if data.get('id'):
+        cur.execute('''UPDATE ldud_anchorage SET anchorage_name=%s, anchored=%s, discharge_started=%s,
+                      discharge_commenced=%s, anchor_aweigh=%s, cargo_quantity=%s WHERE id=%s''',
+                   [data.get('anchorage_name'), data.get('anchored'), data.get('discharge_started'),
+                    data.get('discharge_commenced'), data.get('anchor_aweigh'), data.get('cargo_quantity'), data['id']])
+        row_id = data['id']
+    else:
+        cur.execute('''INSERT INTO ldud_anchorage (ldud_id, anchorage_name, anchored, discharge_started,
+                      discharge_commenced, anchor_aweigh, cargo_quantity)
+                      VALUES (%s, %s, %s, %s, %s, %s, %s) RETURNING id''',
+                   [data['ldud_id'], data.get('anchorage_name'), data.get('anchored'), data.get('discharge_started'),
+                    data.get('discharge_commenced'), data.get('anchor_aweigh'), data.get('cargo_quantity')])
+        row_id = cur.fetchone()['id']
+    conn.commit()
+    conn.close()
+    return row_id
+
+def delete_anchorage(row_id):
+    conn = get_db()
+    cur = get_cursor(conn)
+    cur.execute('DELETE FROM ldud_anchorage WHERE id=%s', (row_id,))
+    conn.commit()
+    conn.close()

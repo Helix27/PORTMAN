@@ -111,3 +111,27 @@ def delete_barge_line():
         return jsonify({'error': 'No permission to delete'}), 403
     model.delete_barge_line(request.json['id'])
     return jsonify({'success': True})
+
+# Anchorage Recording sub-table endpoints
+@bp.route('/api/module/LDUD01/anchorage/<int:ldud_id>')
+@login_required
+def get_anchorage(ldud_id):
+    return jsonify(model.get_anchorage(ldud_id))
+
+@bp.route('/api/module/LDUD01/anchorage/save', methods=['POST'])
+@login_required
+def save_anchorage():
+    perms = get_perms()
+    if not perms.get('can_add') and not perms.get('can_edit'):
+        return jsonify({'error': 'No permission'}), 403
+    row_id = model.save_anchorage(request.json)
+    return jsonify({'id': row_id, 'success': True})
+
+@bp.route('/api/module/LDUD01/anchorage/delete', methods=['POST'])
+@login_required
+def delete_anchorage():
+    perms = get_perms()
+    if not perms.get('can_delete'):
+        return jsonify({'error': 'No permission to delete'}), 403
+    model.delete_anchorage(request.json['id'])
+    return jsonify({'success': True})

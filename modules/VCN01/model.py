@@ -99,38 +99,6 @@ def delete_nomination(row_id):
     conn.commit()
     conn.close()
 
-# Anchorage sub-table operations
-def get_anchorage(vcn_id):
-    conn = get_db()
-    cur = get_cursor(conn)
-    cur.execute('SELECT * FROM vcn_anchorage WHERE vcn_id=%s ORDER BY id DESC', (vcn_id,))
-    rows = cur.fetchall()
-    conn.close()
-    return [dict(r) for r in rows]
-
-def save_anchorage(data):
-    conn = get_db()
-    cur = get_cursor(conn)
-    if data.get('id'):
-        cur.execute('''UPDATE vcn_anchorage SET anchorage_name=%s, anchorage_arrival=%s, anchorage_departure=%s WHERE id=%s''',
-                   [data.get('anchorage_name'), data.get('anchorage_arrival'), data.get('anchorage_departure'), data['id']])
-        row_id = data['id']
-    else:
-        cur.execute('''INSERT INTO vcn_anchorage (vcn_id, anchorage_name, anchorage_arrival, anchorage_departure)
-                       VALUES (%s, %s, %s, %s) RETURNING id''',
-                   [data['vcn_id'], data.get('anchorage_name'), data.get('anchorage_arrival'), data.get('anchorage_departure')])
-        row_id = cur.fetchone()['id']
-    conn.commit()
-    conn.close()
-    return row_id
-
-def delete_anchorage(row_id):
-    conn = get_db()
-    cur = get_cursor(conn)
-    cur.execute('DELETE FROM vcn_anchorage WHERE id=%s', (row_id,))
-    conn.commit()
-    conn.close()
-
 # Delays sub-table operations
 def get_delays(vcn_id):
     conn = get_db()
@@ -184,12 +152,12 @@ def save_cargo_declaration(data):
     conn = get_db()
     cur = get_cursor(conn)
     if data.get('id'):
-        cur.execute('UPDATE vcn_cargo_declaration SET cargo_name=%s, bl_no=%s, bl_date=%s, bl_quantity=%s, quantity_uom=%s WHERE id=%s',
-                   [data.get('cargo_name'), data.get('bl_no'), data.get('bl_date'), data.get('bl_quantity'), data.get('quantity_uom'), data['id']])
+        cur.execute('UPDATE vcn_cargo_declaration SET cargo_name=%s, bl_no=%s, bl_date=%s, bl_quantity=%s, quantity_uom=%s, customer_name=%s WHERE id=%s',
+                   [data.get('cargo_name'), data.get('bl_no'), data.get('bl_date'), data.get('bl_quantity'), data.get('quantity_uom'), data.get('customer_name'), data['id']])
         row_id = data['id']
     else:
-        cur.execute('INSERT INTO vcn_cargo_declaration (vcn_id, cargo_name, bl_no, bl_date, bl_quantity, quantity_uom) VALUES (%s, %s, %s, %s, %s, %s) RETURNING id',
-                   [data['vcn_id'], data.get('cargo_name'), data.get('bl_no'), data.get('bl_date'), data.get('bl_quantity'), data.get('quantity_uom')])
+        cur.execute('INSERT INTO vcn_cargo_declaration (vcn_id, cargo_name, bl_no, bl_date, bl_quantity, quantity_uom, customer_name) VALUES (%s, %s, %s, %s, %s, %s, %s) RETURNING id',
+                   [data['vcn_id'], data.get('cargo_name'), data.get('bl_no'), data.get('bl_date'), data.get('bl_quantity'), data.get('quantity_uom'), data.get('customer_name')])
         row_id = cur.fetchone()['id']
     conn.commit()
     conn.close()
