@@ -44,7 +44,9 @@
             {title: "ID", field: "id", width: 60},
             {title: "Barge Name", field: "barge_name", editor: canEdit ? "input" : false, widthGrow: 1},
             {title: "DWT", field: "dwt", editor: canEdit ? "number" : false, width: 120, hozAlign: "right",
-                editorParams: {min: 0, step: 0.01}}
+                editorParams: {min: 0, step: 0.01}},
+            {title: "Barge Owner Name", field: "barge_owner_name", editor: canEdit ? "input" : false, width: 180},
+            {title: "Barge Owner Email ID", field: "barge_owner_email", editor: canEdit ? "input" : false, width: 200}
         ],
         selectable: true
     });

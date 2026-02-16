@@ -48,7 +48,7 @@
                 <select id="customer_type" required onchange="loadCustomers()">
                     <option value="">--Select--</option>
                     <option value="Customer" {% if header and header.customer_type == 'Customer' %}selected{% endif %}>Customer</option>
-                    <option value="Importer/Exporter" {% if header and header.customer_type == 'Importer/Exporter' %}selected{% endif %}>Importer/Exporter</option>
+                    <option value="Agent" {% if header and header.customer_type == 'Agent' %}selected{% endif %}>Agent</option>
                 </select>
             </div>
             <div class="form-group">

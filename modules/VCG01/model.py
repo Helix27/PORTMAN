@@ -56,12 +56,14 @@ def save_data(data):
     conn = get_db()
     cur = get_cursor(conn)
     if data.get('id'):
-        cur.execute(f"UPDATE {TABLE} SET cargo_type=%s, cargo_category=%s, cargo_name=%s WHERE id=%s",
-                   [data.get('cargo_type', ''), data.get('cargo_category', ''), data.get('cargo_name', ''), data['id']])
+        cur.execute(f"UPDATE {TABLE} SET cargo_type=%s, cargo_category=%s, cargo_name=%s, cargo_category_2=%s, cargo_sub_category=%s, cargo_sub_category_2=%s WHERE id=%s",
+                   [data.get('cargo_type', ''), data.get('cargo_category', ''), data.get('cargo_name', ''),
+                    data.get('cargo_category_2'), data.get('cargo_sub_category'), data.get('cargo_sub_category_2'), data['id']])
         row_id = data['id']
     else:
-        cur.execute(f"INSERT INTO {TABLE} (cargo_type, cargo_category, cargo_name) VALUES (%s, %s, %s) RETURNING id",
-                   [data.get('cargo_type', ''), data.get('cargo_category', ''), data.get('cargo_name', '')])
+        cur.execute(f"INSERT INTO {TABLE} (cargo_type, cargo_category, cargo_name, cargo_category_2, cargo_sub_category, cargo_sub_category_2) VALUES (%s, %s, %s, %s, %s, %s) RETURNING id",
+                   [data.get('cargo_type', ''), data.get('cargo_category', ''), data.get('cargo_name', ''),
+                    data.get('cargo_category_2'), data.get('cargo_sub_category'), data.get('cargo_sub_category_2')])
         row_id = cur.fetchone()['id']
     conn.commit()
     conn.close()

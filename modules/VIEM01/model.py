@@ -27,25 +27,27 @@ def save_data(data):
         cur.execute(f'''UPDATE {TABLE} SET
             name=%s, gl_code=%s, gstin=%s, gst_state_code=%s, gst_state_name=%s,
             pan=%s, billing_address=%s, city=%s, pincode=%s,
-            contact_person=%s, contact_email=%s, contact_phone=%s, default_currency=%s
+            contact_person=%s, contact_email=%s, contact_phone=%s, default_currency=%s,
+            equipment_type=%s
             WHERE id=%s''',
             [data.get('name', ''), data.get('gl_code'), data.get('gstin'),
              data.get('gst_state_code'), data.get('gst_state_name'), data.get('pan'),
              data.get('billing_address'), data.get('city'), data.get('pincode'),
              data.get('contact_person'), data.get('contact_email'), data.get('contact_phone'),
-             data.get('default_currency', 'INR'), data['id']])
+             data.get('default_currency', 'INR'), data.get('equipment_type'), data['id']])
         row_id = data['id']
     else:
         cur.execute(f'''INSERT INTO {TABLE}
             (name, gl_code, gstin, gst_state_code, gst_state_name, pan, billing_address,
-             city, pincode, contact_person, contact_email, contact_phone, default_currency)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+             city, pincode, contact_person, contact_email, contact_phone, default_currency,
+             equipment_type)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
             RETURNING id''',
             [data.get('name', ''), data.get('gl_code'), data.get('gstin'),
              data.get('gst_state_code'), data.get('gst_state_name'), data.get('pan'),
              data.get('billing_address'), data.get('city'), data.get('pincode'),
              data.get('contact_person'), data.get('contact_email'), data.get('contact_phone'),
-             data.get('default_currency', 'INR')])
+             data.get('default_currency', 'INR'), data.get('equipment_type')])
         row_id = cur.fetchone()['id']
     conn.commit()
     conn.close()

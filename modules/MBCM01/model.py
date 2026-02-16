@@ -12,12 +12,12 @@ def save(data):
     conn = get_db()
     cur = get_cursor(conn)
     if data.get('id'):
-        cur.execute('UPDATE mbc_master SET mbc_name=%s, dwt=%s WHERE id=%s',
-                   [data.get('mbc_name'), data.get('dwt'), data['id']])
+        cur.execute('UPDATE mbc_master SET mbc_name=%s, dwt=%s, mbc_owner_name=%s WHERE id=%s',
+                   [data.get('mbc_name'), data.get('dwt'), data.get('mbc_owner_name'), data['id']])
         row_id = data['id']
     else:
-        cur.execute('INSERT INTO mbc_master (mbc_name, dwt) VALUES (%s, %s) RETURNING id',
-                   [data.get('mbc_name'), data.get('dwt')])
+        cur.execute('INSERT INTO mbc_master (mbc_name, dwt, mbc_owner_name) VALUES (%s, %s, %s) RETURNING id',
+                   [data.get('mbc_name'), data.get('dwt'), data.get('mbc_owner_name')])
         row_id = cur.fetchone()['id']
     conn.commit()
     conn.close()

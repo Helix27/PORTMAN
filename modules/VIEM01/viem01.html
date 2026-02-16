@@ -1,10 +1,10 @@
 {% extends "base.html" %}
 
-{% block title %}Vessel Importer/Exporter Master - PORTMAN{% endblock %}
+{% block title %}Vessel Agent Master - PORTMAN{% endblock %}
 
 {% block content %}
 <div class="module-header">
-    <h2>Vessel Importer/Exporter Master</h2>
+    <h2>Vessel Agent Master</h2>
     <span class="module-code">VIEM01</span>
 </div>
 
@@ -20,7 +20,7 @@
 
 {% block scripts %}
 <script>
-    addToRecent('VIEM01', 'Vessel Importer/Exporter Master');
+    addToRecent('VIEM01', 'Vessel Agent Master');
     let table;
     const canEdit = {{ permissions.can_edit|default(0) }} || {{ permissions.can_add|default(0) }};
 
@@ -30,7 +30,8 @@
             layout: "fitColumns",
             columns: [
                 {formatter: "rowSelection", titleFormatter: "rowSelection", hozAlign: "center", headerSort: false, width: 40},
-                {title: "Name", field: "name", editor: canEdit ? "input" : false}
+                {title: "Name", field: "name", editor: canEdit ? "input" : false},
+                {title: "Equipment Type", field: "equipment_type", editor: canEdit ? "input" : false, width: 150}
             ],
             pagination: true,
             paginationMode: "remote",
