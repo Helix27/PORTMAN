@@ -116,6 +116,7 @@
 
     let table;
     let docSeries = [];
+    let defaultDocSeries = '';
     let vessels = [];
     let customers = [];
     let cargoNames = [];
@@ -158,7 +159,10 @@
             fetch('/api/module/MBCM01/all'),
             fetch('/admin/api/config/VEX01')
         ]);
-        docSeries = await dsRes.json();
+        const dsData = await dsRes.json();
+        docSeries = dsData.map(d => d.name);
+        const defaultDs = dsData.find(d => d.is_default);
+        defaultDocSeries = defaultDs ? defaultDs.name : '';
         const vesselsData = await vesselsRes.json();
         vessels = vesselsData.data.map(v => v.vessel_name);
         customers = await custRes.json();
@@ -254,7 +258,8 @@
         table.addRow({
             created_by: currentUser,
             created_date: getTodayDate(),
-            doc_status: 'Pending'
+            doc_status: 'Pending',
+            doc_series: defaultDocSeries
         }, true);
     }
 

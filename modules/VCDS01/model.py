@@ -15,21 +15,25 @@ def get_data(page=1, size=20):
 def get_all():
     conn = get_db()
     cur = get_cursor(conn)
-    cur.execute(f"SELECT name FROM {TABLE} WHERE name IS NOT NULL AND name != '' ORDER BY name ASC")
+    cur.execute(f"SELECT name, is_default FROM {TABLE} WHERE name IS NOT NULL AND name != '' ORDER BY name ASC")
     rows = cur.fetchall()
     conn.close()
-    return [r['name'] for r in rows]
+    return [{'name': r['name'], 'is_default': r['is_default']} for r in rows]
 
 def save_data(data):
     conn = get_db()
     cur = get_cursor(conn)
     row_id = data.get('id')
     name = data.get('name', '')
+    is_default = bool(data.get('is_default', False))
+
+    if is_default:
+        cur.execute(f"UPDATE {TABLE} SET is_default = FALSE WHERE is_default = TRUE")
 
     if row_id:
-        cur.execute(f"UPDATE {TABLE} SET name=%s WHERE id=%s", [name, row_id])
+        cur.execute(f"UPDATE {TABLE} SET name=%s, is_default=%s WHERE id=%s", [name, is_default, row_id])
     else:
-        cur.execute(f"INSERT INTO {TABLE} (name) VALUES (%s) RETURNING id", [name])
+        cur.execute(f"INSERT INTO {TABLE} (name, is_default) VALUES (%s, %s) RETURNING id", [name, is_default])
         row_id = cur.fetchone()['id']
 
     conn.commit()

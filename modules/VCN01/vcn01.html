@@ -249,6 +249,7 @@
     let operationTypes = [];
     let cargoTypes = [];
     let docSeries = [];
+    let defaultDocSeries = '';
     let dischargeTypes = [];
     let runTypes = [];
     let delayTypes = [];
@@ -307,7 +308,10 @@
         customers = await custRes.json();
         operationTypes = await opRes.json();
         cargoTypes = await cargoRes.json();
-        docSeries = await dsRes.json();
+        const dsData = await dsRes.json();
+        docSeries = dsData.map(d => d.name);
+        const defaultDs = dsData.find(d => d.is_default);
+        defaultDocSeries = defaultDs ? defaultDs.name : '';
         dischargeTypes = await todRes.json();
         runTypes = await rtRes.json();
         delayTypes = await dmRes.json();
@@ -875,7 +879,8 @@
             created_by: currentUser,
             created_date: getTodayDate(),
             doc_date: getTodayDate(),
-            doc_status: 'Pending'
+            doc_status: 'Pending',
+            vcn_doc_series: defaultDocSeries
         }, true);
     }
 

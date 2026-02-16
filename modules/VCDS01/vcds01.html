@@ -30,7 +30,19 @@
             layout: "fitColumns",
             columns: [
                 {formatter: "rowSelection", titleFormatter: "rowSelection", hozAlign: "center", headerSort: false, width: 40},
-                {title: "Name", field: "name", editor: canEdit ? "input" : false}
+                {title: "Name", field: "name", editor: canEdit ? "input" : false},
+                {title: "Default", field: "is_default", hozAlign: "center", width: 80, headerSort: false,
+                    formatter: function(cell) {
+                        const checked = cell.getValue() ? 'checked' : '';
+                        return `<input type="radio" name="default_ds" ${checked} ${canEdit ? '' : 'disabled'}>`;
+                    },
+                    cellClick: function(e, cell) {
+                        if (!canEdit) return;
+                        if (e.target.tagName !== 'INPUT') return;
+                        table.getRows().forEach(r => r.update({is_default: false}));
+                        cell.getRow().update({is_default: true});
+                    }
+                }
             ],
             pagination: true,
             paginationMode: "remote",

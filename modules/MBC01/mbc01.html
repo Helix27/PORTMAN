@@ -151,6 +151,7 @@
 
     let table;
     let docSeriesList = [];
+    let defaultDocSeries = '';
     let mbcList = [];
     let operationTypes = [];
     let cargoTypes = [];
@@ -196,7 +197,10 @@
             fetch('/api/module/VDAT01/all'),
             fetch('/api/module/VEM01/all')
         ]);
-        docSeriesList = await dsRes.json();
+        const dsData = await dsRes.json();
+        docSeriesList = dsData.map(d => d.name);
+        const defaultDs = dsData.find(d => d.is_default);
+        defaultDocSeries = defaultDs ? defaultDs.name : '';
         mbcList = await mbcRes.json();
         operationTypes = await otRes.json();
         cargoTypes = await ctRes.json();
@@ -556,7 +560,8 @@
             created_by: currentUser,
             created_date: getTodayDate(),
             doc_date: getTodayDate(),
-            doc_status: 'Pending'
+            doc_status: 'Pending',
+            doc_series: defaultDocSeries
         }, true);
     }
 

@@ -5,8 +5,8 @@ TABLE = 'mbc_doc_series'
 def get_all():
     conn = get_db()
     cur = get_cursor(conn)
-    cur.execute(f'SELECT name FROM {TABLE} ORDER BY name')
-    rows = [r['name'] for r in cur.fetchall()]
+    cur.execute(f'SELECT name, is_default FROM {TABLE} ORDER BY name')
+    rows = [{'name': r['name'], 'is_default': r['is_default']} for r in cur.fetchall()]
     conn.close()
     return rows
 
@@ -23,11 +23,17 @@ def get_data(page=1, size=20):
 def save_data(data):
     conn = get_db()
     cur = get_cursor(conn)
+    name = data.get('name', '')
+    is_default = bool(data.get('is_default', False))
+
+    if is_default:
+        cur.execute(f"UPDATE {TABLE} SET is_default = FALSE WHERE is_default = TRUE")
+
     if data.get('id'):
-        cur.execute(f"UPDATE {TABLE} SET name=%s WHERE id=%s", [data.get('name', ''), data['id']])
+        cur.execute(f"UPDATE {TABLE} SET name=%s, is_default=%s WHERE id=%s", [name, is_default, data['id']])
         row_id = data['id']
     else:
-        cur.execute(f"INSERT INTO {TABLE} (name) VALUES (%s) RETURNING id", [data.get('name', '')])
+        cur.execute(f"INSERT INTO {TABLE} (name, is_default) VALUES (%s, %s) RETURNING id", [name, is_default])
         row_id = cur.fetchone()['id']
     conn.commit()
     conn.close()
