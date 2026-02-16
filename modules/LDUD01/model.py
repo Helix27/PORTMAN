@@ -103,18 +103,18 @@ def save_delay(data):
     if data.get('id'):
         cur.execute('''UPDATE ldud_delays SET delay_name=%s, delay_account_type=%s, equipment_name=%s,
                       start_datetime=%s, end_datetime=%s, total_time_mins=%s, total_time_hrs=%s,
-                      delays_to_sof=%s, invoiceable=%s, minus_delay_hours=%s WHERE id=%s''',
+                      delays_to_sof=%s, invoiceable=%s, minus_delay_hours=%s, crane_number=%s WHERE id=%s''',
                    [data.get('delay_name'), data.get('delay_account_type'), data.get('equipment_name'),
                     data.get('start_datetime'), data.get('end_datetime'), total_mins, total_hrs,
-                    data.get('delays_to_sof'), data.get('invoiceable'), data.get('minus_delay_hours'), data['id']])
+                    data.get('delays_to_sof'), data.get('invoiceable'), data.get('minus_delay_hours'), data.get('crane_number'), data['id']])
         row_id = data['id']
     else:
         cur.execute('''INSERT INTO ldud_delays (ldud_id, delay_name, delay_account_type, equipment_name,
-                      start_datetime, end_datetime, total_time_mins, total_time_hrs, delays_to_sof, invoiceable, minus_delay_hours)
-                      VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s) RETURNING id''',
+                      start_datetime, end_datetime, total_time_mins, total_time_hrs, delays_to_sof, invoiceable, minus_delay_hours, crane_number)
+                      VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s) RETURNING id''',
                    [data['ldud_id'], data.get('delay_name'), data.get('delay_account_type'), data.get('equipment_name'),
                     data.get('start_datetime'), data.get('end_datetime'), total_mins, total_hrs,
-                    data.get('delays_to_sof'), data.get('invoiceable'), data.get('minus_delay_hours')])
+                    data.get('delays_to_sof'), data.get('invoiceable'), data.get('minus_delay_hours'), data.get('crane_number')])
         row_id = cur.fetchone()['id']
     conn.commit()
     conn.close()

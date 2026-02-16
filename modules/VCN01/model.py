@@ -254,12 +254,12 @@ def save_stowage_plan(data):
             return None, f"Total stowage quantity ({current_stowage_total + new_quantity}) cannot exceed IGM quantity ({igm_total})"
 
     if data.get('id'):
-        cur.execute('UPDATE vcn_stowage_plan SET cargo_name=%s, hatch_name=%s, hold_name=%s, hatchwise_quantity=%s WHERE id=%s',
-                   [data.get('cargo_name'), data.get('hatch_name'), data.get('hold_name'), data.get('hatchwise_quantity'), data['id']])
+        cur.execute('UPDATE vcn_stowage_plan SET cargo_name=%s, hatch_name=%s, hold_name=%s, hatchwise_quantity=%s, hatch_completion_time=%s WHERE id=%s',
+                   [data.get('cargo_name'), data.get('hatch_name'), data.get('hold_name'), data.get('hatchwise_quantity'), data.get('hatch_completion_time'), data['id']])
         row_id = data['id']
     else:
-        cur.execute('INSERT INTO vcn_stowage_plan (vcn_id, cargo_name, hatch_name, hold_name, hatchwise_quantity) VALUES (%s, %s, %s, %s, %s) RETURNING id',
-                   [data['vcn_id'], data.get('cargo_name'), data.get('hatch_name'), data.get('hold_name'), data.get('hatchwise_quantity')])
+        cur.execute('INSERT INTO vcn_stowage_plan (vcn_id, cargo_name, hatch_name, hold_name, hatchwise_quantity, hatch_completion_time) VALUES (%s, %s, %s, %s, %s, %s) RETURNING id',
+                   [data['vcn_id'], data.get('cargo_name'), data.get('hatch_name'), data.get('hold_name'), data.get('hatchwise_quantity'), data.get('hatch_completion_time')])
         row_id = cur.fetchone()['id']
     conn.commit()
     conn.close()

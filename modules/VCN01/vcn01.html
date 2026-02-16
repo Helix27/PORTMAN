@@ -758,6 +758,9 @@
                 {title: "Hatchwise Qty", field: "hatchwise_quantity", widthGrow: 1, editor: canEdit ? "number" : false, hozAlign: "right",
                     editorParams: {min: 0, step: 0.01}
                 },
+                {title: "Hatch Completion Time", field: "hatch_completion_time", widthGrow: 1, editor: canEdit ? datetimeEditor : false,
+                    formatter: function(cell) { return cell.getValue() ? cell.getValue().replace('T', ' ') : ''; }
+                },
                 canEdit ? {title: "", field: "actions", formatter: deleteButtonFormatter, width: 60, widthGrow: 0, hozAlign: "center", headerSort: false,
                     cellClick: function(e, cell) { deleteSubRow('stowage', cell.getRow().getData().id, vcnId); }
                 } : null
