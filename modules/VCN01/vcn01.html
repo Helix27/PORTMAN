@@ -258,6 +258,7 @@
     let hatches = [];
     let holds = [];
     let anchorageNames = [];
+    let portNames = [];
     let moduleConfig = {};
 
     // Store sub-table instances
@@ -286,7 +287,7 @@
     }
 
     async function loadMasterData() {
-        const [vesselsRes, agentsRes, ieRes, custRes, opRes, cargoRes, dsRes, todRes, rtRes, dmRes, cnRes, uomRes, hatchRes, holdRes, ancRes, configRes] = await Promise.all([
+        const [vesselsRes, agentsRes, ieRes, custRes, opRes, cargoRes, dsRes, todRes, rtRes, dmRes, cnRes, uomRes, hatchRes, holdRes, ancRes, portRes, configRes] = await Promise.all([
             fetch('/api/module/VCN01/vessels'),
             fetch('/api/module/VAM01/all'),
             fetch('/api/module/VIEM01/all'),
@@ -302,6 +303,7 @@
             fetch('/api/module/VHM01/all'),
             fetch('/api/module/VHO01/all'),
             fetch('/api/module/VANM01/all'),
+            fetch('/api/module/VPM01/all'),
             fetch('/admin/api/config/VCN01')
         ]);
         vessels = await vesselsRes.json();
@@ -322,6 +324,7 @@
         hatches = await hatchRes.json();
         holds = await holdRes.json();
         anchorageNames = await ancRes.json();
+        portNames = await portRes.json();
         moduleConfig = await configRes.json();
         initTable();
     }
@@ -334,6 +337,9 @@
 
         const vesselOptions = {};
         vessels.forEach(v => { vesselOptions[v.value] = v.value; });
+
+        const portOptions = {};
+        portNames.forEach(p => { portOptions[p] = p; });
 
         const columns = [
             {formatter: "rowSelection", titleFormatter: "rowSelection", hozAlign: "center", headerSort: false, width: 40},
@@ -380,6 +386,10 @@
                 editorParams: {values: docSeries, autocomplete: true, allowEmpty: true}, width: 100},
             {title: "Discharge Type", field: "type_of_discharge", editor: canEdit ? "list" : false,
                 editorParams: {values: dischargeTypes, autocomplete: true, allowEmpty: true}, width: 110},
+            {title: "Load Port", field: "load_port", editor: canEdit ? "list" : false,
+                editorParams: {values: portOptions, autocomplete: true, allowEmpty: true}, width: 110},
+            {title: "Discharge Port", field: "discharge_port", editor: canEdit ? "list" : false,
+                editorParams: {values: portOptions, autocomplete: true, allowEmpty: true}, width: 110},
             {title: "Doc Date", field: "doc_date", width: 100},
             {title: "Created By", field: "created_by", width: 90},
             {title: "Doc Status", field: "doc_status",

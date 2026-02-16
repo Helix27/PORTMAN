@@ -55,6 +55,7 @@ from modules.FCAM01 import bp as fcam01_bp, MODULE_INFO as fcam01_info
 from modules.FIN01 import bp as fin01_bp, MODULE_INFO as fin01_info
 from modules.SRV01 import bp as srv01_bp, MODULE_INFO as srv01_info
 from modules.VANM01 import bp as vanm01_bp, MODULE_INFO as vanm01_info
+from modules.VPM01 import bp as vpm01_bp, MODULE_INFO as vpm01_info
 
 # Register existing modules
 register_module(vc01_info['code'], vc01_info['name'], vc01_bp)
@@ -99,6 +100,7 @@ register_module(fcam01_info['code'], fcam01_info['name'], fcam01_bp)
 register_module(fin01_info['code'], fin01_info['name'], fin01_bp)
 register_module(srv01_info['code'], srv01_info['name'], srv01_bp)
 register_module(vanm01_info['code'], vanm01_info['name'], vanm01_bp)
+register_module(vpm01_info['code'], vpm01_info['name'], vpm01_bp)
 
 def login_required(f):
     @wraps(f)
