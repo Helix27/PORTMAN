@@ -298,7 +298,7 @@ function loadSource() {
         let docNum, vessel, date, displayText;
         if (sourceType === 'VCN') {
             docNum = row.vcn_doc_num; vessel = row.vessel_name;
-            date = row.anchored_time ? row.anchored_time.substring(0, 10) : '';
+            date = row.anchorage_arrival ? row.anchorage_arrival.substring(0, 10) : '';
         } else if (sourceType === 'MBC') {
             docNum = row.doc_num; vessel = row.mbc_name; date = row.doc_date || '';
         } else if (sourceType === 'VEX') {

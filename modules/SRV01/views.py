@@ -194,7 +194,7 @@ def get_source_options(source_type):
 
     if source_type == 'VCN':
         cur.execute('''
-            SELECT h.id, h.vcn_doc_num, h.vessel_name, a.anchored_time
+            SELECT h.id, h.vcn_doc_num, h.vessel_name, a.anchorage_arrival
             FROM vcn_header h
             LEFT JOIN vcn_anchorage a ON h.id = a.vcn_id
             ORDER BY h.id DESC
@@ -204,7 +204,7 @@ def get_source_options(source_type):
         result = []
         for r in rows:
             r = dict(r)
-            anchored = r.get('anchored_time', '') or ''
+            anchored = r.get('anchorage_arrival', '') or ''
             if anchored:
                 anchored = str(anchored)[:16].replace('T', ' ')
             display = f"{r['vcn_doc_num']} / {r['vessel_name']} / {anchored}"

@@ -14,7 +14,7 @@ def get_vcn_list():
     conn = get_db()
     cur = get_cursor(conn)
     cur.execute('''
-        SELECT h.id, h.vcn_doc_num, h.vessel_name, a.anchored_time
+        SELECT h.id, h.vcn_doc_num, h.vessel_name, a.anchorage_arrival
         FROM vcn_header h
         LEFT JOIN vcn_anchorage a ON a.vcn_id = h.id
         WHERE h.doc_status = 'Approved'
@@ -25,14 +25,14 @@ def get_vcn_list():
     result = []
     for r in rows:
         display = f"{r['vcn_doc_num']} / {r['vessel_name']}"
-        if r['anchored_time']:
-            display += f" / {r['anchored_time'].replace('T', ' ')}"
+        if r['anchorage_arrival']:
+            display += f" / {r['anchorage_arrival'].replace('T', ' ')}"
         result.append({
             'value': display,
             'vcn_id': r['id'],
             'vcn_doc_num': r['vcn_doc_num'],
             'vessel_name': r['vessel_name'],
-            'anchored_datetime': r['anchored_time']
+            'anchored_datetime': r['anchorage_arrival']
         })
     return result
 

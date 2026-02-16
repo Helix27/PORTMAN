@@ -81,7 +81,7 @@ def get_vcn_options():
     conn = get_db()
     cur = get_cursor(conn)
     cur.execute('''
-        SELECT h.id, h.vcn_doc_num, h.vessel_name, a.anchored_time
+        SELECT h.id, h.vcn_doc_num, h.vessel_name, a.anchorage_arrival
         FROM vcn_header h
         LEFT JOIN vcn_anchorage a ON h.id = a.vcn_id
         ORDER BY h.vcn_doc_num DESC

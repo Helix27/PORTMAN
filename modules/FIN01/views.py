@@ -72,9 +72,9 @@ def generate_bill():
     conn = get_db()
     cur = get_cursor(conn)
 
-    # VCN with anchored_time from anchorage
+    # VCN with anchorage_arrival from anchorage
     cur.execute('''
-        SELECT h.id, h.vcn_doc_num, h.vessel_name, a.anchored_time
+        SELECT h.id, h.vcn_doc_num, h.vessel_name, a.anchorage_arrival
         FROM vcn_header h
         LEFT JOIN vcn_anchorage a ON h.id = a.vcn_id
         ORDER BY h.id DESC

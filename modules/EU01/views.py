@@ -67,7 +67,7 @@ def get_vcn_options():
     options = model.get_vcn_options()
     result = []
     for opt in options:
-        anchored = opt.get('anchored_time', '')
+        anchored = opt.get('anchorage_arrival', '')
         if anchored:
             anchored = anchored[:16].replace('T', ' ')
         display = f"{opt['vcn_doc_num']} / {opt['vessel_name']} / {anchored}"
