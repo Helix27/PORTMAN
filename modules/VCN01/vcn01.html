@@ -255,7 +255,6 @@
     let delayTypes = [];
     let cargoNames = [];
     let quantityUoms = [];
-    let hatches = [];
     let holds = [];
     let portNames = [];
     let moduleConfig = {};
@@ -286,7 +285,7 @@
     }
 
     async function loadMasterData() {
-        const [vesselsRes, agentsRes, ieRes, custRes, opRes, cargoRes, dsRes, todRes, rtRes, dmRes, cnRes, uomRes, hatchRes, holdRes, portRes, configRes] = await Promise.all([
+        const [vesselsRes, agentsRes, ieRes, custRes, opRes, cargoRes, dsRes, todRes, rtRes, dmRes, cnRes, uomRes, holdRes, portRes, configRes] = await Promise.all([
             fetch('/api/module/VCN01/vessels'),
             fetch('/api/module/VAM01/all'),
             fetch('/api/module/VIEM01/all'),
@@ -299,7 +298,6 @@
             fetch('/api/module/VDM01/all'),
             fetch('/api/module/VCG01/names'),
             fetch('/api/module/VQM01/all'),
-            fetch('/api/module/VHM01/all'),
             fetch('/api/module/VHO01/all'),
             fetch('/api/module/VPM01/all'),
             fetch('/admin/api/config/VCN01')
@@ -319,7 +317,6 @@
         delayTypes = await dmRes.json();
         cargoNames = await cnRes.json();
         quantityUoms = await uomRes.json();
-        hatches = await hatchRes.json();
         holds = await holdRes.json();
         portNames = await portRes.json();
         moduleConfig = await configRes.json();
@@ -726,10 +723,6 @@
         });
         if (isDark) document.querySelector(`#igm-table-${vcnId}`).classList.add('tabulator-dark');
 
-        // Hatch options
-        const hatchOptions = {};
-        hatches.forEach(h => { hatchOptions[h] = h; });
-
         // Hold options
         const holdOptions = {};
         holds.forEach(h => { holdOptions[h] = h; });
@@ -749,16 +742,13 @@
                 {title: "Cargo Name", field: "cargo_name", widthGrow: 1, editor: canEdit ? "list" : false,
                     editorParams: {values: vcnCargoOptions, autocomplete: true, allowEmpty: true}
                 },
-                {title: "Hatch Name", field: "hatch_name", widthGrow: 1, editor: canEdit ? "list" : false,
-                    editorParams: {values: hatchOptions, autocomplete: true, allowEmpty: true}
-                },
                 {title: "Hold Name", field: "hold_name", widthGrow: 1, editor: canEdit ? "list" : false,
                     editorParams: {values: holdOptions, autocomplete: true, allowEmpty: true}
                 },
-                {title: "Hatchwise Qty", field: "hatchwise_quantity", widthGrow: 1, editor: canEdit ? "number" : false, hozAlign: "right",
+                {title: "Holdwise Qty", field: "hatchwise_quantity", widthGrow: 1, editor: canEdit ? "number" : false, hozAlign: "right",
                     editorParams: {min: 0, step: 0.01}
                 },
-                {title: "Hatch Completion Time", field: "hatch_completion_time", widthGrow: 1, editor: canEdit ? datetimeEditor : false,
+                {title: "Hold Completion Time", field: "hatch_completion_time", widthGrow: 1, editor: canEdit ? datetimeEditor : false,
                     formatter: function(cell) { return cell.getValue() ? cell.getValue().replace('T', ' ') : ''; }
                 },
                 canEdit ? {title: "", field: "actions", formatter: deleteButtonFormatter, width: 60, widthGrow: 0, hozAlign: "center", headerSort: false,

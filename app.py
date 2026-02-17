@@ -31,7 +31,7 @@ from modules.VDM01 import bp as vdm01_bp, MODULE_INFO as vdm01_info
 from modules.VCG01 import bp as vcg01_bp, MODULE_INFO as vcg01_info
 from modules.VCN01 import bp as vcn01_bp, MODULE_INFO as vcn01_info
 from modules.VQM01 import bp as vqm01_bp, MODULE_INFO as vqm01_info
-from modules.VHM01 import bp as vhm01_bp, MODULE_INFO as vhm01_info
+
 from modules.VHO01 import bp as vho01_bp, MODULE_INFO as vho01_info
 from modules.VDAT01 import bp as vdat01_bp, MODULE_INFO as vdat01_info
 from modules.VEM01 import bp as vem01_bp, MODULE_INFO as vem01_info
@@ -76,7 +76,7 @@ register_module(vdm01_info['code'], vdm01_info['name'], vdm01_bp)
 register_module(vcg01_info['code'], vcg01_info['name'], vcg01_bp)
 register_module(vcn01_info['code'], vcn01_info['name'], vcn01_bp)
 register_module(vqm01_info['code'], vqm01_info['name'], vqm01_bp)
-register_module(vhm01_info['code'], vhm01_info['name'], vhm01_bp)
+
 register_module(vho01_info['code'], vho01_info['name'], vho01_bp)
 register_module(vdat01_info['code'], vdat01_info['name'], vdat01_bp)
 register_module(vem01_info['code'], vem01_info['name'], vem01_bp)
