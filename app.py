@@ -42,6 +42,7 @@ from modules.MBCM01 import bp as mbcm01_bp, MODULE_INFO as mbcm01_info
 from modules.PBM01 import bp as pbm01_bp, MODULE_INFO as pbm01_info
 from modules.MBCDS01 import bp as mbcds01_bp, MODULE_INFO as mbcds01_info
 from modules.MBC01 import bp as mbc01_bp, MODULE_INFO as mbc01_info
+from modules.PPL01 import bp as ppl01_bp, MODULE_INFO as ppl01_info
 from modules.EU01 import bp as eu01_bp, MODULE_INFO as eu01_info
 from modules.CRM01 import bp as crm01_bp, MODULE_INFO as crm01_info
 from modules.VEX01 import bp as vex01_bp, MODULE_INFO as vex01_info
@@ -87,6 +88,7 @@ register_module(mbcm01_info['code'], mbcm01_info['name'], mbcm01_bp)
 register_module(pbm01_info['code'], pbm01_info['name'], pbm01_bp)
 register_module(mbcds01_info['code'], mbcds01_info['name'], mbcds01_bp)
 register_module(mbc01_info['code'], mbc01_info['name'], mbc01_bp)
+register_module(ppl01_info['code'], ppl01_info['name'], ppl01_bp)
 register_module(eu01_info['code'], eu01_info['name'], eu01_bp)
 register_module(crm01_info['code'], crm01_info['name'], crm01_bp)
 register_module(vexds01_info['code'], vexds01_info['name'], vexds01_bp)

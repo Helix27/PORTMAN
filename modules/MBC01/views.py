@@ -132,3 +132,28 @@ def delete_discharge_port_line():
         return jsonify({'error': 'No permission to delete'}), 403
     model.delete_discharge_port_line(request.json['id'])
     return jsonify({'success': True})
+
+# Cleaning Details sub-table endpoints
+@bp.route('/api/module/MBC01/cleaning/<int:mbc_id>')
+@login_required
+def get_cleaning_details(mbc_id):
+    return jsonify(model.get_cleaning_details(mbc_id))
+
+@bp.route('/api/module/MBC01/cleaning/save', methods=['POST'])
+@login_required
+def save_cleaning_detail():
+    perms = get_perms()
+    if not perms.get('can_add') and not perms.get('can_edit'):
+        return jsonify({'error': 'No permission'}), 403
+    data = request.json
+    row_id = model.save_cleaning_detail(data)
+    return jsonify({'id': row_id, 'success': True})
+
+@bp.route('/api/module/MBC01/cleaning/delete', methods=['POST'])
+@login_required
+def delete_cleaning_detail():
+    perms = get_perms()
+    if not perms.get('can_delete'):
+        return jsonify({'error': 'No permission to delete'}), 403
+    model.delete_cleaning_detail(request.json['id'])
+    return jsonify({'success': True})

@@ -4,14 +4,96 @@
 
 {% block head %}
 <style>
+    .detail-modal {
+        display: none;
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: rgba(0, 0, 0, 0.5);
+        z-index: 9999;
+        overflow: auto;
+    }
+    .detail-modal.active {
+        display: flex;
+        align-items: flex-start;
+        justify-content: center;
+        padding: 20px;
+    }
+    .detail-modal-content {
+        background: white;
+        border-radius: 8px;
+        width: 95%;
+        max-width: 1400px;
+        margin: 20px auto;
+        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+        position: relative;
+        max-height: 90vh;
+        overflow-y: auto;
+    }
+    .dark-theme .detail-modal-content {
+        background: #1e293b;
+        color: #e2e8f0;
+    }
+    .detail-modal-header {
+        padding: 20px;
+        border-bottom: 2px solid #3182ce;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        position: sticky;
+        top: 0;
+        background: white;
+        z-index: 10;
+    }
+    .dark-theme .detail-modal-header {
+        background: #1e293b;
+        border-color: #334155;
+    }
+    .detail-modal-header h3 {
+        margin: 0;
+        font-size: 18px;
+        font-weight: 600;
+    }
+    .detail-modal-close {
+        background: #e53e3e;
+        color: white;
+        border: none;
+        padding: 8px 16px;
+        border-radius: 4px;
+        cursor: pointer;
+        font-size: 14px;
+        font-weight: 500;
+    }
+    .detail-modal-close:hover {
+        background: #c53030;
+    }
+    .detail-modal-body {
+        padding: 20px;
+    }
     .sub-table-container {
         background: #f8fafc;
         padding: 15px;
         border-bottom: 2px solid #3182ce;
         box-sizing: border-box;
         width: 100% !important;
-        max-width: 100% !important;
         overflow: hidden;
+        display: block;
+        margin: 0;
+    }
+    .btn-open-details {
+        background: #3182ce;
+        color: white;
+        border: none;
+        padding: 4px 10px;
+        border-radius: 4px;
+        cursor: pointer;
+        font-size: 12px;
+        font-weight: 500;
+    }
+    .btn-open-details:hover {
+        background: #2c5282;
     }
     .dark-theme .sub-table-container {
         background: #1e293b;
@@ -119,12 +201,6 @@
         gap: 8px;
         align-items: center;
     }
-    .expand-icon {
-        transition: transform 0.2s;
-    }
-    .expand-icon.expanded {
-        transform: rotate(90deg);
-    }
 </style>
 {% endblock %}
 
@@ -143,6 +219,18 @@
 </div>
 
 <div id="table"></div>
+
+<div id="detailsModal" class="detail-modal">
+    <div class="detail-modal-content">
+        <div class="detail-modal-header">
+            <h3 id="modalTitle">MBC Details</h3>
+            <button class="detail-modal-close" onclick="closeDetailsModal()">Close</button>
+        </div>
+        <div class="detail-modal-body">
+            <div id="modalSubTables"></div>
+        </div>
+    </div>
+</div>
 {% endblock %}
 
 {% block scripts %}
@@ -161,7 +249,9 @@
     let delayTypes = [];
     let delayAccountTypes = [];
     let equipmentList = [];
+    let payloaderList = [];
     let subTables = {};
+    let currentMbcId = null;
 
     const currentUser = '{{ session.username }}';
     const permissions = {
@@ -185,7 +275,7 @@
     }
 
     async function loadMasterData() {
-        const [dsRes, mbcRes, otRes, ctRes, cnRes, uomRes, berthRes, delayRes, datRes, eqRes] = await Promise.all([
+        const [dsRes, mbcRes, otRes, ctRes, cnRes, uomRes, berthRes, delayRes, datRes, eqRes, pplRes] = await Promise.all([
             fetch('/api/module/MBCDS01/all'),
             fetch('/api/module/MBCM01/all'),
             fetch('/api/module/VOT01/all'),
@@ -195,7 +285,8 @@
             fetch('/api/module/PBM01/all'),
             fetch('/api/module/VDM01/all'),
             fetch('/api/module/VDAT01/all'),
-            fetch('/api/module/VEM01/all')
+            fetch('/api/module/VEM01/all'),
+            fetch('/api/module/PPL01/all')
         ]);
         const dsData = await dsRes.json();
         docSeriesList = dsData.map(d => d.name);
@@ -210,6 +301,7 @@
         delayTypes = await delayRes.json();
         delayAccountTypes = await datRes.json();
         equipmentList = await eqRes.json();
+        payloaderList = await pplRes.json();
         initTable();
     }
 
@@ -261,19 +353,20 @@
         const columns = [
             {formatter: "rowSelection", titleFormatter: "rowSelection", hozAlign: "center", headerSort: false, width: 40},
             {
+                title: "Details",
                 formatter: function(cell) {
                     const data = cell.getRow().getData();
                     if (!data.id) return '';
-                    return '<span class="expand-icon" style="cursor:pointer;font-size:14px;">&#9654;</span>';
+                    return '<button class="btn-open-details">+</button>';
                 },
-                width: 30,
+                width: 70,
                 hozAlign: "center",
                 headerSort: false,
                 cellClick: function(e, cell) {
                     const row = cell.getRow();
                     const data = row.getData();
                     if (!data.id) return;
-                    toggleSubTables(row);
+                    openDetailsModal(data);
                 }
             },
             {title: "Doc Num", field: "doc_num", width: 100},
@@ -318,11 +411,7 @@
                 document.getElementById('totalCount').textContent = response.total;
                 return response;
             },
-            selectable: true,
-            rowFormatter: function(row) {
-                const el = row.getElement();
-                el.querySelector('.expand-icon')?.classList.remove('expanded');
-            }
+            selectable: true
         });
 
         if (localStorage.getItem('theme') === 'dark') {
@@ -330,27 +419,16 @@
         }
     }
 
-    async function toggleSubTables(row) {
-        const el = row.getElement();
-        const icon = el.querySelector('.expand-icon');
-        const mbcId = row.getData().id;
-        const containerId = `sub-container-${mbcId}`;
-        const existingContainer = document.getElementById(containerId);
+    async function openDetailsModal(data) {
+        const mbcId = data.id;
+        currentMbcId = mbcId;
 
-        if (existingContainer) {
-            if (subTables[mbcId]) {
-                Object.values(subTables[mbcId]).forEach(t => t.destroy());
-                delete subTables[mbcId];
-            }
-            existingContainer.remove();
-            icon?.classList.remove('expanded');
-            return;
-        }
+        document.getElementById('modalTitle').textContent = `Details for ${data.doc_num || 'MBC'}`;
 
-        icon?.classList.add('expanded');
+        const modalBody = document.getElementById('modalSubTables');
+        modalBody.innerHTML = '';
 
         const subContainer = document.createElement('div');
-        subContainer.id = containerId;
         subContainer.className = 'sub-table-container';
         subContainer.innerHTML = `
             <div class="sub-section">
@@ -375,6 +453,16 @@
             </div>
             <div class="sub-section">
                 <div class="sub-section-header">
+                    <span>MBC Cleaning Details</span>
+                    <div class="sub-section-actions">
+                        ${(permissions.can_edit || permissions.can_add) ? `<button class="btn-sub-add" onclick="addSubRow('cleaning', ${mbcId})">+ Add</button>` : ''}
+                        ${(permissions.can_edit || permissions.can_add) ? `<button class="btn-sub-save" onclick="saveSubTable('cleaning', ${mbcId})">Save</button>` : ''}
+                    </div>
+                </div>
+                <div class="sub-section-content"><div id="cleaning-table-${mbcId}" class="sub-tabulator"></div></div>
+            </div>
+            <div class="sub-section">
+                <div class="sub-section-header">
                     <span>Delays</span>
                     <div class="sub-section-actions">
                         ${(permissions.can_edit || permissions.can_add) ? `<button class="btn-sub-add" onclick="addSubRow('delays', ${mbcId})">+ Add</button>` : ''}
@@ -384,10 +472,38 @@
                 <div class="sub-section-content"><div id="delays-table-${mbcId}" class="sub-tabulator"></div></div>
             </div>`;
 
-        el.after(subContainer);
+        modalBody.appendChild(subContainer);
+        document.getElementById('detailsModal').classList.add('active');
+
         subTables[mbcId] = {};
         await initSubTables(mbcId);
     }
+
+    function closeDetailsModal() {
+        const modal = document.getElementById('detailsModal');
+        modal.classList.remove('active');
+
+        if (currentMbcId && subTables[currentMbcId]) {
+            Object.values(subTables[currentMbcId]).forEach(t => {
+                if (t && typeof t.destroy === 'function') t.destroy();
+            });
+            delete subTables[currentMbcId];
+        }
+
+        document.getElementById('modalSubTables').innerHTML = '';
+        currentMbcId = null;
+    }
+
+    // Close modal when clicking outside or pressing Escape
+    document.addEventListener('DOMContentLoaded', function() {
+        const modal = document.getElementById('detailsModal');
+        modal.addEventListener('click', function(e) {
+            if (e.target === modal) closeDetailsModal();
+        });
+        document.addEventListener('keydown', function(e) {
+            if (e.key === 'Escape' && modal.classList.contains('active')) closeDetailsModal();
+        });
+    });
 
     async function initSubTables(mbcId) {
         const canEdit = permissions.can_edit || permissions.can_add;
@@ -423,6 +539,8 @@
                     formatter: function(cell) { return cell.getValue() ? cell.getValue().replace('T', ' ') : ''; }},
                 {title: "Cast Off Load Port", field: "cast_off_load_port", width: 150, editor: canEdit ? datetimeEditor : false,
                     formatter: function(cell) { return cell.getValue() ? cell.getValue().replace('T', ' ') : ''; }},
+                {title: "ETA", field: "eta", width: 150, editor: canEdit ? datetimeEditor : false,
+                    formatter: function(cell) { return cell.getValue() ? cell.getValue().replace('T', ' ') : ''; }},
                 canEdit ? {title: "", field: "actions", formatter: deleteButtonFormatter, width: 50, hozAlign: "center", headerSort: false,
                     cellClick: function(e, cell) { deleteSubRow('load_port', cell.getRow().getData().id, mbcId); }
                 } : null
@@ -440,17 +558,19 @@
                     formatter: function(cell) { return cell.getValue() ? cell.getValue().replace('T', ' ') : ''; }},
                 {title: "Departure Gull Island", field: "departure_gull_island", width: 140, editor: canEdit ? datetimeEditor : false,
                     formatter: function(cell) { return cell.getValue() ? cell.getValue().replace('T', ' ') : ''; }},
-                {title: "Vessel Arrival Port", field: "vessel_arrival_port", width: 140, editor: canEdit ? datetimeEditor : false,
+                {title: "MBC Arrival Port", field: "vessel_arrival_port", width: 140, editor: canEdit ? datetimeEditor : false,
                     formatter: function(cell) { return cell.getValue() ? cell.getValue().replace('T', ' ') : ''; }},
-                {title: "Vessel All Made Fast", field: "vessel_all_made_fast", width: 140, editor: canEdit ? datetimeEditor : false,
+                {title: "MBC All Made Fast At Unloading Berth", field: "vessel_all_made_fast", width: 220, editor: canEdit ? datetimeEditor : false,
                     formatter: function(cell) { return cell.getValue() ? cell.getValue().replace('T', ' ') : ''; }},
                 {title: "Unloading Commenced", field: "unloading_commenced", width: 140, editor: canEdit ? datetimeEditor : false,
                     formatter: function(cell) { return cell.getValue() ? cell.getValue().replace('T', ' ') : ''; }},
                 {title: "Cleaning Commenced", field: "cleaning_commenced", width: 140, editor: canEdit ? datetimeEditor : false,
                     formatter: function(cell) { return cell.getValue() ? cell.getValue().replace('T', ' ') : ''; }},
+                {title: "Cleaning Completed", field: "cleaning_completed", width: 140, editor: canEdit ? datetimeEditor : false,
+                    formatter: function(cell) { return cell.getValue() ? cell.getValue().replace('T', ' ') : ''; }},
                 {title: "Unloading Completed", field: "unloading_completed", width: 140, editor: canEdit ? datetimeEditor : false,
                     formatter: function(cell) { return cell.getValue() ? cell.getValue().replace('T', ' ') : ''; }},
-                {title: "Vessel Cast Off", field: "vessel_cast_off", width: 140, editor: canEdit ? datetimeEditor : false,
+                {title: "MBC Cast Off", field: "vessel_cast_off", width: 140, editor: canEdit ? datetimeEditor : false,
                     formatter: function(cell) { return cell.getValue() ? cell.getValue().replace('T', ' ') : ''; }},
                 {title: "Unloaded By", field: "vessel_unloaded_by", width: 100, editor: canEdit ? "input" : false},
                 {title: "Unloading Berth", field: "vessel_unloading_berth", width: 110, editor: canEdit ? "list" : false,
@@ -465,6 +585,36 @@
             ].filter(Boolean)
         });
         if (isDark) document.querySelector(`#discharge_port-table-${mbcId}`).classList.add('tabulator-dark');
+
+        // MBC Cleaning Details table
+        const pplOptions = {};
+        payloaderList.forEach(p => { pplOptions[p] = p; });
+
+        subTables[mbcId].cleaning = new Tabulator(`#cleaning-table-${mbcId}`, {
+            layout: "fitDataFill",
+            height: 150,
+            ajaxURL: `/api/module/MBC01/cleaning/${mbcId}`,
+            columns: [
+                {title: "Payloader", field: "payloader_name", width: 130, editor: canEdit ? "list" : false,
+                    editorParams: {values: pplOptions, autocomplete: true, allowEmpty: true}},
+                {title: "HMR Start", field: "hmr_start", width: 100, editor: canEdit ? "number" : false, hozAlign: "right",
+                    editorParams: {min: 0, step: 0.01}},
+                {title: "HMR End", field: "hmr_end", width: 100, editor: canEdit ? "number" : false, hozAlign: "right",
+                    editorParams: {min: 0, step: 0.01}},
+                {title: "Diesel Start", field: "diesel_start", width: 140, editor: canEdit ? datetimeEditor : false,
+                    formatter: function(cell) { return cell.getValue() ? cell.getValue().replace('T', ' ') : ''; }},
+                {title: "Diesel End", field: "diesel_end", width: 140, editor: canEdit ? datetimeEditor : false,
+                    formatter: function(cell) { return cell.getValue() ? cell.getValue().replace('T', ' ') : ''; }},
+                {title: "Start Time", field: "start_time", width: 140, editor: canEdit ? datetimeEditor : false,
+                    formatter: function(cell) { return cell.getValue() ? cell.getValue().replace('T', ' ') : ''; }},
+                {title: "End Time", field: "end_time", width: 140, editor: canEdit ? datetimeEditor : false,
+                    formatter: function(cell) { return cell.getValue() ? cell.getValue().replace('T', ' ') : ''; }},
+                canEdit ? {title: "", field: "actions", formatter: deleteButtonFormatter, width: 50, hozAlign: "center", headerSort: false,
+                    cellClick: function(e, cell) { deleteSubRow('cleaning', cell.getRow().getData().id, mbcId); }
+                } : null
+            ].filter(Boolean)
+        });
+        if (isDark) document.querySelector(`#cleaning-table-${mbcId}`).classList.add('tabulator-dark');
 
         // Delays table
         subTables[mbcId].delays = new Tabulator(`#delays-table-${mbcId}`, {
@@ -572,10 +722,7 @@
         selected.forEach(row => {
             const id = row.getData().id;
             if (id) {
-                if (subTables[id]) {
-                    Object.values(subTables[id]).forEach(t => t.destroy());
-                    delete subTables[id];
-                }
+                if (currentMbcId === id) closeDetailsModal();
                 fetch("/api/module/MBC01/delete", {
                     method: 'POST',
                     headers: {'Content-Type': 'application/json'},

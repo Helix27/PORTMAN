@@ -133,17 +133,17 @@ def save_load_port_line(data):
 
     if data.get('id'):
         cur.execute('''UPDATE mbc_load_port_lines SET
-                      arrived_load_port=%s, alongside_berth=%s, loading_commenced=%s,
+                      eta=%s, arrived_load_port=%s, alongside_berth=%s, loading_commenced=%s,
                       loading_completed=%s, cast_off_load_port=%s
                       WHERE id=%s''',
-                   [data.get('arrived_load_port'), data.get('alongside_berth'), data.get('loading_commenced'),
+                   [data.get('eta'), data.get('arrived_load_port'), data.get('alongside_berth'), data.get('loading_commenced'),
                     data.get('loading_completed'), data.get('cast_off_load_port'), data['id']])
         row_id = data['id']
     else:
         cur.execute('''INSERT INTO mbc_load_port_lines
-                      (mbc_id, arrived_load_port, alongside_berth, loading_commenced, loading_completed, cast_off_load_port)
-                      VALUES (%s, %s, %s, %s, %s, %s) RETURNING id''',
-                   [data['mbc_id'], data.get('arrived_load_port'), data.get('alongside_berth'),
+                      (mbc_id, eta, arrived_load_port, alongside_berth, loading_commenced, loading_completed, cast_off_load_port)
+                      VALUES (%s, %s, %s, %s, %s, %s, %s) RETURNING id''',
+                   [data['mbc_id'], data.get('eta'), data.get('arrived_load_port'), data.get('alongside_berth'),
                     data.get('loading_commenced'), data.get('loading_completed'), data.get('cast_off_load_port')])
         row_id = cur.fetchone()['id']
     conn.commit()
@@ -177,26 +177,26 @@ def save_discharge_port_line(data):
         cur.execute('''UPDATE mbc_discharge_port_lines SET
                       arrival_gull_island=%s, departure_gull_island=%s, vessel_arrival_port=%s,
                       vessel_all_made_fast=%s, unloading_commenced=%s, cleaning_commenced=%s,
-                      unloading_completed=%s, vessel_cast_off=%s, vessel_unloaded_by=%s,
+                      cleaning_completed=%s, unloading_completed=%s, vessel_cast_off=%s, vessel_unloaded_by=%s,
                       vessel_unloading_berth=%s, discharge_stop_shifting=%s, discharge_start_shifting=%s
                       WHERE id=%s''',
                    [data.get('arrival_gull_island'), data.get('departure_gull_island'), data.get('vessel_arrival_port'),
                     data.get('vessel_all_made_fast'), data.get('unloading_commenced'), data.get('cleaning_commenced'),
-                    data.get('unloading_completed'), data.get('vessel_cast_off'), data.get('vessel_unloaded_by'),
-                    data.get('vessel_unloading_berth'), data.get('discharge_stop_shifting'),
-                    data.get('discharge_start_shifting'), data['id']])
+                    data.get('cleaning_completed'), data.get('unloading_completed'), data.get('vessel_cast_off'),
+                    data.get('vessel_unloaded_by'), data.get('vessel_unloading_berth'),
+                    data.get('discharge_stop_shifting'), data.get('discharge_start_shifting'), data['id']])
         row_id = data['id']
     else:
         cur.execute('''INSERT INTO mbc_discharge_port_lines
                       (mbc_id, arrival_gull_island, departure_gull_island, vessel_arrival_port,
-                       vessel_all_made_fast, unloading_commenced, cleaning_commenced, unloading_completed,
-                       vessel_cast_off, vessel_unloaded_by, vessel_unloading_berth,
+                       vessel_all_made_fast, unloading_commenced, cleaning_commenced, cleaning_completed,
+                       unloading_completed, vessel_cast_off, vessel_unloaded_by, vessel_unloading_berth,
                        discharge_stop_shifting, discharge_start_shifting)
-                      VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s) RETURNING id''',
+                      VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s) RETURNING id''',
                    [data['mbc_id'], data.get('arrival_gull_island'), data.get('departure_gull_island'),
                     data.get('vessel_arrival_port'), data.get('vessel_all_made_fast'),
                     data.get('unloading_commenced'), data.get('cleaning_commenced'),
-                    data.get('unloading_completed'), data.get('vessel_cast_off'),
+                    data.get('cleaning_completed'), data.get('unloading_completed'), data.get('vessel_cast_off'),
                     data.get('vessel_unloaded_by'), data.get('vessel_unloading_berth'),
                     data.get('discharge_stop_shifting'), data.get('discharge_start_shifting')])
         row_id = cur.fetchone()['id']
@@ -209,5 +209,49 @@ def delete_discharge_port_line(row_id):
     conn = get_db()
     cur = get_cursor(conn)
     cur.execute('DELETE FROM mbc_discharge_port_lines WHERE id=%s', (row_id,))
+    conn.commit()
+    conn.close()
+
+
+# Cleaning Details sub-table operations
+def get_cleaning_details(mbc_id):
+    conn = get_db()
+    cur = get_cursor(conn)
+    cur.execute('SELECT * FROM mbc_cleaning_details WHERE mbc_id=%s ORDER BY id DESC', (mbc_id,))
+    rows = cur.fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
+
+
+def save_cleaning_detail(data):
+    conn = get_db()
+    cur = get_cursor(conn)
+
+    if data.get('id'):
+        cur.execute('''UPDATE mbc_cleaning_details SET
+                      payloader_name=%s, hmr_start=%s, hmr_end=%s,
+                      diesel_start=%s, diesel_end=%s, start_time=%s, end_time=%s
+                      WHERE id=%s''',
+                   [data.get('payloader_name'), data.get('hmr_start'), data.get('hmr_end'),
+                    data.get('diesel_start'), data.get('diesel_end'),
+                    data.get('start_time'), data.get('end_time'), data['id']])
+        row_id = data['id']
+    else:
+        cur.execute('''INSERT INTO mbc_cleaning_details
+                      (mbc_id, payloader_name, hmr_start, hmr_end, diesel_start, diesel_end, start_time, end_time)
+                      VALUES (%s, %s, %s, %s, %s, %s, %s, %s) RETURNING id''',
+                   [data['mbc_id'], data.get('payloader_name'), data.get('hmr_start'), data.get('hmr_end'),
+                    data.get('diesel_start'), data.get('diesel_end'),
+                    data.get('start_time'), data.get('end_time')])
+        row_id = cur.fetchone()['id']
+    conn.commit()
+    conn.close()
+    return row_id
+
+
+def delete_cleaning_detail(row_id):
+    conn = get_db()
+    cur = get_cursor(conn)
+    cur.execute('DELETE FROM mbc_cleaning_details WHERE id=%s', (row_id,))
     conn.commit()
     conn.close()
