@@ -30,7 +30,10 @@
             layout: "fitColumns",
             columns: [
                 {formatter: "rowSelection", titleFormatter: "rowSelection", hozAlign: "center", headerSort: false, width: 40},
-                {title: "Name", field: "name", editor: canEdit ? "input" : false}
+                {title: "Delay Name", field: "name", editor: canEdit ? "input" : false, widthGrow: 2},
+                {title: "To SOF", field: "to_sof", editor: canEdit ? "list" : false, width: 100,
+                    editorParams: {values: {"Yes": "Yes", "No": "No"}, allowEmpty: true}},
+                {title: "Type", field: "type", editor: canEdit ? "input" : false, widthGrow: 1}
             ],
             pagination: true,
             paginationMode: "remote",

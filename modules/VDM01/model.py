@@ -26,10 +26,13 @@ def save_data(data):
     row_id = data.get('id')
     name = data.get('name', '')
 
+    to_sof = data.get('to_sof', '')
+    dtype = data.get('type', '')
+
     if row_id:
-        cur.execute(f"UPDATE {TABLE} SET name=%s WHERE id=%s", [name, row_id])
+        cur.execute(f"UPDATE {TABLE} SET name=%s, to_sof=%s, type=%s WHERE id=%s", [name, to_sof, dtype, row_id])
     else:
-        cur.execute(f"INSERT INTO {TABLE} (name) VALUES (%s) RETURNING id", [name])
+        cur.execute(f"INSERT INTO {TABLE} (name, to_sof, type) VALUES (%s, %s, %s) RETURNING id", [name, to_sof, dtype])
         row_id = cur.fetchone()['id']
 
     conn.commit()

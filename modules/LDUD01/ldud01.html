@@ -244,8 +244,6 @@
     let table;
     let vcnList = [];
     let delayTypes = [];
-    let delayAccountTypes = [];
-    let equipmentList = [];
     let bargeList = [];
     let contractorList = [];
     let cargoNames = [];
@@ -276,11 +274,9 @@
     }
 
     async function loadMasterData() {
-        const [vcnRes, delayRes, datRes, eqRes, bargeRes, contractorRes, cargoRes, ancRes] = await Promise.all([
+        const [vcnRes, delayRes, bargeRes, contractorRes, cargoRes, ancRes] = await Promise.all([
             fetch('/api/module/LDUD01/vcn_list'),
             fetch('/api/module/VDM01/all'),
-            fetch('/api/module/VDAT01/all'),
-            fetch('/api/module/VEM01/all'),
             fetch('/api/module/VBM01/all'),
             fetch('/api/module/VCTM01/all'),
             fetch('/api/module/VCG01/names'),
@@ -288,8 +284,6 @@
         ]);
         vcnList = await vcnRes.json();
         delayTypes = await delayRes.json();
-        delayAccountTypes = await datRes.json();
-        equipmentList = await eqRes.json();
         bargeList = await bargeRes.json();
         contractorList = await contractorRes.json();
         cargoNames = await cargoRes.json();
@@ -558,12 +552,6 @@
         const delayOptions = {};
         delayTypes.forEach(d => { delayOptions[d] = d; });
 
-        const datOptions = {};
-        delayAccountTypes.forEach(d => { datOptions[d] = d; });
-
-        const eqOptions = {};
-        equipmentList.forEach(e => { eqOptions[e] = e; });
-
         const bargeOptions = {};
         bargeList.forEach(b => { bargeOptions[b] = b; });
 
@@ -682,20 +670,12 @@
                 },
                 {title: "Delay Name", field: "delay_name", width: 120, editor: canEdit ? "list" : false,
                     editorParams: {values: delayOptions, autocomplete: true, allowEmpty: true}},
-                {title: "Account Type", field: "delay_account_type", width: 120, editor: canEdit ? "list" : false,
-                    editorParams: {values: datOptions, autocomplete: true, allowEmpty: true}},
-                {title: "Equipment", field: "equipment_name", width: 100, editor: canEdit ? "list" : false,
-                    editorParams: {values: eqOptions, autocomplete: true, allowEmpty: true}},
                 {title: "Start", field: "start_datetime", width: 140, editor: canEdit ? datetimeEditor : false,
                     formatter: function(cell) { return cell.getValue() ? cell.getValue().replace('T', ' ') : ''; }},
                 {title: "End", field: "end_datetime", width: 140, editor: canEdit ? datetimeEditor : false,
                     formatter: function(cell) { return cell.getValue() ? cell.getValue().replace('T', ' ') : ''; }},
                 {title: "Mins", field: "total_time_mins", width: 60, hozAlign: "right"},
                 {title: "Hrs", field: "total_time_hrs", width: 60, hozAlign: "right"},
-                {title: "To SOF", field: "delays_to_sof", width: 60, editor: canEdit ? "list" : false,
-                    editorParams: {values: yesNoOptions}},
-                {title: "Invoice", field: "invoiceable", width: 60, editor: canEdit ? "list" : false,
-                    editorParams: {values: yesNoOptions}},
                 {title: "Minus Hrs", field: "minus_delay_hours", width: 70, editor: canEdit ? "list" : false,
                     editorParams: {values: yesNoOptions}},
                 canEdit ? {title: "", field: "actions", formatter: deleteButtonFormatter, width: 50, hozAlign: "center", headerSort: false,
