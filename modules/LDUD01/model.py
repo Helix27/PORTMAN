@@ -232,3 +232,85 @@ def delete_anchorage(row_id):
     cur.execute('DELETE FROM ldud_anchorage WHERE id=%s', (row_id,))
     conn.commit()
     conn.close()
+
+
+# Vessel Operations sub-table operations
+def get_vessel_operations(ldud_id):
+    conn = get_db()
+    cur = get_cursor(conn)
+    cur.execute('SELECT * FROM ldud_vessel_operations WHERE ldud_id=%s ORDER BY id DESC', (ldud_id,))
+    rows = cur.fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
+
+
+def save_vessel_operation(data):
+    conn = get_db()
+    cur = get_cursor(conn)
+    if data.get('id'):
+        cur.execute('''UPDATE ldud_vessel_operations SET hold_name=%s, start_time=%s, end_time=%s,
+                      cargo_name=%s, quantity=%s WHERE id=%s''',
+                   [data.get('hold_name'), data.get('start_time'), data.get('end_time'),
+                    data.get('cargo_name'), data.get('quantity'), data['id']])
+        row_id = data['id']
+    else:
+        cur.execute('''INSERT INTO ldud_vessel_operations (ldud_id, hold_name, start_time, end_time, cargo_name, quantity)
+                      VALUES (%s, %s, %s, %s, %s, %s) RETURNING id''',
+                   [data['ldud_id'], data.get('hold_name'), data.get('start_time'), data.get('end_time'),
+                    data.get('cargo_name'), data.get('quantity')])
+        row_id = cur.fetchone()['id']
+    conn.commit()
+    conn.close()
+    return row_id
+
+
+def delete_vessel_operation(row_id):
+    conn = get_db()
+    cur = get_cursor(conn)
+    cur.execute('DELETE FROM ldud_vessel_operations WHERE id=%s', (row_id,))
+    conn.commit()
+    conn.close()
+
+
+# Barge Cleaning Lines sub-table operations
+def get_barge_cleaning(ldud_id):
+    conn = get_db()
+    cur = get_cursor(conn)
+    cur.execute('SELECT * FROM ldud_barge_cleaning WHERE ldud_id=%s ORDER BY id DESC', (ldud_id,))
+    rows = cur.fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
+
+
+def save_barge_cleaning(data):
+    conn = get_db()
+    cur = get_cursor(conn)
+    if data.get('id'):
+        cur.execute('''UPDATE ldud_barge_cleaning SET barge_name=%s, payloader_name=%s,
+                      hmr_start=%s, hmr_end=%s, diesel_start=%s, diesel_end=%s,
+                      start_time=%s, end_time=%s WHERE id=%s''',
+                   [data.get('barge_name'), data.get('payloader_name'),
+                    data.get('hmr_start'), data.get('hmr_end'),
+                    data.get('diesel_start'), data.get('diesel_end'),
+                    data.get('start_time'), data.get('end_time'), data['id']])
+        row_id = data['id']
+    else:
+        cur.execute('''INSERT INTO ldud_barge_cleaning (ldud_id, barge_name, payloader_name,
+                      hmr_start, hmr_end, diesel_start, diesel_end, start_time, end_time)
+                      VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s) RETURNING id''',
+                   [data['ldud_id'], data.get('barge_name'), data.get('payloader_name'),
+                    data.get('hmr_start'), data.get('hmr_end'),
+                    data.get('diesel_start'), data.get('diesel_end'),
+                    data.get('start_time'), data.get('end_time')])
+        row_id = cur.fetchone()['id']
+    conn.commit()
+    conn.close()
+    return row_id
+
+
+def delete_barge_cleaning(row_id):
+    conn = get_db()
+    cur = get_cursor(conn)
+    cur.execute('DELETE FROM ldud_barge_cleaning WHERE id=%s', (row_id,))
+    conn.commit()
+    conn.close()

@@ -61,62 +61,6 @@ def delete_header(row_id):
     conn.close()
 
 
-# Delays sub-table operations
-def get_delays(mbc_id):
-    conn = get_db()
-    cur = get_cursor(conn)
-    cur.execute('SELECT * FROM mbc_delays WHERE mbc_id=%s ORDER BY id DESC', (mbc_id,))
-    rows = cur.fetchall()
-    conn.close()
-    return [dict(r) for r in rows]
-
-
-def save_delay(data):
-    conn = get_db()
-    cur = get_cursor(conn)
-
-    # Calculate total time
-    total_mins = None
-    total_hrs = None
-    if data.get('start_datetime') and data.get('end_datetime'):
-        try:
-            start = datetime.fromisoformat(data['start_datetime'])
-            end = datetime.fromisoformat(data['end_datetime'])
-            diff = (end - start).total_seconds()
-            total_mins = round(diff / 60, 2)
-            total_hrs = round(diff / 3600, 2)
-        except:
-            pass
-
-    if data.get('id'):
-        cur.execute('''UPDATE mbc_delays SET delay_name=%s, delay_account_type=%s, equipment_name=%s,
-                      start_datetime=%s, end_datetime=%s, total_time_mins=%s, total_time_hrs=%s,
-                      delays_to_sof=%s, invoiceable=%s, minus_delay_hours=%s WHERE id=%s''',
-                   [data.get('delay_name'), data.get('delay_account_type'), data.get('equipment_name'),
-                    data.get('start_datetime'), data.get('end_datetime'), total_mins, total_hrs,
-                    data.get('delays_to_sof'), data.get('invoiceable'), data.get('minus_delay_hours'), data['id']])
-        row_id = data['id']
-    else:
-        cur.execute('''INSERT INTO mbc_delays (mbc_id, delay_name, delay_account_type, equipment_name,
-                      start_datetime, end_datetime, total_time_mins, total_time_hrs, delays_to_sof, invoiceable, minus_delay_hours)
-                      VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s) RETURNING id''',
-                   [data['mbc_id'], data.get('delay_name'), data.get('delay_account_type'), data.get('equipment_name'),
-                    data.get('start_datetime'), data.get('end_datetime'), total_mins, total_hrs,
-                    data.get('delays_to_sof'), data.get('invoiceable'), data.get('minus_delay_hours')])
-        row_id = cur.fetchone()['id']
-    conn.commit()
-    conn.close()
-    return row_id, total_mins, total_hrs
-
-
-def delete_delay(row_id):
-    conn = get_db()
-    cur = get_cursor(conn)
-    cur.execute('DELETE FROM mbc_delays WHERE id=%s', (row_id,))
-    conn.commit()
-    conn.close()
-
-
 # Load Port Lines sub-table operations
 def get_load_port_lines(mbc_id):
     conn = get_db()

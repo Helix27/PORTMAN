@@ -4,6 +4,10 @@ import psycopg2
 import psycopg2.extras
 from config import DATABASE_URL
 
+MODULE_TABLE_REGISTRY = {
+    'TM01': 'tide_master',
+}
+
 
 def get_db():
     conn = psycopg2.connect(DATABASE_URL)
@@ -13,6 +17,10 @@ def get_db():
 def get_cursor(conn):
     """Return a RealDictCursor for dict-like row access."""
     return conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+
+
+def get_module_table(module_code):
+    return MODULE_TABLE_REGISTRY.get(module_code)
 
 
 @contextmanager

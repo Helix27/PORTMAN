@@ -1,245 +1,4 @@
-{% extends "base.html" %}
-
-{% block title %}Loading Unloading - PORTMAN{% endblock %}
-
-{% block head %}
-<style>
-    .detail-modal {
-        display: none;
-        position: fixed;
-        top: 0;
-        left: 0;
-        width: 100%;
-        height: 100%;
-        background: rgba(0, 0, 0, 0.5);
-        z-index: 9999;
-        overflow: auto;
-    }
-    .detail-modal.active {
-        display: flex;
-        align-items: flex-start;
-        justify-content: center;
-        padding: 20px;
-    }
-    .detail-modal-content {
-        background: white;
-        border-radius: 8px;
-        width: 95%;
-        max-width: 1400px;
-        margin: 20px auto;
-        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
-        position: relative;
-        max-height: 90vh;
-        overflow-y: auto;
-    }
-    .dark-theme .detail-modal-content {
-        background: #1e293b;
-        color: #e2e8f0;
-    }
-    .detail-modal-header {
-        padding: 20px;
-        border-bottom: 2px solid #3182ce;
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        position: sticky;
-        top: 0;
-        background: white;
-        z-index: 10;
-    }
-    .dark-theme .detail-modal-header {
-        background: #1e293b;
-        border-color: #334155;
-    }
-    .detail-modal-header h3 {
-        margin: 0;
-        font-size: 18px;
-        font-weight: 600;
-    }
-    .detail-modal-close {
-        background: #e53e3e;
-        color: white;
-        border: none;
-        padding: 8px 16px;
-        border-radius: 4px;
-        cursor: pointer;
-        font-size: 14px;
-        font-weight: 500;
-    }
-    .detail-modal-close:hover {
-        background: #c53030;
-    }
-    .detail-modal-body {
-        padding: 20px;
-    }
-    .sub-table-container {
-        background: #f8fafc;
-        padding: 15px;
-        border-bottom: 2px solid #3182ce;
-        box-sizing: border-box;
-        width: 100% !important;
-        overflow: hidden;
-        display: block;
-        margin: 0;
-    }
-    .btn-open-details {
-        background: #3182ce;
-        color: white;
-        border: none;
-        padding: 4px 10px;
-        border-radius: 4px;
-        cursor: pointer;
-        font-size: 12px;
-        font-weight: 500;
-    }
-    .btn-open-details:hover {
-        background: #2c5282;
-    }
-    .dark-theme .sub-table-container {
-        background: #1e293b;
-        border-color: #334155;
-    }
-    .sub-section {
-        margin-bottom: 15px;
-        border: 1px solid #cbd5e0;
-        border-radius: 6px;
-        overflow: hidden;
-    }
-    .sub-section:last-child {
-        margin-bottom: 0;
-    }
-    .dark-theme .sub-section {
-        border-color: #475569;
-    }
-    .sub-section-header {
-        background: #e2e8f0;
-        padding: 10px 15px;
-        font-weight: 600;
-        font-size: 13px;
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        color: #1a202c;
-    }
-    .dark-theme .sub-section-header {
-        background: #334155;
-        color: #e2e8f0;
-    }
-    .sub-section-content {
-        background: white;
-    }
-    .dark-theme .sub-section-content {
-        background: #1e293b;
-    }
-    .sub-tabulator {
-        font-size: 11px;
-        width: 100% !important;
-        max-width: 100% !important;
-    }
-    .sub-tabulator .tabulator-header {
-        background: #f1f5f9 !important;
-        border-bottom: 1px solid #cbd5e0 !important;
-    }
-    .sub-tabulator .tabulator-header .tabulator-col {
-        background: #f1f5f9 !important;
-        border-right: 1px solid #e2e8f0 !important;
-    }
-    .sub-tabulator .tabulator-header .tabulator-col-title {
-        color: #374151 !important;
-        font-weight: 600 !important;
-    }
-    .sub-tabulator .tabulator-tableHolder {
-        overflow-x: hidden !important;
-    }
-    .dark-theme .sub-tabulator .tabulator-header {
-        background: #475569 !important;
-        border-bottom: 1px solid #64748b !important;
-    }
-    .dark-theme .sub-tabulator .tabulator-header .tabulator-col {
-        background: #475569 !important;
-        border-right: 1px solid #64748b !important;
-    }
-    .dark-theme .sub-tabulator .tabulator-header .tabulator-col-title {
-        color: #e2e8f0 !important;
-    }
-    .btn-sub-add {
-        background: #48bb78;
-        color: white;
-        border: none;
-        padding: 5px 12px;
-        border-radius: 4px;
-        font-size: 12px;
-        cursor: pointer;
-    }
-    .btn-sub-add:hover {
-        background: #38a169;
-    }
-    .btn-sub-delete {
-        background: #fc8181;
-        color: white;
-        border: none;
-        padding: 3px 10px;
-        border-radius: 3px;
-        font-size: 11px;
-        cursor: pointer;
-    }
-    .btn-sub-delete:hover {
-        background: #f56565;
-    }
-    .btn-sub-save {
-        background: #3182ce;
-        color: white;
-        border: none;
-        padding: 5px 12px;
-        border-radius: 4px;
-        font-size: 12px;
-        cursor: pointer;
-        font-weight: 500;
-    }
-    .btn-sub-save:hover {
-        background: #2c5282;
-    }
-    .sub-section-actions {
-        display: flex;
-        gap: 8px;
-        align-items: center;
-    }
-</style>
-{% endblock %}
-
-{% block content %}
-<div class="module-header">
-    <h2>Loading Unloading</h2>
-    <span class="module-code">LDUD01</span>
-    <span id="saveStatus" class="save-status"></span>
-</div>
-
-<div class="toolbar">
-    {% if permissions.can_add %}<button class="btn btn-add" onclick="addRow()">+ Add Row</button>{% endif %}
-    {% if permissions.can_delete %}<button class="btn btn-delete" onclick="deleteSelected()">Delete Selected</button>{% endif %}
-    {% if permissions.can_add or permissions.can_edit %}<button class="btn btn-save" onclick="saveAll()">Save (Ctrl+S)</button>{% endif %}
-    <div class="row-info">Rows: <span id="rowCount">0</span> / <span id="totalCount">0</span></div>
-</div>
-
-<div id="table"></div>
-
-<!-- Details Modal -->
-<div id="detailsModal" class="detail-modal">
-    <div class="detail-modal-content">
-        <div class="detail-modal-header">
-            <h3 id="modalTitle">LDUD Details</h3>
-            <button class="detail-modal-close" onclick="closeDetailsModal()">Close</button>
-        </div>
-        <div class="detail-modal-body">
-            <div id="modalSubTables"></div>
-        </div>
-    </div>
-</div>
-{% endblock %}
-
-{% block scripts %}
-<script>
-    addToRecent('LDUD01', 'Loading Unloading');
+addToRecent('LDUD01', 'Loading Unloading');
 
     let table;
     let vcnList = [];
@@ -255,12 +14,12 @@
     let vesselOpsHoldFields = {}; // Dynamic vessel ops hold columns per LDUD ID
     let currentLdudId = null;
 
-    const currentUser = '{{ session.username }}';
+    const currentUser = '0';
     const permissions = {
-        can_read: {{ permissions.can_read|default(0) }},
-        can_add: {{ permissions.can_add|default(0) }},
-        can_edit: {{ permissions.can_edit|default(0) }},
-        can_delete: {{ permissions.can_delete|default(0) }}
+        can_read: 0,
+        can_add: 0,
+        can_edit: 0,
+        can_delete: 0
     };
 
     function getTodayDate() {
@@ -704,7 +463,7 @@
             </div>
             <div class="sub-section">
                 <div class="sub-section-header">
-                    <span>MV Anchorage Discharge</span>
+                    <span>Vessel Operations</span>
                     <div class="sub-section-actions">
                         ${(permissions.can_edit || permissions.can_add) ? `<button class="btn-sub-add" onclick="addVesselOpsDateRow(${ldudId})">+ Add</button>` : ''}
                         ${(permissions.can_edit || permissions.can_add) ? `<button class="btn-sub-save" onclick="saveVesselOpsTable(${ldudId})">Save</button>` : ''}
@@ -1324,5 +1083,3 @@
     });
 
     loadMasterData();
-</script>
-{% endblock %}

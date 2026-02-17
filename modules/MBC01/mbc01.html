@@ -246,9 +246,6 @@
     let cargoNames = [];
     let uomList = [];
     let berthList = [];
-    let delayTypes = [];
-    let delayAccountTypes = [];
-    let equipmentList = [];
     let payloaderList = [];
     let subTables = {};
     let currentMbcId = null;
@@ -275,7 +272,7 @@
     }
 
     async function loadMasterData() {
-        const [dsRes, mbcRes, otRes, ctRes, cnRes, uomRes, berthRes, delayRes, datRes, eqRes, pplRes] = await Promise.all([
+        const [dsRes, mbcRes, otRes, ctRes, cnRes, uomRes, berthRes, pplRes] = await Promise.all([
             fetch('/api/module/MBCDS01/all'),
             fetch('/api/module/MBCM01/all'),
             fetch('/api/module/VOT01/all'),
@@ -283,9 +280,6 @@
             fetch('/api/module/VCG01/names'),
             fetch('/api/module/VQM01/all'),
             fetch('/api/module/PBM01/all'),
-            fetch('/api/module/VDM01/all'),
-            fetch('/api/module/VDAT01/all'),
-            fetch('/api/module/VEM01/all'),
             fetch('/api/module/PPL01/all')
         ]);
         const dsData = await dsRes.json();
@@ -298,9 +292,6 @@
         cargoNames = await cnRes.json();
         uomList = await uomRes.json();
         berthList = await berthRes.json();
-        delayTypes = await delayRes.json();
-        delayAccountTypes = await datRes.json();
-        equipmentList = await eqRes.json();
         payloaderList = await pplRes.json();
         initTable();
     }
@@ -460,16 +451,6 @@
                     </div>
                 </div>
                 <div class="sub-section-content"><div id="cleaning-table-${mbcId}" class="sub-tabulator"></div></div>
-            </div>
-            <div class="sub-section">
-                <div class="sub-section-header">
-                    <span>Delays</span>
-                    <div class="sub-section-actions">
-                        ${(permissions.can_edit || permissions.can_add) ? `<button class="btn-sub-add" onclick="addSubRow('delays', ${mbcId})">+ Add</button>` : ''}
-                        ${(permissions.can_edit || permissions.can_add) ? `<button class="btn-sub-save" onclick="saveSubTable('delays', ${mbcId})">Save</button>` : ''}
-                    </div>
-                </div>
-                <div class="sub-section-content"><div id="delays-table-${mbcId}" class="sub-tabulator"></div></div>
             </div>`;
 
         modalBody.appendChild(subContainer);
@@ -509,19 +490,8 @@
         const canEdit = permissions.can_edit || permissions.can_add;
         const isDark = localStorage.getItem('theme') === 'dark';
 
-        const delayOptions = {};
-        delayTypes.forEach(d => { delayOptions[d] = d; });
-
-        const datOptions = {};
-        delayAccountTypes.forEach(d => { datOptions[d] = d; });
-
-        const eqOptions = {};
-        equipmentList.forEach(e => { eqOptions[e] = e; });
-
         const berthOptions = {};
         berthList.forEach(b => { berthOptions[b] = b; });
-
-        const yesNoOptions = {'Yes': 'Yes', 'No': 'No'};
 
         // Load Port Details table
         subTables[mbcId].load_port = new Tabulator(`#load_port-table-${mbcId}`, {
@@ -616,36 +586,6 @@
         });
         if (isDark) document.querySelector(`#cleaning-table-${mbcId}`).classList.add('tabulator-dark');
 
-        // Delays table
-        subTables[mbcId].delays = new Tabulator(`#delays-table-${mbcId}`, {
-            layout: "fitDataFill",
-            height: 200,
-            ajaxURL: `/api/module/MBC01/delays/${mbcId}`,
-            columns: [
-                {title: "Delay Name", field: "delay_name", width: 120, editor: canEdit ? "list" : false,
-                    editorParams: {values: delayOptions, autocomplete: true, allowEmpty: true}},
-                {title: "Account Type", field: "delay_account_type", width: 120, editor: canEdit ? "list" : false,
-                    editorParams: {values: datOptions, autocomplete: true, allowEmpty: true}},
-                {title: "Equipment", field: "equipment_name", width: 100, editor: canEdit ? "list" : false,
-                    editorParams: {values: eqOptions, autocomplete: true, allowEmpty: true}},
-                {title: "Start", field: "start_datetime", width: 140, editor: canEdit ? datetimeEditor : false,
-                    formatter: function(cell) { return cell.getValue() ? cell.getValue().replace('T', ' ') : ''; }},
-                {title: "End", field: "end_datetime", width: 140, editor: canEdit ? datetimeEditor : false,
-                    formatter: function(cell) { return cell.getValue() ? cell.getValue().replace('T', ' ') : ''; }},
-                {title: "Mins", field: "total_time_mins", width: 60, hozAlign: "right"},
-                {title: "Hrs", field: "total_time_hrs", width: 60, hozAlign: "right"},
-                {title: "To SOF", field: "delays_to_sof", width: 60, editor: canEdit ? "list" : false,
-                    editorParams: {values: yesNoOptions}},
-                {title: "Invoice", field: "invoiceable", width: 60, editor: canEdit ? "list" : false,
-                    editorParams: {values: yesNoOptions}},
-                {title: "Minus Hrs", field: "minus_delay_hours", width: 70, editor: canEdit ? "list" : false,
-                    editorParams: {values: yesNoOptions}},
-                canEdit ? {title: "", field: "actions", formatter: deleteButtonFormatter, width: 50, hozAlign: "center", headerSort: false,
-                    cellClick: function(e, cell) { deleteSubRow('delays', cell.getRow().getData().id, mbcId); }
-                } : null
-            ].filter(Boolean)
-        });
-        if (isDark) document.querySelector(`#delays-table-${mbcId}`).classList.add('tabulator-dark');
     }
 
     function deleteButtonFormatter(cell) {
@@ -682,10 +622,6 @@
                 const result = await res.json();
                 if (result.success) {
                     savedCount++;
-                    // Update calculated fields for delays
-                    if (type === 'delays' && result.total_time_mins !== undefined) {
-                        row.update({total_time_mins: result.total_time_mins, total_time_hrs: result.total_time_hrs});
-                    }
                 }
             }
         }

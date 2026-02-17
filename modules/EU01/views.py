@@ -110,7 +110,7 @@ def get_equipment():
 def get_delays():
     conn = get_db()
     cur = get_cursor(conn)
-    cur.execute('SELECT name FROM vessel_delay_types ORDER BY name')
+    cur.execute('SELECT name FROM port_delay_types ORDER BY name')
     rows = cur.fetchall()
     conn.close()
     return jsonify([r['name'] for r in rows])

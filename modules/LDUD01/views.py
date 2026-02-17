@@ -135,3 +135,51 @@ def delete_anchorage():
         return jsonify({'error': 'No permission to delete'}), 403
     model.delete_anchorage(request.json['id'])
     return jsonify({'success': True})
+
+# Vessel Operations sub-table endpoints
+@bp.route('/api/module/LDUD01/vessel_ops/<int:ldud_id>')
+@login_required
+def get_vessel_operations(ldud_id):
+    return jsonify(model.get_vessel_operations(ldud_id))
+
+@bp.route('/api/module/LDUD01/vessel_ops/save', methods=['POST'])
+@login_required
+def save_vessel_operation():
+    perms = get_perms()
+    if not perms.get('can_add') and not perms.get('can_edit'):
+        return jsonify({'error': 'No permission'}), 403
+    row_id = model.save_vessel_operation(request.json)
+    return jsonify({'id': row_id, 'success': True})
+
+@bp.route('/api/module/LDUD01/vessel_ops/delete', methods=['POST'])
+@login_required
+def delete_vessel_operation():
+    perms = get_perms()
+    if not perms.get('can_delete'):
+        return jsonify({'error': 'No permission to delete'}), 403
+    model.delete_vessel_operation(request.json['id'])
+    return jsonify({'success': True})
+
+# Barge Cleaning Lines sub-table endpoints
+@bp.route('/api/module/LDUD01/barge_cleaning/<int:ldud_id>')
+@login_required
+def get_barge_cleaning(ldud_id):
+    return jsonify(model.get_barge_cleaning(ldud_id))
+
+@bp.route('/api/module/LDUD01/barge_cleaning/save', methods=['POST'])
+@login_required
+def save_barge_cleaning():
+    perms = get_perms()
+    if not perms.get('can_add') and not perms.get('can_edit'):
+        return jsonify({'error': 'No permission'}), 403
+    row_id = model.save_barge_cleaning(request.json)
+    return jsonify({'id': row_id, 'success': True})
+
+@bp.route('/api/module/LDUD01/barge_cleaning/delete', methods=['POST'])
+@login_required
+def delete_barge_cleaning():
+    perms = get_perms()
+    if not perms.get('can_delete'):
+        return jsonify({'error': 'No permission to delete'}), 403
+    model.delete_barge_cleaning(request.json['id'])
+    return jsonify({'success': True})

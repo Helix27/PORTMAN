@@ -33,7 +33,7 @@ from modules.VCN01 import bp as vcn01_bp, MODULE_INFO as vcn01_info
 from modules.VQM01 import bp as vqm01_bp, MODULE_INFO as vqm01_info
 
 from modules.VHO01 import bp as vho01_bp, MODULE_INFO as vho01_info
-from modules.VDAT01 import bp as vdat01_bp, MODULE_INFO as vdat01_info
+from modules.PDM01 import bp as pdm01_bp, MODULE_INFO as pdm01_info
 from modules.VEM01 import bp as vem01_bp, MODULE_INFO as vem01_info
 from modules.VBM01 import bp as vbm01_bp, MODULE_INFO as vbm01_info
 from modules.VCTM01 import bp as vctm01_bp, MODULE_INFO as vctm01_info
@@ -57,6 +57,7 @@ from modules.FIN01 import bp as fin01_bp, MODULE_INFO as fin01_info
 from modules.SRV01 import bp as srv01_bp, MODULE_INFO as srv01_info
 from modules.VANM01 import bp as vanm01_bp, MODULE_INFO as vanm01_info
 from modules.VPM01 import bp as vpm01_bp, MODULE_INFO as vpm01_info
+from modules.TM01 import bp as tm01_bp, MODULE_INFO as tm01_info
 
 # Register existing modules
 register_module(vc01_info['code'], vc01_info['name'], vc01_bp)
@@ -79,7 +80,7 @@ register_module(vcn01_info['code'], vcn01_info['name'], vcn01_bp)
 register_module(vqm01_info['code'], vqm01_info['name'], vqm01_bp)
 
 register_module(vho01_info['code'], vho01_info['name'], vho01_bp)
-register_module(vdat01_info['code'], vdat01_info['name'], vdat01_bp)
+register_module(pdm01_info['code'], pdm01_info['name'], pdm01_bp)
 register_module(vem01_info['code'], vem01_info['name'], vem01_bp)
 register_module(vbm01_info['code'], vbm01_info['name'], vbm01_bp)
 register_module(vctm01_info['code'], vctm01_info['name'], vctm01_bp)
@@ -103,6 +104,7 @@ register_module(fin01_info['code'], fin01_info['name'], fin01_bp)
 register_module(srv01_info['code'], srv01_info['name'], srv01_bp)
 register_module(vanm01_info['code'], vanm01_info['name'], vanm01_bp)
 register_module(vpm01_info['code'], vpm01_info['name'], vpm01_bp)
+register_module(tm01_info['code'], tm01_info['name'], tm01_bp)
 
 def login_required(f):
     @wraps(f)

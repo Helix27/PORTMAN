@@ -58,31 +58,6 @@ def delete():
     model.delete_header(request.json['id'])
     return jsonify({'success': True})
 
-# Delays sub-table endpoints
-@bp.route('/api/module/MBC01/delays/<int:mbc_id>')
-@login_required
-def get_delays(mbc_id):
-    return jsonify(model.get_delays(mbc_id))
-
-@bp.route('/api/module/MBC01/delays/save', methods=['POST'])
-@login_required
-def save_delay():
-    perms = get_perms()
-    if not perms.get('can_add') and not perms.get('can_edit'):
-        return jsonify({'error': 'No permission'}), 403
-    data = request.json
-    row_id, total_mins, total_hrs = model.save_delay(data)
-    return jsonify({'id': row_id, 'success': True, 'total_time_mins': total_mins, 'total_time_hrs': total_hrs})
-
-@bp.route('/api/module/MBC01/delays/delete', methods=['POST'])
-@login_required
-def delete_delay():
-    perms = get_perms()
-    if not perms.get('can_delete'):
-        return jsonify({'error': 'No permission to delete'}), 403
-    model.delete_delay(request.json['id'])
-    return jsonify({'success': True})
-
 # Load Port Lines sub-table endpoints
 @bp.route('/api/module/MBC01/load_port/<int:mbc_id>')
 @login_required

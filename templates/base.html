@@ -307,9 +307,9 @@
                         <span class="code">VDM01</span>
                         <span class="name">Vessel Delay Master</span>
                     </div>
-                    <div class="module-item" onclick="goToModule('VDAT01', 'Delay Account Types')">
-                        <span class="code">VDAT01</span>
-                        <span class="name">Delay Account Types</span>
+                    <div class="module-item" onclick="goToModule('PDM01', 'Port Delay Master')">
+                        <span class="code">PDM01</span>
+                        <span class="name">Port Delay Master</span>
                     </div>
                     <div class="module-item" onclick="goToModule('VCG01', 'Cargo Master')">
                         <span class="code">VCG01</span>
@@ -359,6 +359,10 @@
                         <span class="code">VPM01</span>
                         <span class="name">Port Master</span>
                     </div>
+                    <div class="module-item" onclick="goToModule('TM01', 'Tide Master')">
+                        <span class="code">TM01</span>
+                        <span class="name">Tide Master</span>
+                    </div>
                 </div>
             </div>
         </div>
@@ -393,14 +397,18 @@
         const searchInput = document.getElementById('moduleSearch');
         const suggestions = document.getElementById('suggestions');
 
+        async function fetchModuleResults(query) {
+            const res = await fetch('/api/modules/search?q=' + encodeURIComponent(query));
+            return await res.json();
+        }
+
         searchInput.addEventListener('input', async function() {
             const q = this.value.trim();
             if (q.length < 1) {
                 suggestions.style.display = 'none';
                 return;
             }
-            const res = await fetch('/api/modules/search?q=' + encodeURIComponent(q));
-            const data = await res.json();
+            const data = await fetchModuleResults(q);
             if (data.length > 0) {
                 suggestions.innerHTML = data.map(m =>
                     `<div class="suggestion-item" data-code="${m.code}" data-name="${m.name}">
@@ -413,6 +421,20 @@
             } else {
                 suggestions.innerHTML = '<div class="no-results">No modules found</div>';
                 suggestions.style.display = 'block';
+            }
+        });
+
+        searchInput.addEventListener('keydown', async function(e) {
+            if (e.key !== 'Enter') return;
+            e.preventDefault();
+
+            const q = this.value.trim();
+            if (q.length < 1) return;
+
+            const data = await fetchModuleResults(q);
+            if (data.length > 0) {
+                suggestions.style.display = 'none';
+                goToModule(data[0].code, data[0].name);
             }
         });
 

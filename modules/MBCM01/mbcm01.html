@@ -28,6 +28,11 @@
     };
 
     const canEdit = permissions.can_edit || permissions.can_add;
+    const mbcOwnerOptions = {
+        "JSW INFRA": "JSW INFRA",
+        "JSW SHIPPING": "JSW SHIPPING",
+        "OTHERS": "OTHERS"
+    };
 
     const table = new Tabulator("#table", {
         height: "calc(100vh - 160px)",
@@ -45,7 +50,8 @@
             {title: "MBC Name", field: "mbc_name", editor: canEdit ? "input" : false, widthGrow: 1},
             {title: "DWT", field: "dwt", editor: canEdit ? "number" : false, width: 120, hozAlign: "right",
                 editorParams: {min: 0, step: 0.01}},
-            {title: "MBC Owner Name", field: "mbc_owner_name", editor: canEdit ? "input" : false, width: 180}
+            {title: "MBC Owner Name", field: "mbc_owner_name", editor: canEdit ? "list" : false, width: 180,
+                editorParams: {values: mbcOwnerOptions, autocomplete: false, allowEmpty: true}}
         ],
         selectable: true
     });
