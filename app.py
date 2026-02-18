@@ -23,7 +23,6 @@ from modules.ADMIN import bp as admin_bp, MODULE_INFO as admin_info
 from modules.VAM01 import bp as vam01_bp, MODULE_INFO as vam01_info
 from modules.VIEM01 import bp as viem01_bp, MODULE_INFO as viem01_info
 from modules.VCUM01 import bp as vcum01_bp, MODULE_INFO as vcum01_info
-from modules.VOT01 import bp as vot01_bp, MODULE_INFO as vot01_info
 from modules.VCDS01 import bp as vcds01_bp, MODULE_INFO as vcds01_info
 from modules.VTOD01 import bp as vtod01_bp, MODULE_INFO as vtod01_info
 from modules.VRT01 import bp as vrt01_bp, MODULE_INFO as vrt01_info
@@ -68,7 +67,6 @@ register_module(admin_info['code'], admin_info['name'], admin_bp)
 register_module(vam01_info['code'], vam01_info['name'], vam01_bp)
 register_module(viem01_info['code'], viem01_info['name'], viem01_bp)
 register_module(vcum01_info['code'], vcum01_info['name'], vcum01_bp)
-register_module(vot01_info['code'], vot01_info['name'], vot01_bp)
 register_module(vcds01_info['code'], vcds01_info['name'], vcds01_bp)
 register_module(vtod01_info['code'], vtod01_info['name'], vtod01_bp)
 register_module(vrt01_info['code'], vrt01_info['name'], vrt01_bp)

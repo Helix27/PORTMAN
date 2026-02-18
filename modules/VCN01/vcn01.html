@@ -246,7 +246,6 @@
     let vesselAgents = [];
     let importerExporters = [];
     let customers = [];
-    let operationTypes = [];
     let cargoTypes = [];
     let docSeries = [];
     let defaultDocSeries = '';
@@ -285,12 +284,11 @@
     }
 
     async function loadMasterData() {
-        const [vesselsRes, agentsRes, ieRes, custRes, opRes, cargoRes, dsRes, todRes, rtRes, dmRes, cnRes, uomRes, holdRes, portRes, configRes] = await Promise.all([
+        const [vesselsRes, agentsRes, ieRes, custRes, cargoRes, dsRes, todRes, rtRes, dmRes, cnRes, uomRes, holdRes, portRes, configRes] = await Promise.all([
             fetch('/api/module/VCN01/vessels'),
             fetch('/api/module/VAM01/all'),
             fetch('/api/module/VIEM01/all'),
             fetch('/api/module/VCUM01/all'),
-            fetch('/api/module/VOT01/all'),
             fetch('/api/module/VCG01/types'),
             fetch('/api/module/VCDS01/all'),
             fetch('/api/module/VTOD01/all'),
@@ -306,7 +304,6 @@
         vesselAgents = await agentsRes.json();
         importerExporters = await ieRes.json();
         customers = await custRes.json();
-        operationTypes = await opRes.json();
         cargoTypes = await cargoRes.json();
         const dsData = await dsRes.json();
         docSeries = dsData.map(d => d.name);
@@ -354,6 +351,8 @@
                     openDetailsModal(data);
                 }
             },
+            {title: "Operation Type", field: "operation_type", editor: canEdit ? "list" : false,
+                editorParams: {values: {"Import": "Import", "Export": "Export"}, autocomplete: false, allowEmpty: true}, width: 110},
             {title: "VCN Doc", field: "vcn_doc_num", width: 80},
             {title: "Vessel Master Doc", field: "vessel_master_doc", editor: canEdit ? "list" : false,
                 editorParams: {values: vesselOptions, autocomplete: true, allowEmpty: true}, width: 160,
@@ -372,8 +371,6 @@
                 editorParams: {values: importerExporters, autocomplete: true, allowEmpty: true}, width: 130},
             {title: "Customer", field: "customer_name", editor: canEdit ? "list" : false,
                 editorParams: {values: customers, autocomplete: true, allowEmpty: true}, width: 120},
-            {title: "Operation Type", field: "operation_type", editor: canEdit ? "list" : false,
-                editorParams: {values: operationTypes, autocomplete: true, allowEmpty: true}, width: 110},
             {title: "Cargo Type", field: "cargo_type", editor: canEdit ? "list" : false,
                 editorParams: {values: cargoTypes, autocomplete: true, allowEmpty: true}, width: 100},
             {title: "Doc Series", field: "vcn_doc_series", editor: canEdit ? "list" : false,
