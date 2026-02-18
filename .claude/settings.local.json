@@ -15,7 +15,8 @@
       "Bash(alembic downgrade:*)",
       "Bash(alembic upgrade:*)",
       "Bash(timeout /t 4)",
-      "Bash(ping:*)"
+      "Bash(ping:*)",
+      "WebFetch(domain:www.marinetraffic.com)"
     ]
   }
 }

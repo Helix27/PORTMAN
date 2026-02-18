@@ -35,7 +35,7 @@ from modules.VHO01 import bp as vho01_bp, MODULE_INFO as vho01_info
 from modules.PDM01 import bp as pdm01_bp, MODULE_INFO as pdm01_info
 from modules.VEM01 import bp as vem01_bp, MODULE_INFO as vem01_info
 from modules.VBM01 import bp as vbm01_bp, MODULE_INFO as vbm01_info
-from modules.VCTM01 import bp as vctm01_bp, MODULE_INFO as vctm01_info
+from modules.VSDM01 import bp as vsdm01_bp, MODULE_INFO as vsdm01_info
 from modules.LDUD01 import bp as ldud01_bp, MODULE_INFO as ldud01_info
 from modules.MBCM01 import bp as mbcm01_bp, MODULE_INFO as mbcm01_info
 from modules.PBM01 import bp as pbm01_bp, MODULE_INFO as pbm01_info
@@ -79,7 +79,7 @@ register_module(vho01_info['code'], vho01_info['name'], vho01_bp)
 register_module(pdm01_info['code'], pdm01_info['name'], pdm01_bp)
 register_module(vem01_info['code'], vem01_info['name'], vem01_bp)
 register_module(vbm01_info['code'], vbm01_info['name'], vbm01_bp)
-register_module(vctm01_info['code'], vctm01_info['name'], vctm01_bp)
+register_module(vsdm01_info['code'], vsdm01_info['name'], vsdm01_bp)
 register_module(ldud01_info['code'], ldud01_info['name'], ldud01_bp)
 register_module(mbcm01_info['code'], mbcm01_info['name'], mbcm01_bp)
 register_module(pbm01_info['code'], pbm01_info['name'], pbm01_bp)

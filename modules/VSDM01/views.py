@@ -3,8 +3,8 @@ from functools import wraps
 from . import model
 from database import get_user_permissions
 
-bp = Blueprint('VCTM01', __name__, template_folder='.')
-MODULE_CODE = 'VCTM01'
+bp = Blueprint('VSDM01', __name__, template_folder='.')
+MODULE_CODE = 'VSDM01'
 
 def login_required(f):
     @wraps(f)
@@ -19,27 +19,27 @@ def get_perms():
         return {'can_read': 1, 'can_add': 1, 'can_edit': 1, 'can_delete': 1}
     return get_user_permissions(session.get('user_id'), MODULE_CODE)
 
-@bp.route('/module/VCTM01/')
+@bp.route('/module/VSDM01/')
 @login_required
 def view():
     perms = get_perms()
     if not perms.get('can_read'):
         return render_template('no_access.html'), 403
-    return render_template('vctm01.html', permissions=perms)
+    return render_template('vsdm01.html', permissions=perms)
 
-@bp.route('/api/module/VCTM01/data')
+@bp.route('/api/module/VSDM01/data')
 @login_required
 def get_data():
     rows = model.get_all()
     return jsonify({'data': rows, 'last_page': 1, 'total': len(rows)})
 
-@bp.route('/api/module/VCTM01/all')
+@bp.route('/api/module/VSDM01/all')
 @login_required
 def get_all():
     rows = model.get_all()
     return jsonify([r['name'] for r in rows])
 
-@bp.route('/api/module/VCTM01/save', methods=['POST'])
+@bp.route('/api/module/VSDM01/save', methods=['POST'])
 @login_required
 def save():
     perms = get_perms()
@@ -52,7 +52,7 @@ def save():
     row_id = model.save(data)
     return jsonify({'id': row_id})
 
-@bp.route('/api/module/VCTM01/delete', methods=['POST'])
+@bp.route('/api/module/VSDM01/delete', methods=['POST'])
 @login_required
 def delete():
     perms = get_perms()

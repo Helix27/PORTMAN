@@ -9,19 +9,7 @@ def get_next_doc_num():
     next_num = (result or 0) + 1
     return f"LDUD{next_num}"
 
-def get_vcn_list():
-    """Get VCN entries with anchored datetime for dropdown"""
-    conn = get_db()
-    cur = get_cursor(conn)
-    cur.execute('''
-        SELECT h.id, h.vcn_doc_num, h.vessel_name, a.anchorage_arrival
-        FROM vcn_header h
-        LEFT JOIN vcn_anchorage a ON a.vcn_id = h.id
-        WHERE h.doc_status = 'Approved'
-        ORDER BY h.vcn_doc_num DESC
-    ''')
-    rows = cur.fetchall()
-    conn.close()
+def _build_vcn_list(rows):
     result = []
     for r in rows:
         display = f"{r['vcn_doc_num']} / {r['vessel_name']}"
@@ -35,6 +23,36 @@ def get_vcn_list():
             'anchored_datetime': r['anchorage_arrival']
         })
     return result
+
+def get_vcn_list():
+    """Get all approved VCN entries with anchored datetime for dropdown"""
+    conn = get_db()
+    cur = get_cursor(conn)
+    cur.execute('''
+        SELECT h.id, h.vcn_doc_num, h.vessel_name, a.anchorage_arrival
+        FROM vcn_header h
+        LEFT JOIN vcn_anchorage a ON a.vcn_id = h.id
+        WHERE h.doc_status = 'Approved'
+        ORDER BY h.vcn_doc_num DESC
+    ''')
+    rows = cur.fetchall()
+    conn.close()
+    return _build_vcn_list(rows)
+
+def get_export_vcn_list():
+    """Get only Export operation type approved VCN entries for dropdown"""
+    conn = get_db()
+    cur = get_cursor(conn)
+    cur.execute('''
+        SELECT h.id, h.vcn_doc_num, h.vessel_name, a.anchorage_arrival
+        FROM vcn_header h
+        LEFT JOIN vcn_anchorage a ON a.vcn_id = h.id
+        WHERE h.doc_status = 'Approved' AND h.operation_type = 'Export'
+        ORDER BY h.vcn_doc_num DESC
+    ''')
+    rows = cur.fetchall()
+    conn.close()
+    return _build_vcn_list(rows)
 
 def get_data(page=1, size=20):
     conn = get_db()
@@ -211,16 +229,18 @@ def save_anchorage(data):
     cur = get_cursor(conn)
     if data.get('id'):
         cur.execute('''UPDATE ldud_anchorage SET anchorage_name=%s, anchored=%s, discharge_started=%s,
-                      discharge_commenced=%s, anchor_aweigh=%s, cargo_quantity=%s WHERE id=%s''',
+                      discharge_commenced=%s, anchor_aweigh=%s, cargo_quantity=%s, cargo_name=%s WHERE id=%s''',
                    [data.get('anchorage_name'), data.get('anchored'), data.get('discharge_started'),
-                    data.get('discharge_commenced'), data.get('anchor_aweigh'), data.get('cargo_quantity'), data['id']])
+                    data.get('discharge_commenced'), data.get('anchor_aweigh'), data.get('cargo_quantity'),
+                    data.get('cargo_name'), data['id']])
         row_id = data['id']
     else:
         cur.execute('''INSERT INTO ldud_anchorage (ldud_id, anchorage_name, anchored, discharge_started,
-                      discharge_commenced, anchor_aweigh, cargo_quantity)
-                      VALUES (%s, %s, %s, %s, %s, %s, %s) RETURNING id''',
+                      discharge_commenced, anchor_aweigh, cargo_quantity, cargo_name)
+                      VALUES (%s, %s, %s, %s, %s, %s, %s, %s) RETURNING id''',
                    [data['ldud_id'], data.get('anchorage_name'), data.get('anchored'), data.get('discharge_started'),
-                    data.get('discharge_commenced'), data.get('anchor_aweigh'), data.get('cargo_quantity')])
+                    data.get('discharge_commenced'), data.get('anchor_aweigh'), data.get('cargo_quantity'),
+                    data.get('cargo_name')])
         row_id = cur.fetchone()['id']
     conn.commit()
     conn.close()

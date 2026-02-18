@@ -1,11 +1,11 @@
 {% extends "base.html" %}
 
-{% block title %}Contractor Master - PORTMAN{% endblock %}
+{% block title %}Vessel Stevedore Master - PORTMAN{% endblock %}
 
 {% block content %}
 <div class="module-header">
-    <h2>Contractor Master</h2>
-    <span class="module-code">VCTM01</span>
+    <h2>Vessel Stevedore Master</h2>
+    <span class="module-code">VSDM01</span>
 </div>
 
 <div class="toolbar">
@@ -19,7 +19,7 @@
 
 {% block scripts %}
 <script>
-    addToRecent('VCTM01', 'Contractor Master');
+    addToRecent('VSDM01', 'Vessel Stevedore Master');
 
     const permissions = {
         can_edit: {{ permissions.can_edit|default(0) }},
@@ -32,7 +32,7 @@
     const table = new Tabulator("#table", {
         height: "calc(100vh - 160px)",
         layout: "fitColumns",
-        ajaxURL: "/api/module/VCTM01/data",
+        ajaxURL: "/api/module/VSDM01/data",
         pagination: true,
         paginationMode: "remote",
         paginationSize: 20,
@@ -42,7 +42,7 @@
         columns: [
             {formatter: "rowSelection", titleFormatter: "rowSelection", hozAlign: "center", headerSort: false, width: 40},
             {title: "ID", field: "id", width: 60},
-            {title: "Contractor Name", field: "name", editor: canEdit ? "input" : false, widthGrow: 1}
+            {title: "Stevedore Name", field: "name", editor: canEdit ? "input" : false, widthGrow: 1}
         ],
         selectable: true
     });
@@ -62,7 +62,7 @@
         rows.forEach(row => {
             const id = row.getData().id;
             if (id) {
-                fetch('/api/module/VCTM01/delete', {
+                fetch('/api/module/VSDM01/delete', {
                     method: 'POST',
                     headers: {'Content-Type': 'application/json'},
                     body: JSON.stringify({id})
@@ -76,7 +76,7 @@
         for (const row of table.getRows()) {
             const data = row.getData();
             if (data.name) {
-                const res = await fetch('/api/module/VCTM01/save', {
+                const res = await fetch('/api/module/VSDM01/save', {
                     method: 'POST',
                     headers: {'Content-Type': 'application/json'},
                     body: JSON.stringify(data)

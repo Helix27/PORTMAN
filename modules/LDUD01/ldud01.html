@@ -243,16 +243,19 @@
 
     let table;
     let vcnList = [];
+    let exportVcnList = [];
     let delayTypes = [];
     let bargeList = [];
     let contractorList = [];
     let cargoNames = [];
     let anchorageNames = [];
     let payloaderList = [];
+    let holdMasterList = [];
     let subTables = {};
     let stowagePlanData = {}; // Store stowage plan data per LDUD ID
     let stowageHoldMeta = {}; // Hold metadata per LDUD ID
     let vesselOpsHoldFields = {}; // Dynamic vessel ops hold columns per LDUD ID
+    let currentOperationTypes = {}; // Track operation type per ldud ID
     let currentLdudId = null;
 
     const currentUser = '{{ session.username }}';
@@ -277,22 +280,26 @@
     }
 
     async function loadMasterData() {
-        const [vcnRes, delayRes, bargeRes, contractorRes, cargoRes, ancRes, pplRes] = await Promise.all([
+        const [vcnRes, exportVcnRes, delayRes, bargeRes, contractorRes, cargoRes, ancRes, pplRes, holdsRes] = await Promise.all([
             fetch('/api/module/LDUD01/vcn_list'),
+            fetch('/api/module/LDUD01/vcn_list/export'),
             fetch('/api/module/VDM01/all'),
             fetch('/api/module/VBM01/all'),
-            fetch('/api/module/VCTM01/all'),
+            fetch('/api/module/VSDM01/all'),
             fetch('/api/module/VCG01/names'),
             fetch('/api/module/VANM01/all'),
-            fetch('/api/module/PPL01/all')
+            fetch('/api/module/PPL01/all'),
+            fetch('/api/module/VHO01/all')
         ]);
         vcnList = await vcnRes.json();
+        exportVcnList = await exportVcnRes.json();
         delayTypes = await delayRes.json();
         bargeList = await bargeRes.json();
         contractorList = await contractorRes.json();
         cargoNames = await cargoRes.json();
         anchorageNames = await ancRes.json();
         payloaderList = await pplRes.json();
+        holdMasterList = await holdsRes.json();
         initTable();
     }
 
@@ -562,6 +569,9 @@
         const vcnOptions = {};
         vcnList.forEach(v => { vcnOptions[v.value] = v.value; });
 
+        const exportVcnOptions = {};
+        exportVcnList.forEach(v => { exportVcnOptions[v.value] = v.value; });
+
         const columns = [
             {formatter: "rowSelection", titleFormatter: "rowSelection", hozAlign: "center", headerSort: false, width: 40},
             {
@@ -581,12 +591,21 @@
                     openDetailsModal(data);
                 }
             },
+            {title: "Operation Type", field: "operation_type", editor: canEdit ? "list" : false,
+                editorParams: {values: {"Import": "Import", "Export": "Export"}, autocomplete: false, allowEmpty: true}, width: 110},
             {title: "Doc Num", field: "doc_num", width: 80},
             {title: "VCN / Vessel / Anchored", field: "vcn_display", editor: canEdit ? "list" : false,
-                editorParams: {values: vcnOptions, autocomplete: true, allowEmpty: true}, width: 250,
+                editorParams: function(cell) {
+                    const opType = cell.getRow().getData().operation_type;
+                    const opts = opType === 'Export' ? exportVcnOptions : vcnOptions;
+                    return {values: opts, autocomplete: true, allowEmpty: true};
+                },
+                width: 250,
                 cellEdited: function(cell) {
                     const val = cell.getValue();
-                    const vcn = vcnList.find(v => v.value === val);
+                    const opType = cell.getRow().getData().operation_type;
+                    const list = opType === 'Export' ? exportVcnList : vcnList;
+                    const vcn = list.find(v => v.value === val);
                     if (vcn) {
                         cell.getRow().update({
                             vcn_id: vcn.vcn_id,
@@ -669,14 +688,51 @@
 
     async function openDetailsModal(data) {
         const ldudId = data.id;
+        const operationType = data.operation_type || 'Import';
         currentLdudId = ldudId;
 
         // Set modal title
-        document.getElementById('modalTitle').textContent = `Details for ${data.doc_num || 'LDUD'}`;
+        document.getElementById('modalTitle').textContent = `Details for ${data.doc_num || 'LDUD'} (${operationType})`;
 
         // Clear previous content
         const modalBody = document.getElementById('modalSubTables');
         modalBody.innerHTML = '';
+
+        const anchorageTitle = operationType === 'Export' ? 'Anchorage Recording Export' : 'Anchorage Recording';
+        const canAct = permissions.can_edit || permissions.can_add;
+
+        // Build vessel ops section — Import uses pivot+hold-summary, Export uses simple row table
+        let vesselOpsSection = '';
+        if (operationType === 'Export') {
+            vesselOpsSection = `
+            <div class="sub-section">
+                <div class="sub-section-header">
+                    <span>MV Anchorage Loading</span>
+                    <div class="sub-section-actions">
+                        ${canAct ? `<button class="btn-sub-add" onclick="addSubRow('vessel_ops', ${ldudId})">+ Add</button>` : ''}
+                        ${canAct ? `<button class="btn-sub-save" onclick="saveSubTable('vessel_ops', ${ldudId})">Save</button>` : ''}
+                    </div>
+                </div>
+                <div class="sub-section-content">
+                    <div id="vessel_ops-table-${ldudId}" class="sub-tabulator"></div>
+                </div>
+            </div>`;
+        } else {
+            vesselOpsSection = `
+            <div class="sub-section">
+                <div class="sub-section-header">
+                    <span>MV Anchorage Discharge</span>
+                    <div class="sub-section-actions">
+                        ${canAct ? `<button class="btn-sub-add" onclick="addSubRow('vessel_ops', ${ldudId})">+ Add</button>` : ''}
+                        ${canAct ? `<button class="btn-sub-save" onclick="saveSubTable('vessel_ops', ${ldudId})">Save</button>` : ''}
+                    </div>
+                </div>
+                <div class="sub-section-content">
+                    <div id="hold-summary-${ldudId}" style="padding: 10px; background: #f1f5f9; border-bottom: 1px solid #cbd5e0; font-size: 12px;"></div>
+                    <div id="vessel_ops-table-${ldudId}" class="sub-tabulator"></div>
+                </div>
+            </div>`;
+        }
 
         // Create the sub-table container
         const subContainer = document.createElement('div');
@@ -686,41 +742,29 @@
                 <div class="sub-section-header">
                     <span>Delays</span>
                     <div class="sub-section-actions">
-                        ${(permissions.can_edit || permissions.can_add) ? `<button class="btn-sub-add" onclick="addSubRow('delays', ${ldudId})">+ Add</button>` : ''}
-                        ${(permissions.can_edit || permissions.can_add) ? `<button class="btn-sub-save" onclick="saveSubTable('delays', ${ldudId})">Save</button>` : ''}
+                        ${canAct ? `<button class="btn-sub-add" onclick="addSubRow('delays', ${ldudId})">+ Add</button>` : ''}
+                        ${canAct ? `<button class="btn-sub-save" onclick="saveSubTable('delays', ${ldudId})">Save</button>` : ''}
                     </div>
                 </div>
                 <div class="sub-section-content"><div id="delays-table-${ldudId}" class="sub-tabulator"></div></div>
             </div>
             <div class="sub-section">
                 <div class="sub-section-header">
-                    <span>Anchorage Recording</span>
+                    <span>${anchorageTitle}</span>
                     <div class="sub-section-actions">
-                        ${(permissions.can_edit || permissions.can_add) ? `<button class="btn-sub-add" onclick="addSubRow('anchorage', ${ldudId})">+ Add</button>` : ''}
-                        ${(permissions.can_edit || permissions.can_add) ? `<button class="btn-sub-save" onclick="saveSubTable('anchorage', ${ldudId})">Save</button>` : ''}
+                        ${canAct ? `<button class="btn-sub-add" onclick="addSubRow('anchorage', ${ldudId})">+ Add</button>` : ''}
+                        ${canAct ? `<button class="btn-sub-save" onclick="saveSubTable('anchorage', ${ldudId})">Save</button>` : ''}
                     </div>
                 </div>
                 <div class="sub-section-content"><div id="anchorage-table-${ldudId}" class="sub-tabulator"></div></div>
             </div>
+            ${vesselOpsSection}
             <div class="sub-section">
                 <div class="sub-section-header">
-                    <span>MV Anchorage Discharge</span>
+                    <span>${operationType === 'Export' ? 'Barge Lines Export' : 'Barge Lines'}</span>
                     <div class="sub-section-actions">
-                        ${(permissions.can_edit || permissions.can_add) ? `<button class="btn-sub-add" onclick="addVesselOpsDateRow(${ldudId})">+ Add</button>` : ''}
-                        ${(permissions.can_edit || permissions.can_add) ? `<button class="btn-sub-save" onclick="saveVesselOpsTable(${ldudId})">Save</button>` : ''}
-                    </div>
-                </div>
-                <div class="sub-section-content">
-                    <div id="hold-summary-${ldudId}" style="padding: 10px; background: #f1f5f9; border-bottom: 1px solid #cbd5e0; font-size: 12px;"></div>
-                    <div id="vessel_ops-table-${ldudId}" class="sub-tabulator"></div>
-                </div>
-            </div>
-            <div class="sub-section">
-                <div class="sub-section-header">
-                    <span>Barge Lines</span>
-                    <div class="sub-section-actions">
-                        ${(permissions.can_edit || permissions.can_add) ? `<button class="btn-sub-add" onclick="addSubRow('barge_lines', ${ldudId})">+ Add</button>` : ''}
-                        ${(permissions.can_edit || permissions.can_add) ? `<button class="btn-sub-save" onclick="saveSubTable('barge_lines', ${ldudId})">Save</button>` : ''}
+                        ${canAct ? `<button class="btn-sub-add" onclick="addSubRow('barge_lines', ${ldudId})">+ Add</button>` : ''}
+                        ${canAct ? `<button class="btn-sub-save" onclick="saveSubTable('barge_lines', ${ldudId})">Save</button>` : ''}
                     </div>
                 </div>
                 <div class="sub-section-content">
@@ -731,8 +775,8 @@
                 <div class="sub-section-header">
                     <span>Barge Cleaning Lines</span>
                     <div class="sub-section-actions">
-                        ${(permissions.can_edit || permissions.can_add) ? `<button class="btn-sub-add" onclick="addSubRow('barge_cleaning', ${ldudId})">+ Add</button>` : ''}
-                        ${(permissions.can_edit || permissions.can_add) ? `<button class="btn-sub-save" onclick="saveSubTable('barge_cleaning', ${ldudId})">Save</button>` : ''}
+                        ${canAct ? `<button class="btn-sub-add" onclick="addSubRow('barge_cleaning', ${ldudId})">+ Add</button>` : ''}
+                        ${canAct ? `<button class="btn-sub-save" onclick="saveSubTable('barge_cleaning', ${ldudId})">Save</button>` : ''}
                     </div>
                 </div>
                 <div class="sub-section-content"><div id="barge_cleaning-table-${ldudId}" class="sub-tabulator"></div></div>
@@ -746,7 +790,7 @@
 
         // Initialize sub-tables
         subTables[ldudId] = {};
-        await initSubTables(ldudId);
+        await initSubTables(ldudId, operationType);
     }
 
     function closeDetailsModal() {
@@ -785,9 +829,12 @@
         });
     });
 
-    async function initSubTables(ldudId) {
+    async function initSubTables(ldudId, operationType = 'Import') {
         const canEdit = permissions.can_edit || permissions.can_add;
         const isDark = localStorage.getItem('theme') === 'dark';
+
+        // Track operation type for this LDUD
+        currentOperationTypes[ldudId] = operationType;
 
         // Get VCN ID from main table row
         const mainRow = table.getRows().find(r => r.getData().id === ldudId);
@@ -981,6 +1028,9 @@
         const anchorageOptions = {};
         anchorageNames.forEach(a => { anchorageOptions[a] = a; });
 
+        const anchorageStartedTitle = operationType === 'Export' ? 'Loading Started' : 'Discharge Started';
+        const anchorageCompletedTitle = operationType === 'Export' ? 'Loading Completed' : 'Discharge Completed';
+
         subTables[ldudId].anchorage = new Tabulator(`#anchorage-table-${ldudId}`, {
             layout: "fitColumns",
             height: 200,
@@ -988,11 +1038,13 @@
             columns: [
                 {title: "Anchorage Name", field: "anchorage_name", widthGrow: 1, editor: canEdit ? "list" : false,
                     editorParams: {values: anchorageOptions, autocomplete: true, allowEmpty: true}},
+                {title: "Cargo Name", field: "cargo_name", widthGrow: 1, editor: canEdit ? "list" : false,
+                    editorParams: {values: cargoOptions, autocomplete: true, allowEmpty: true}},
                 {title: "Anchored", field: "anchored", widthGrow: 1, editor: canEdit ? datetimeEditor : false,
                     formatter: function(cell) { return cell.getValue() ? cell.getValue().replace('T', ' ') : ''; }},
-                {title: "Discharge Started", field: "discharge_started", widthGrow: 1, editor: canEdit ? datetimeEditor : false,
+                {title: anchorageStartedTitle, field: "discharge_started", widthGrow: 1, editor: canEdit ? datetimeEditor : false,
                     formatter: function(cell) { return cell.getValue() ? cell.getValue().replace('T', ' ') : ''; }},
-                {title: "Discharge Commenced", field: "discharge_commenced", widthGrow: 1, editor: canEdit ? datetimeEditor : false,
+                {title: anchorageCompletedTitle, field: "discharge_commenced", widthGrow: 1, editor: canEdit ? datetimeEditor : false,
                     formatter: function(cell) { return cell.getValue() ? cell.getValue().replace('T', ' ') : ''; }},
                 {title: "Anchor Aweigh", field: "anchor_aweigh", widthGrow: 1, editor: canEdit ? datetimeEditor : false,
                     formatter: function(cell) { return cell.getValue() ? cell.getValue().replace('T', ' ') : ''; }},
@@ -1005,91 +1057,145 @@
         });
         if (isDark) document.querySelector(`#anchorage-table-${ldudId}`).classList.add('tabulator-dark');
 
-        // Barge Lines table
-        subTables[ldudId].barge_lines = new Tabulator(`#barge_lines-table-${ldudId}`, {
-            layout: "fitDataFill",
-            height: 250,
-            ajaxURL: `/api/module/LDUD01/barge_lines/${ldudId}`,
-            ajaxResponse: function(url, params, response) {
-                return response;
-            },
-            columns: [
+        // Barge Lines table — column order/titles differ for Export
+        const dtFmt = function(cell) { return cell.getValue() ? cell.getValue().replace('T', ' ') : ''; };
+        const delBtn = canEdit ? {title: "", field: "actions", formatter: deleteButtonFormatter, width: 50, hozAlign: "center", headerSort: false,
+            cellClick: function(e, cell) { deleteSubRow('barge_lines', cell.getRow().getData().id, ldudId); }
+        } : null;
+
+        let bargeLinesColumns;
+        if (operationType === 'Export') {
+            bargeLinesColumns = [
                 {title: "Trip#", field: "trip_number", width: 50, hozAlign: "center"},
                 {title: "Hold", field: "hold_name", width: 80, editor: canEdit ? "list" : false,
-                    editorParams: {values: holdOptions, autocomplete: true, allowEmpty: true}
-                },
+                    editorParams: {values: holdOptions, autocomplete: true, allowEmpty: true}},
                 {title: "Barge", field: "barge_name", width: 100, editor: canEdit ? "list" : false,
                     editorParams: {values: bargeOptions, autocomplete: true, allowEmpty: true}},
-                {title: "Contractor", field: "contractor_name", width: 120, editor: canEdit ? "list" : false,
+                {title: "Stevedore", field: "contractor_name", width: 120, editor: canEdit ? "list" : false,
+                    editorParams: {values: contractorOptions, autocomplete: true, allowEmpty: true}},
+                {title: "Cargo", field: "cargo_name", width: 100, editor: canEdit ? "list" : false,
+                    editorParams: {values: cargoOptions, autocomplete: true, allowEmpty: true}},
+                {title: "Loading Start", field: "commenced_loading", width: 130, editor: canEdit ? datetimeEditor : false, formatter: dtFmt},
+                {title: "Loading End", field: "completed_loading", width: 130, editor: canEdit ? datetimeEditor : false, formatter: dtFmt},
+                {title: "Cast Off Load Port", field: "along_side_berth", width: 140, editor: canEdit ? datetimeEditor : false, formatter: dtFmt},
+                {title: "Anch Gull Island (Loaded)", field: "anchored_gull_island", width: 150, editor: canEdit ? datetimeEditor : false, formatter: dtFmt},
+                {title: "Aweigh Gull Island (Loaded)", field: "aweigh_gull_island", width: 155, editor: canEdit ? datetimeEditor : false, formatter: dtFmt},
+                {title: "BPT/BFL", field: "bpt_bfl", width: 70, editor: canEdit ? "list" : false,
+                    editorParams: {values: bptBflOptions}},
+                {title: "Alongside Vessel", field: "along_side_vessel", width: 130, editor: canEdit ? datetimeEditor : false, formatter: dtFmt},
+                {title: "Unload Start", field: "commence_discharge_berth", width: 130, editor: canEdit ? datetimeEditor : false, formatter: dtFmt},
+                {title: "Unload End", field: "completed_discharge_berth", width: 130, editor: canEdit ? datetimeEditor : false, formatter: dtFmt},
+                {title: "Cast Off Vessel", field: "cast_off_berth", width: 130, editor: canEdit ? datetimeEditor : false, formatter: dtFmt},
+                {title: "Cast Off Vessel NT", field: "cast_off_berth_nt", width: 140, editor: canEdit ? datetimeEditor : false, formatter: dtFmt},
+                {title: "Qty", field: "discharge_quantity", width: 80, editor: canEdit ? "number" : false, hozAlign: "right",
+                    editorParams: {min: 0, step: 0.01}},
+                delBtn
+            ].filter(Boolean);
+        } else {
+            bargeLinesColumns = [
+                {title: "Trip#", field: "trip_number", width: 50, hozAlign: "center"},
+                {title: "Hold", field: "hold_name", width: 80, editor: canEdit ? "list" : false,
+                    editorParams: {values: holdOptions, autocomplete: true, allowEmpty: true}},
+                {title: "Barge", field: "barge_name", width: 100, editor: canEdit ? "list" : false,
+                    editorParams: {values: bargeOptions, autocomplete: true, allowEmpty: true}},
+                {title: "Stevedore", field: "contractor_name", width: 120, editor: canEdit ? "list" : false,
                     editorParams: {values: contractorOptions, autocomplete: true, allowEmpty: true}},
                 {title: "Cargo", field: "cargo_name", width: 100, editor: canEdit ? "list" : false,
                     editorParams: {values: cargoOptions, autocomplete: true, allowEmpty: true}},
                 {title: "BPT/BFL", field: "bpt_bfl", width: 70, editor: canEdit ? "list" : false,
                     editorParams: {values: bptBflOptions}},
-                {title: "Alongside Vessel", field: "along_side_vessel", width: 130, editor: canEdit ? datetimeEditor : false,
-                    formatter: function(cell) { return cell.getValue() ? cell.getValue().replace('T', ' ') : ''; }},
-                {title: "Loading Start", field: "commenced_loading", width: 130, editor: canEdit ? datetimeEditor : false,
-                    formatter: function(cell) { return cell.getValue() ? cell.getValue().replace('T', ' ') : ''; }},
-                {title: "Loading End", field: "completed_loading", width: 130, editor: canEdit ? datetimeEditor : false,
-                    formatter: function(cell) { return cell.getValue() ? cell.getValue().replace('T', ' ') : ''; }},
-                {title: "Cast Off MV", field: "cast_off_mv", width: 130, editor: canEdit ? datetimeEditor : false,
-                    formatter: function(cell) { return cell.getValue() ? cell.getValue().replace('T', ' ') : ''; }},
-                {title: "Anch Gull Island", field: "anchored_gull_island", width: 130, editor: canEdit ? datetimeEditor : false,
-                    formatter: function(cell) { return cell.getValue() ? cell.getValue().replace('T', ' ') : ''; }},
-                {title: "Aweigh Gull Island", field: "aweigh_gull_island", width: 130, editor: canEdit ? datetimeEditor : false,
-                    formatter: function(cell) { return cell.getValue() ? cell.getValue().replace('T', ' ') : ''; }},
-                {title: "Alongside Berth", field: "along_side_berth", width: 130, editor: canEdit ? datetimeEditor : false,
-                    formatter: function(cell) { return cell.getValue() ? cell.getValue().replace('T', ' ') : ''; }},
-                {title: "Discharge Start", field: "commence_discharge_berth", width: 130, editor: canEdit ? datetimeEditor : false,
-                    formatter: function(cell) { return cell.getValue() ? cell.getValue().replace('T', ' ') : ''; }},
-                {title: "Discharge End", field: "completed_discharge_berth", width: 130, editor: canEdit ? datetimeEditor : false,
-                    formatter: function(cell) { return cell.getValue() ? cell.getValue().replace('T', ' ') : ''; }},
-                {title: "Cast Off Berth", field: "cast_off_berth", width: 130, editor: canEdit ? datetimeEditor : false,
-                    formatter: function(cell) { return cell.getValue() ? cell.getValue().replace('T', ' ') : ''; }},
-                {title: "Cast Off NT", field: "cast_off_berth_nt", width: 130, editor: canEdit ? datetimeEditor : false,
-                    formatter: function(cell) { return cell.getValue() ? cell.getValue().replace('T', ' ') : ''; }},
+                {title: "Alongside Vessel", field: "along_side_vessel", width: 130, editor: canEdit ? datetimeEditor : false, formatter: dtFmt},
+                {title: "Loading Start", field: "commenced_loading", width: 130, editor: canEdit ? datetimeEditor : false, formatter: dtFmt},
+                {title: "Loading End", field: "completed_loading", width: 130, editor: canEdit ? datetimeEditor : false, formatter: dtFmt},
+                {title: "Cast Off MV", field: "cast_off_mv", width: 130, editor: canEdit ? datetimeEditor : false, formatter: dtFmt},
+                {title: "Anch Gull Island", field: "anchored_gull_island", width: 130, editor: canEdit ? datetimeEditor : false, formatter: dtFmt},
+                {title: "Aweigh Gull Island", field: "aweigh_gull_island", width: 130, editor: canEdit ? datetimeEditor : false, formatter: dtFmt},
+                {title: "Alongside Berth", field: "along_side_berth", width: 130, editor: canEdit ? datetimeEditor : false, formatter: dtFmt},
+                {title: "Discharge Start", field: "commence_discharge_berth", width: 130, editor: canEdit ? datetimeEditor : false, formatter: dtFmt},
+                {title: "Discharge End", field: "completed_discharge_berth", width: 130, editor: canEdit ? datetimeEditor : false, formatter: dtFmt},
+                {title: "Cast Off Berth", field: "cast_off_berth", width: 130, editor: canEdit ? datetimeEditor : false, formatter: dtFmt},
+                {title: "Cast Off NT", field: "cast_off_berth_nt", width: 130, editor: canEdit ? datetimeEditor : false, formatter: dtFmt},
                 {title: "Qty", field: "discharge_quantity", width: 80, editor: canEdit ? "number" : false, hozAlign: "right",
-                    editorParams: {min: 0, step: 0.01}
-                },
-                canEdit ? {title: "", field: "actions", formatter: deleteButtonFormatter, width: 50, hozAlign: "center", headerSort: false,
-                    cellClick: function(e, cell) { deleteSubRow('barge_lines', cell.getRow().getData().id, ldudId); }
-                } : null
-            ].filter(Boolean)
+                    editorParams: {min: 0, step: 0.01}},
+                delBtn
+            ].filter(Boolean);
+        }
+
+        subTables[ldudId].barge_lines = new Tabulator(`#barge_lines-table-${ldudId}`, {
+            layout: "fitDataFill",
+            height: 250,
+            ajaxURL: `/api/module/LDUD01/barge_lines/${ldudId}`,
+            columns: bargeLinesColumns
         });
         if (isDark) document.querySelector(`#barge_lines-table-${ldudId}`).classList.add('tabulator-dark');
 
-        // Vessel Operations table
-        const vesselOpsHoldColumns = getHoldDefs(ldudId).map(def => ({
-            title: def.hold_name,
-            field: def.field,
-            width: 120,
-            hozAlign: "right",
-            editor: canEdit ? "number" : false,
-            editorParams: {min: 0, step: 0.01},
-            headerTooltip: `Stowage Qty: ${parseFloat(def.stowage_qty || 0).toFixed(2)}${def.cargo_name ? ` | Cargo: ${def.cargo_name}` : ''}`,
-            cellEdited: function() { updateHoldSummary(ldudId); }
-        }));
+        if (operationType === 'Export') {
+            // Export: simple row-based loading ops table using hold master
+            const holdMasterOpts = {};
+            holdMasterList.forEach(h => { holdMasterOpts[h] = h; });
 
-        subTables[ldudId].vessel_ops = new Tabulator(`#vessel_ops-table-${ldudId}`, {
-            layout: "fitDataFill",
-            height: 200,
-            ajaxURL: `/api/module/LDUD01/vessel_ops/${ldudId}`,
-            ajaxResponse: function(url, params, response) {
-                const pivotRows = buildVesselOpsRowsFromApi(ldudId, response);
-                setTimeout(() => updateHoldSummary(ldudId), 50);
-                return pivotRows;
-            },
-            columns: [
-                {title: "Date", field: "op_date", width: 130, editor: canEdit ? dateEditor : false},
-                ...vesselOpsHoldColumns,
-                canEdit ? {title: "", field: "actions", formatter: deleteButtonFormatter, width: 50, hozAlign: "center", headerSort: false,
-                    cellClick: function(e, cell) { deleteVesselOpsDateRow(ldudId, cell.getRow()); }
-                } : null
-            ].filter(Boolean)
-        });
-        if (isDark) document.querySelector(`#vessel_ops-table-${ldudId}`).classList.add('tabulator-dark');
+            // Fetch export cargo names for this VCN for dropdown
+            let exportCargoNamesOpts = {};
+            if (vcnId) {
+                const ecnRes = await fetch(`/api/module/VCN01/export_cargo_names/${vcnId}`);
+                const ecnNames = await ecnRes.json();
+                ecnNames.forEach(n => { exportCargoNamesOpts[n] = n; });
+            }
 
-        updateHoldSummary(ldudId);
+            subTables[ldudId].vessel_ops = new Tabulator(`#vessel_ops-table-${ldudId}`, {
+                layout: "fitDataFill",
+                height: 200,
+                ajaxURL: `/api/module/LDUD01/vessel_ops/${ldudId}`,
+                columns: [
+                    {title: "Date", field: "start_time", width: 130, editor: canEdit ? dateEditor : false,
+                        formatter: function(cell) { const v = cell.getValue(); return v ? String(v).slice(0, 10) : ''; }
+                    },
+                    {title: "Hold Name", field: "hold_name", width: 130, editor: canEdit ? "list" : false,
+                        editorParams: {values: holdMasterOpts, autocomplete: true, allowEmpty: true}},
+                    {title: "Cargo Name", field: "cargo_name", width: 140, editor: canEdit ? "list" : false,
+                        editorParams: {values: exportCargoNamesOpts, autocomplete: true, allowEmpty: true}},
+                    {title: "Quantity", field: "quantity", width: 100, hozAlign: "right",
+                        editor: canEdit ? "number" : false, editorParams: {min: 0, step: 0.01}},
+                    canEdit ? {title: "", field: "actions", formatter: deleteButtonFormatter, width: 50, hozAlign: "center", headerSort: false,
+                        cellClick: function(e, cell) { deleteSubRow('vessel_ops', cell.getRow().getData().id, ldudId); }
+                    } : null
+                ].filter(Boolean)
+            });
+            if (isDark) document.querySelector(`#vessel_ops-table-${ldudId}`).classList.add('tabulator-dark');
+        } else {
+            // Import: existing pivot table driven by stowage plan
+            const vesselOpsHoldColumns = getHoldDefs(ldudId).map(def => ({
+                title: def.hold_name,
+                field: def.field,
+                width: 120,
+                hozAlign: "right",
+                editor: canEdit ? "number" : false,
+                editorParams: {min: 0, step: 0.01},
+                headerTooltip: `Stowage Qty: ${parseFloat(def.stowage_qty || 0).toFixed(2)}${def.cargo_name ? ` | Cargo: ${def.cargo_name}` : ''}`,
+                cellEdited: function() { updateHoldSummary(ldudId); }
+            }));
+
+            subTables[ldudId].vessel_ops = new Tabulator(`#vessel_ops-table-${ldudId}`, {
+                layout: "fitDataFill",
+                height: 200,
+                ajaxURL: `/api/module/LDUD01/vessel_ops/${ldudId}`,
+                ajaxResponse: function(url, params, response) {
+                    const pivotRows = buildVesselOpsRowsFromApi(ldudId, response);
+                    setTimeout(() => updateHoldSummary(ldudId), 50);
+                    return pivotRows;
+                },
+                columns: [
+                    {title: "Date", field: "op_date", width: 130, editor: canEdit ? dateEditor : false},
+                    ...vesselOpsHoldColumns,
+                    canEdit ? {title: "", field: "actions", formatter: deleteButtonFormatter, width: 50, hozAlign: "center", headerSort: false,
+                        cellClick: function(e, cell) { deleteVesselOpsDateRow(ldudId, cell.getRow()); }
+                    } : null
+                ].filter(Boolean)
+            });
+            if (isDark) document.querySelector(`#vessel_ops-table-${ldudId}`).classList.add('tabulator-dark');
+
+            updateHoldSummary(ldudId);
+        }
 
         // Barge Cleaning Lines table
         const pplOptions = {};
@@ -1140,6 +1246,59 @@
         return '<button class="btn-sub-delete">X</button>';
     }
 
+    async function saveExportVesselOpsTable(ldudId) {
+        const tableRef = subTables[ldudId] && subTables[ldudId].vessel_ops;
+        if (!tableRef) return;
+
+        // Fetch export cargo BL totals per cargo name for validation
+        const mainRow = table.getRows().find(r => r.getData().id === ldudId);
+        const vcnId = mainRow ? mainRow.getData().vcn_id : null;
+        const exportCargoTotals = {};
+        if (vcnId) {
+            const res = await fetch(`/api/module/VCN01/export_cargo/${vcnId}`);
+            const rows = await res.json();
+            rows.forEach(r => {
+                if (r.cargo_name) {
+                    exportCargoTotals[r.cargo_name] = (exportCargoTotals[r.cargo_name] || 0) + parseFloat(r.bl_quantity || 0);
+                }
+            });
+        }
+
+        // Sum vessel ops quantities per cargo name
+        const rows = tableRef.getRows();
+        const vesselOpsTotals = {};
+        rows.forEach(row => {
+            const d = row.getData();
+            if (d.cargo_name) {
+                vesselOpsTotals[d.cargo_name] = (vesselOpsTotals[d.cargo_name] || 0) + parseFloat(d.quantity || 0);
+            }
+        });
+
+        // Validate against export cargo BL totals
+        for (const [cargoName, total] of Object.entries(vesselOpsTotals)) {
+            const limit = exportCargoTotals[cargoName] || 0;
+            if (limit > 0 && total > limit) {
+                alert(`Total loading quantity for "${cargoName}" (${total}) exceeds declared BL quantity (${limit}).`);
+                return;
+            }
+        }
+
+        let savedCount = 0;
+        for (const row of rows) {
+            const d = row.getData();
+            if (d.id) {
+                const res = await fetch('/api/module/LDUD01/vessel_ops/save', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({...d, ldud_id: ldudId, end_time: null})
+                });
+                const result = await res.json();
+                if (result.success) savedCount++;
+            }
+        }
+        alert(`Saved ${savedCount} row(s)`);
+    }
+
     function updateHoldSummary(ldudId) {
         const summaryEl = document.getElementById(`hold-summary-${ldudId}`);
         if (!summaryEl) return;
@@ -1188,7 +1347,20 @@
 
     async function addSubRow(type, ldudId) {
         if (type === 'vessel_ops') {
-            addVesselOpsDateRow(ldudId);
+            if (currentOperationTypes[ldudId] === 'Export') {
+                // Simple row add for export
+                const res = await fetch('/api/module/LDUD01/vessel_ops/save', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({ldud_id: ldudId})
+                });
+                const data = await res.json();
+                if (data.id && subTables[ldudId] && subTables[ldudId].vessel_ops) {
+                    subTables[ldudId].vessel_ops.addRow({id: data.id, ldud_id: ldudId}, true);
+                }
+            } else {
+                addVesselOpsDateRow(ldudId);
+            }
             return;
         }
 
@@ -1209,7 +1381,11 @@
 
     async function saveSubTable(type, ldudId) {
         if (type === 'vessel_ops') {
-            await saveVesselOpsTable(ldudId);
+            if (currentOperationTypes[ldudId] === 'Export') {
+                await saveExportVesselOpsTable(ldudId);
+            } else {
+                await saveVesselOpsTable(ldudId);
+            }
             return;
         }
 
@@ -1262,7 +1438,8 @@
         table.addRow({
             created_by: currentUser,
             created_date: getTodayDate(),
-            doc_status: 'Pending'
+            doc_status: 'Pending',
+            operation_type: 'Import'
         }, true);
     }
 
