@@ -26,7 +26,6 @@
     let table;
     let vcnOptions = [];  // Array of {value, label, type, id}
     let mbcOptions = [];  // Array of {value, label, type, id}
-    let vexOptions = [];  // Array of {value, label, type, id}
     let mbcNames = [];    // MBC names from master
     let equipmentList = [];
     let delayList = [];
@@ -57,10 +56,9 @@
     }
 
     async function loadMasterData() {
-        const [vcn, mbc, vex, mbcNamesRes, equip, delays, cargo, ops, uom, routes] = await Promise.all([
+        const [vcn, mbc, mbcNamesRes, equip, delays, cargo, ops, uom, routes] = await Promise.all([
             fetch('/api/module/EU01/vcn-options').then(r => r.json()),
             fetch('/api/module/EU01/mbc-options').then(r => r.json()),
-            fetch('/api/module/EU01/vex-options').then(r => r.json()),
             fetch('/api/module/EU01/mbc-names').then(r => r.json()),
             fetch('/api/module/EU01/equipment').then(r => r.json()),
             fetch('/api/module/EU01/delays').then(r => r.json()),
@@ -72,7 +70,6 @@
 
         vcnOptions = vcn;
         mbcOptions = mbc;
-        vexOptions = vex;
         mbcNames = mbcNamesRes;
         equipmentList = equip;
         delayList = delays;
@@ -94,7 +91,6 @@
         const opts = {'': ''};
         vcnOptions.forEach(opt => { opts[opt.label] = opt.label; });
         mbcOptions.forEach(opt => { opts[opt.label] = opt.label; });
-        vexOptions.forEach(opt => { opts[opt.label] = opt.label; });
         return opts;
     }
 
@@ -122,13 +118,13 @@
         return input;
     };
 
-    // Dynamic barge editor based on VCN/MBC/VEX selection
+    // Dynamic barge editor based on VCN/MBC selection
     var bargeEditor = function(cell, onRendered, success, cancel) {
         const row = cell.getRow();
         const rowData = row.getData();
         const sourceDisplay = rowData.source_display || '';
 
-        // Determine if it's a VCN, MBC, or VEX selection
+        // Determine if it's a VCN or MBC selection
         let options = [];
 
         // Check if it's a VCN selection
@@ -148,19 +144,7 @@
                 options = mbcNames;
                 renderSelect(options);
             } else {
-                // Check if it's a VEX selection - fetch barges and MBCs
-                const vexMatch = vexOptions.find(v => v.label === sourceDisplay);
-                if (vexMatch) {
-                    Promise.all([
-                        fetch(`/api/module/EU01/vex-barges/${vexMatch.id}`).then(r => r.json()),
-                        fetch(`/api/module/EU01/vex-mbcs/${vexMatch.id}`).then(r => r.json())
-                    ]).then(([barges, mbcs]) => {
-                        options = [...barges, ...mbcs];
-                        renderSelect(options);
-                    });
-                } else {
-                    renderSelect(options);
-                }
+                renderSelect(options);
             }
         }
 
@@ -203,7 +187,7 @@
         const columns = [
             {formatter: "rowSelection", titleFormatter: "rowSelection", hozAlign: "center", headerSort: false, width: 40},
             {title: "ID", field: "id", width: 60},
-            {title: "VCN / MBC / VEX", field: "source_display", width: 280, editor: canEdit ? "list" : false,
+            {title: "VCN / MBC", field: "source_display", width: 280, editor: canEdit ? "list" : false,
                 editorParams: {values: getVcnMbcOptions(), autocomplete: true, allowEmpty: true, listOnEmpty: true}},
             {title: "Barge / MBC Name", field: "barge_name", width: 150, editor: canEdit ? bargeEditor : false},
             {title: "Equipment", field: "equipment_name", width: 140, editor: canEdit ? "list" : false,

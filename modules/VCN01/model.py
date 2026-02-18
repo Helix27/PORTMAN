@@ -9,15 +9,6 @@ def get_next_doc_num():
     next_num = (result or 0) + 1
     return f"VCN{next_num}"
 
-def get_next_igm_num(vcn_id):
-    conn = get_db()
-    cur = get_cursor(conn)
-    cur.execute("SELECT MAX(CAST(SUBSTR(igm_number, 4) AS INTEGER)) FROM vcn_igm WHERE igm_number LIKE 'IGM%%'")
-    result = cur.fetchone()['max']
-    conn.close()
-    next_num = (result or 0) + 1
-    return f"IGM{next_num}"
-
 def get_vessels():
     """Get vessels from VC01 for dropdown"""
     conn = get_db()
@@ -152,12 +143,19 @@ def save_cargo_declaration(data):
     conn = get_db()
     cur = get_cursor(conn)
     if data.get('id'):
-        cur.execute('UPDATE vcn_cargo_declaration SET cargo_name=%s, bl_no=%s, bl_date=%s, bl_quantity=%s, quantity_uom=%s, customer_name=%s WHERE id=%s',
-                   [data.get('cargo_name'), data.get('bl_no'), data.get('bl_date'), data.get('bl_quantity'), data.get('quantity_uom'), data.get('customer_name'), data['id']])
+        cur.execute('''UPDATE vcn_cargo_declaration SET cargo_name=%s, bl_no=%s, bl_date=%s, bl_quantity=%s,
+                       quantity_uom=%s, customer_name=%s, igm_number=%s, igm_manual_number=%s, igm_date=%s WHERE id=%s''',
+                   [data.get('cargo_name'), data.get('bl_no'), data.get('bl_date'), data.get('bl_quantity'),
+                    data.get('quantity_uom'), data.get('customer_name'),
+                    data.get('igm_number'), data.get('igm_manual_number'), data.get('igm_date'), data['id']])
         row_id = data['id']
     else:
-        cur.execute('INSERT INTO vcn_cargo_declaration (vcn_id, cargo_name, bl_no, bl_date, bl_quantity, quantity_uom, customer_name) VALUES (%s, %s, %s, %s, %s, %s, %s) RETURNING id',
-                   [data['vcn_id'], data.get('cargo_name'), data.get('bl_no'), data.get('bl_date'), data.get('bl_quantity'), data.get('quantity_uom'), data.get('customer_name')])
+        cur.execute('''INSERT INTO vcn_cargo_declaration (vcn_id, cargo_name, bl_no, bl_date, bl_quantity,
+                       quantity_uom, customer_name, igm_number, igm_manual_number, igm_date)
+                       VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s) RETURNING id''',
+                   [data['vcn_id'], data.get('cargo_name'), data.get('bl_no'), data.get('bl_date'), data.get('bl_quantity'),
+                    data.get('quantity_uom'), data.get('customer_name'),
+                    data.get('igm_number'), data.get('igm_manual_number'), data.get('igm_date')])
         row_id = cur.fetchone()['id']
     conn.commit()
     conn.close()
@@ -170,47 +168,14 @@ def delete_cargo_declaration(row_id):
     conn.commit()
     conn.close()
 
-# IGM sub-table operations
-def get_igm(vcn_id):
+def get_cargo_total_quantity(vcn_id):
+    """Get total BL quantity from cargo declarations for a VCN (replaces IGM total)"""
     conn = get_db()
     cur = get_cursor(conn)
-    cur.execute('SELECT * FROM vcn_igm WHERE vcn_id=%s ORDER BY id DESC', (vcn_id,))
-    rows = cur.fetchall()
-    conn.close()
-    return [dict(r) for r in rows]
-
-def get_igm_total_quantity(vcn_id):
-    """Get total IGM BL quantity for a VCN"""
-    conn = get_db()
-    cur = get_cursor(conn)
-    cur.execute('SELECT SUM(bl_quantity) FROM vcn_igm WHERE vcn_id=%s', (vcn_id,))
+    cur.execute('SELECT SUM(bl_quantity) FROM vcn_cargo_declaration WHERE vcn_id=%s', (vcn_id,))
     result = cur.fetchone()['sum']
     conn.close()
     return result or 0
-
-def save_igm(data):
-    conn = get_db()
-    cur = get_cursor(conn)
-    if data.get('id'):
-        cur.execute('UPDATE vcn_igm SET igm_manual_number=%s, igm_date=%s, dwt=%s, bl_quantity=%s WHERE id=%s',
-                   [data.get('igm_manual_number'), data.get('igm_date'), data.get('dwt'), data.get('bl_quantity'), data['id']])
-        row_id = data['id']
-    else:
-        igm_number = get_next_igm_num(data['vcn_id'])
-        cur.execute('INSERT INTO vcn_igm (vcn_id, igm_number, igm_manual_number, igm_date, dwt, bl_quantity) VALUES (%s, %s, %s, %s, %s, %s) RETURNING id',
-                   [data['vcn_id'], igm_number, data.get('igm_manual_number'), data.get('igm_date'), data.get('dwt'), data.get('bl_quantity')])
-        row_id = cur.fetchone()['id']
-        data['igm_number'] = igm_number
-    conn.commit()
-    conn.close()
-    return row_id, data.get('igm_number')
-
-def delete_igm(row_id):
-    conn = get_db()
-    cur = get_cursor(conn)
-    cur.execute('DELETE FROM vcn_igm WHERE id=%s', (row_id,))
-    conn.commit()
-    conn.close()
 
 # Stowage Plan sub-table operations
 def get_stowage_plan(vcn_id):
@@ -237,7 +202,7 @@ def save_stowage_plan(data):
     # Validate that hatchwise quantity doesn't exceed IGM total
     vcn_id = data.get('vcn_id')
     if vcn_id:
-        igm_total = get_igm_total_quantity(vcn_id)
+        igm_total = get_cargo_total_quantity(vcn_id)
         current_stowage_total = get_stowage_total_quantity(vcn_id)
         new_quantity = data.get('hatchwise_quantity') or 0
 
@@ -251,7 +216,7 @@ def save_stowage_plan(data):
         # Check if new total would exceed IGM quantity
         if current_stowage_total + new_quantity > igm_total:
             conn.close()
-            return None, f"Total stowage quantity ({current_stowage_total + new_quantity}) cannot exceed IGM quantity ({igm_total})"
+            return None, f"Total stowage quantity ({current_stowage_total + new_quantity}) cannot exceed cargo BL quantity ({igm_total})"
 
     if data.get('id'):
         cur.execute('UPDATE vcn_stowage_plan SET cargo_name=%s, hold_name=%s, hatchwise_quantity=%s, hatch_completion_time=%s WHERE id=%s',

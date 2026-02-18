@@ -52,12 +52,12 @@ def save_header(data):
     row_id = data.get('id')
 
     if row_id:
-        cols = [k for k in data if k not in ['id', 'doc_num']]
+        cols = [k for k in data if k not in ['id', 'doc_num', 'vcn_display']]
         cur.execute(f"UPDATE ldud_header SET {', '.join([f'{c}=%s' for c in cols])} WHERE id=%s",
                    [data[c] for c in cols] + [row_id])
     else:
         data['doc_num'] = get_next_doc_num()
-        cols = [k for k in data if k != 'id']
+        cols = [k for k in data if k not in ['id', 'vcn_display']]
         cur.execute(f"INSERT INTO ldud_header ({', '.join(cols)}) VALUES ({', '.join(['%s']*len(cols))}) RETURNING id",
                    [data[c] for c in cols])
         row_id = cur.fetchone()['id']

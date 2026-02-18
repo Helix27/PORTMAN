@@ -154,35 +154,6 @@ def delete_cargo():
 def get_cargo_names(vcn_id):
     return jsonify(model.get_cargo_names_for_vcn(vcn_id))
 
-# IGM endpoints
-@bp.route('/api/module/VCN01/igm/<int:vcn_id>')
-@login_required
-def get_igm(vcn_id):
-    return jsonify(model.get_igm(vcn_id))
-
-@bp.route('/api/module/VCN01/igm/save', methods=['POST'])
-@login_required
-def save_igm():
-    perms = get_perms()
-    if not perms.get('can_add') and not perms.get('can_edit'):
-        return jsonify({'error': 'No permission'}), 403
-    row_id, igm_number = model.save_igm(request.json)
-    return jsonify({'success': True, 'id': row_id, 'igm_number': igm_number})
-
-@bp.route('/api/module/VCN01/igm/delete', methods=['POST'])
-@login_required
-def delete_igm():
-    perms = get_perms()
-    if not perms.get('can_delete'):
-        return jsonify({'error': 'No permission to delete'}), 403
-    model.delete_igm(request.json.get('id'))
-    return jsonify({'success': True})
-
-@bp.route('/api/module/VCN01/igm/total/<int:vcn_id>')
-@login_required
-def get_igm_total(vcn_id):
-    return jsonify({'total': model.get_igm_total_quantity(vcn_id)})
-
 # Stowage Plan endpoints
 @bp.route('/api/module/VCN01/stowage/<int:vcn_id>')
 @login_required
@@ -214,5 +185,5 @@ def delete_stowage():
 def get_stowage_total(vcn_id):
     return jsonify({
         'stowage_total': model.get_stowage_total_quantity(vcn_id),
-        'igm_total': model.get_igm_total_quantity(vcn_id)
+        'igm_total': model.get_cargo_total_quantity(vcn_id)
     })

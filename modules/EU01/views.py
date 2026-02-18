@@ -170,32 +170,3 @@ def get_routes():
     conn.close()
     return jsonify([r['route_name'] for r in rows])
 
-@bp.route('/api/module/EU01/vex-options')
-@login_required
-def get_vex_options():
-    options = model.get_vex_options()
-    result = []
-    for opt in options:
-        doc_date = opt.get('bill_of_coastal_goods_date', '')
-        display = f"{opt['vex_doc_num']} / {opt['vessel_name']} / {doc_date}"
-        result.append({
-            'value': display,
-            'label': display,
-            'type': 'VEX',
-            'id': opt['id']
-        })
-    return jsonify(result)
-
-@bp.route('/api/module/EU01/vex-barges/<int:vex_id>')
-@login_required
-def get_vex_barges(vex_id):
-    """Get barges from a specific VEX's barge lines"""
-    barges = model.get_vex_barges(vex_id)
-    return jsonify(barges)
-
-@bp.route('/api/module/EU01/vex-mbcs/<int:vex_id>')
-@login_required
-def get_vex_mbcs(vex_id):
-    """Get MBCs from a specific VEX's MBC lines"""
-    mbcs = model.get_vex_mbcs(vex_id)
-    return jsonify(mbcs)

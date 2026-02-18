@@ -185,7 +185,7 @@ def approve():
 
 @bp.route('/api/module/SRV01/source-options/<source_type>')
 def get_source_options(source_type):
-    """Get source document options (VCN/MBC/VEX)"""
+    """Get source document options (VCN/MBC)"""
     if 'user_id' not in session:
         return jsonify({'error': 'Not logged in'}), 401
 
@@ -222,20 +222,6 @@ def get_source_options(source_type):
         for r in rows:
             r = dict(r)
             display = f"{r['doc_num']} / {r['mbc_name']} / {r.get('doc_date', '')}"
-            result.append({'id': r['id'], 'display': display})
-        return jsonify({'data': result})
-
-    elif source_type == 'VEX':
-        cur.execute('''
-            SELECT id, vex_doc_num, vessel_name, bill_of_coastal_goods_date
-            FROM vex_header ORDER BY id DESC
-        ''')
-        rows = cur.fetchall()
-        conn.close()
-        result = []
-        for r in rows:
-            r = dict(r)
-            display = f"{r['vex_doc_num']} / {r['vessel_name']} / {r.get('bill_of_coastal_goods_date', '')}"
             result.append({'id': r['id'], 'display': display})
         return jsonify({'data': result})
 

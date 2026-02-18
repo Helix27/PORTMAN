@@ -45,8 +45,6 @@ from modules.MBC01 import bp as mbc01_bp, MODULE_INFO as mbc01_info
 from modules.PPL01 import bp as ppl01_bp, MODULE_INFO as ppl01_info
 from modules.EU01 import bp as eu01_bp, MODULE_INFO as eu01_info
 from modules.CRM01 import bp as crm01_bp, MODULE_INFO as crm01_info
-from modules.VEX01 import bp as vex01_bp, MODULE_INFO as vex01_info
-from modules.VEXDS01 import bp as vexds01_bp, MODULE_INFO as vexds01_info
 
 # Import finance modules
 from modules.FCRM01 import bp as fcrm01_bp, MODULE_INFO as fcrm01_info
@@ -92,9 +90,6 @@ register_module(mbc01_info['code'], mbc01_info['name'], mbc01_bp)
 register_module(ppl01_info['code'], ppl01_info['name'], ppl01_bp)
 register_module(eu01_info['code'], eu01_info['name'], eu01_bp)
 register_module(crm01_info['code'], crm01_info['name'], crm01_bp)
-register_module(vexds01_info['code'], vexds01_info['name'], vexds01_bp)
-register_module(vex01_info['code'], vex01_info['name'], vex01_bp)
-
 # Register finance modules
 register_module(fcrm01_info['code'], fcrm01_info['name'], fcrm01_bp)
 register_module(fgrm01_info['code'], fgrm01_info['name'], fgrm01_bp)

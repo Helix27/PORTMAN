@@ -63,7 +63,6 @@ def generate_bill():
     # Import other module models
     from modules.VCN01 import model as vcn_model
     from modules.MBC01 import model as mbc_model
-    from modules.VEX01 import model as vex_model
     from modules.EU01 import model as eu_model
     from modules.VIEM01 import model as viem_model
     from modules.VCUM01 import model as vcum_model
@@ -89,20 +88,11 @@ def generate_bill():
     ''')
     mbc_options = cur.fetchall()
 
-    # VEX with bill_of_coastal_goods_date
-    cur.execute('''
-        SELECT id, vex_doc_num, vessel_name, bill_of_coastal_goods_date
-        FROM vex_header
-        ORDER BY id DESC
-    ''')
-    vex_options = cur.fetchall()
-
     conn.close()
 
     # Convert to list of dicts for template
     vcn_options = [dict(r) for r in vcn_options]
     mbc_options = [dict(r) for r in mbc_options]
-    vex_options = [dict(r) for r in vex_options]
 
     from datetime import datetime
     current_date = datetime.now().strftime('%Y-%m-%d')
@@ -110,7 +100,6 @@ def generate_bill():
     return render_template('generate_bill.html',
                          vcn_options=vcn_options,
                          mbc_options=mbc_options,
-                         vex_options=vex_options,
                          current_date=current_date,
                          perms=perms,
                          username=session.get('username'))
@@ -202,10 +191,6 @@ def save_bill():
             cur.execute('SELECT doc_num FROM mbc_header WHERE id=%s', (data['source_id'],))
             row = cur.fetchone()
             data['source_display'] = row['doc_num'] if row else ''
-        elif data['source_type'] == 'VEX':
-            cur.execute('SELECT vex_doc_num FROM vex_header WHERE id=%s', (data['source_id'],))
-            row = cur.fetchone()
-            data['source_display'] = row['vex_doc_num'] if row else ''
         conn.close()
 
     row_id, bill_number = model.save_bill_header(data)

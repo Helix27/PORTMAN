@@ -37,10 +37,6 @@ def clear_mock_data():
         'bill_header',
         # EU lines
         'eu_lines',
-        # VEX subtables → header
-        'vex_mbc_lines',
-        'vex_barge_lines',
-        'vex_header',
         # MBC subtables → header
         'mbc_delays',
         'mbc_discharge_port_lines',
@@ -73,7 +69,6 @@ def clear_mock_data():
         'vessel_delay_types',
         'vessel_run_types',
         'vessel_type_of_discharge',
-        'vex_doc_series',
         'vessel_call_doc_series',
         'vessel_operation_types',
         'vessel_customers',
@@ -183,17 +178,6 @@ def populate_doc_series():
     conn.commit()
     conn.close()
     print(f"[OK] Populated {len(series)} doc series")
-
-def populate_vex_doc_series():
-    """VEXDS01 - Vessel Export Doc Series Master"""
-    series = ['VEX/24-25', 'VEX/25-26', 'VEX/26-27', 'EXP/24-25', 'EXP/25-26']
-    conn = get_db()
-    cur = conn.cursor()
-    for s in series:
-        cur.execute('INSERT INTO vex_doc_series (name) VALUES (%s) ON CONFLICT DO NOTHING', [s])
-    conn.commit()
-    conn.close()
-    print(f"[OK] Populated {len(series)} VEX doc series")
 
 def populate_discharge_types():
     """VTOD01 - Type of Discharge Master"""
@@ -695,50 +679,6 @@ def populate_mbc_records():
     print(f"[OK] Populated {mbc_count} MBC records with subtables (load port, discharge port, delays)")
 
 
-def populate_vex_records():
-    """VEX01 - Vessel Export with subtables"""
-    conn = get_db()
-    cur = get_cursor(conn)
-
-    vex_count = 0
-    for idx in range(1, 3):
-        doc_date = datetime.now() + timedelta(days=idx*12)
-        customer = 'Amba River Coke Limited' if idx % 2 else 'JSW Steel Dolvi Limited'
-
-        # Create VEX header with correct columns
-        cur.execute("""
-            INSERT INTO vex_header (vex_doc_num, doc_series, vessel_name, customer_name, cargo_name,
-                                    bill_of_coastal_goods_date, bill_of_coastal_goods_qty, quantity_uom,
-                                    doc_status, created_by, created_date)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s) RETURNING id
-        """, [f'VEX{idx}', 'VEX/25-26', f'MV Export Vessel {idx}', customer, 'Coal Export',
-              doc_date.strftime('%Y-%m-%d'), 8000 + idx*1000, 'MT',
-              'Approved', 'admin', datetime.now().strftime('%Y-%m-%d')])
-        vex_id = cur.fetchone()['id']
-
-        # Add barge lines
-        barges = ['Radha Krishna 1', 'Aisha 1']
-        for barge in barges[:idx]:
-            cur.execute("""
-                INSERT INTO vex_barge_lines (vex_id, barge_name)
-                VALUES (%s, %s)
-            """, [vex_id, barge])
-
-        # Add MBC lines
-        mbcs = ['JSW Raigad', 'JSW Manikgad']
-        for mbc in mbcs[:idx]:
-            cur.execute("""
-                INSERT INTO vex_mbc_lines (vex_id, mbc_name)
-                VALUES (%s, %s)
-            """, [vex_id, mbc])
-
-        vex_count += 1
-
-    conn.commit()
-    conn.close()
-    print(f"[OK] Populated {vex_count} VEX records with subtables (barge lines, mbc lines)")
-
-
 def populate_eu_records():
     """EU01 - Equipment Utilization (critical for billing)"""
     conn = get_db()
@@ -819,31 +759,9 @@ def populate_eu_records():
               base_time.strftime('%Y-%m-%d'), 'admin', datetime.now().strftime('%Y-%m-%d'), 0])
         eu_count += 1
 
-    # Get VEX records
-    cur.execute("SELECT id, vex_doc_num, vessel_name, cargo_name FROM vex_header WHERE doc_status = 'Approved' LIMIT 2")
-    vexs = cur.fetchall()
-
-    # Create EU entries for VEX operations
-    for vex in vexs:
-        base_time = datetime.now() + timedelta(days=eu_count*4)
-        start = base_time + timedelta(hours=10)
-        end = start + timedelta(hours=6)
-
-        # Mobile crane for VEX export
-        cur.execute("""
-            INSERT INTO eu_lines (source_type, source_id, source_display, equipment_name, operator_name,
-                                  cargo_name, operation_type, quantity, quantity_uom,
-                                  start_time, end_time, entry_date, created_by, created_date, is_billed)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-        """, ['VEX', vex['id'], f"{vex['vex_doc_num']} - {vex['vessel_name']}",
-              'Mobile Crane', 'Operator D', vex['cargo_name'] or 'Coal Export', 'Export Loading',
-              8000, 'MT', start.strftime('%Y-%m-%dT%H:%M'), end.strftime('%Y-%m-%dT%H:%M'),
-              base_time.strftime('%Y-%m-%d'), 'admin', datetime.now().strftime('%Y-%m-%d'), 0])
-        eu_count += 1
-
     conn.commit()
     conn.close()
-    print(f"[OK] Populated {eu_count} Equipment Utilization (EU) records for billing (VCN, LDUD, MBC, VEX)")
+    print(f"[OK] Populated {eu_count} Equipment Utilization (EU) records for billing (VCN, LDUD, MBC)")
 
 
 def link_service_types_to_gst():
@@ -1242,14 +1160,12 @@ def main():
     populate_mbc_master()
     populate_port_berths()
     populate_conveyor_routes()
-    populate_vex_doc_series()
 
     print("\nPopulating Transaction Modules...")
     populate_vessels()
     populate_vcn_records()
     populate_ldud_records()
     populate_mbc_records()
-    populate_vex_records()
     populate_eu_records()
 
     print("\nPopulating Finance Modules...")
