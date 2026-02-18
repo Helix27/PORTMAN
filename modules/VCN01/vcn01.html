@@ -422,14 +422,43 @@
 
     async function openDetailsModal(data) {
         const vcnId = data.id;
+        const operationType = data.operation_type || 'Import';
         currentVcnId = vcnId;
 
         // Set modal title
-        document.getElementById('modalTitle').textContent = `Details for ${data.vcn_doc_num || 'VCN'}`;
+        document.getElementById('modalTitle').textContent = `Details for ${data.vcn_doc_num || 'VCN'} (${operationType})`;
 
         // Clear previous content
         const modalBody = document.getElementById('modalSubTables');
         modalBody.innerHTML = '';
+
+        // Build cargo section based on operation type
+        let cargoSection = '';
+        if (operationType === 'Export') {
+            cargoSection = `
+            <div class="sub-section">
+                <div class="sub-section-header">
+                    <span>Export Cargo Declaration</span>
+                    <div class="sub-section-actions">
+                        ${(permissions.can_edit || permissions.can_add) ? `<button class="btn-sub-add" onclick="addSubRow('export_cargo', ${vcnId})">+ Add</button>` : ''}
+                        ${(permissions.can_edit || permissions.can_add) ? `<button class="btn-sub-save" onclick="saveSubTable('export_cargo', ${vcnId})">Save</button>` : ''}
+                    </div>
+                </div>
+                <div class="sub-section-content"><div id="export-cargo-table-${vcnId}" class="sub-tabulator"></div></div>
+            </div>`;
+        } else {
+            cargoSection = `
+            <div class="sub-section">
+                <div class="sub-section-header">
+                    <span>Cargo Declaration</span>
+                    <div class="sub-section-actions">
+                        ${(permissions.can_edit || permissions.can_add) ? `<button class="btn-sub-add" onclick="addSubRow('cargo', ${vcnId})">+ Add</button>` : ''}
+                        ${(permissions.can_edit || permissions.can_add) ? `<button class="btn-sub-save" onclick="saveSubTable('cargo', ${vcnId})">Save</button>` : ''}
+                    </div>
+                </div>
+                <div class="sub-section-content"><div id="cargo-table-${vcnId}" class="sub-tabulator"></div></div>
+            </div>`;
+        }
 
         // Create the sub-table container
         const subContainer = document.createElement('div');
@@ -455,16 +484,7 @@
                 </div>
                 <div class="sub-section-content"><div id="delays-table-${vcnId}" class="sub-tabulator"></div></div>
             </div>
-            <div class="sub-section">
-                <div class="sub-section-header">
-                    <span>Cargo Declaration</span>
-                    <div class="sub-section-actions">
-                        ${(permissions.can_edit || permissions.can_add) ? `<button class="btn-sub-add" onclick="addSubRow('cargo', ${vcnId})">+ Add</button>` : ''}
-                        ${(permissions.can_edit || permissions.can_add) ? `<button class="btn-sub-save" onclick="saveSubTable('cargo', ${vcnId})">Save</button>` : ''}
-                    </div>
-                </div>
-                <div class="sub-section-content"><div id="cargo-table-${vcnId}" class="sub-tabulator"></div></div>
-            </div>
+            ${cargoSection}
             <div class="sub-section">
                 <div class="sub-section-header">
                     <span>Stowage Plan</span>
@@ -485,7 +505,7 @@
 
         // Initialize sub-tables
         subTables[vcnId] = {};
-        await initSubTables(vcnId);
+        await initSubTables(vcnId, operationType);
     }
 
     function closeDetailsModal() {
@@ -587,7 +607,7 @@
         return input;
     };
 
-    async function initSubTables(vcnId) {
+    async function initSubTables(vcnId, operationType = 'Import') {
         const canEdit = permissions.can_edit || permissions.can_add;
         const isDark = localStorage.getItem('theme') === 'dark';
 
@@ -661,42 +681,73 @@
         const customerOptions = {};
         customers.forEach(c => { customerOptions[c] = c; });
 
-        // Cargo table (updated with BL Quantity, Quantity UOM, and Customer)
-        subTables[vcnId].cargo = new Tabulator(`#cargo-table-${vcnId}`, {
-            layout: "fitColumns",
-            height: 150,
-            ajaxURL: `/api/module/VCN01/cargo/${vcnId}`,
-            columns: [
-                {title: "IGM Number", field: "igm_number", widthGrow: 1, editor: canEdit ? "input" : false},
-                {title: "IGM Manual No", field: "igm_manual_number", widthGrow: 1, editor: canEdit ? "input" : false},
-                {title: "IGM Date", field: "igm_date", widthGrow: 1, editor: canEdit ? dateEditor : false},
-                {title: "Cargo Name", field: "cargo_name", widthGrow: 1, editor: canEdit ? "list" : false,
-                    editorParams: {values: cargoOptions, autocomplete: true, allowEmpty: true}
-                },
-                {title: "Customer", field: "customer_name", widthGrow: 1, editor: canEdit ? "list" : false,
-                    editorParams: {values: customerOptions, autocomplete: true, allowEmpty: true}
-                },
-                {title: "BL No", field: "bl_no", widthGrow: 1, editor: canEdit ? "input" : false},
-                {title: "BL Date", field: "bl_date", widthGrow: 1, editor: canEdit ? dateEditor : false},
-                {title: "BL Quantity", field: "bl_quantity", widthGrow: 1, editor: canEdit ? "number" : false, hozAlign: "right",
-                    editorParams: {min: 0, step: 0.01}
-                },
-                {title: "Quantity UOM", field: "quantity_uom", widthGrow: 1, editor: canEdit ? "list" : false,
-                    editorParams: {values: uomOptions, autocomplete: true, allowEmpty: true}
-                },
-                canEdit ? {title: "", field: "actions", formatter: deleteButtonFormatter, width: 60, widthGrow: 0, hozAlign: "center", headerSort: false,
-                    cellClick: function(e, cell) { deleteSubRow('cargo', cell.getRow().getData().id, vcnId); }
-                } : null
-            ].filter(Boolean)
-        });
-        if (isDark) document.querySelector(`#cargo-table-${vcnId}`).classList.add('tabulator-dark');
+        // Cargo table: import cargo or export cargo based on operation type
+        if (operationType === 'Export') {
+            subTables[vcnId].export_cargo = new Tabulator(`#export-cargo-table-${vcnId}`, {
+                layout: "fitColumns",
+                height: 150,
+                ajaxURL: `/api/module/VCN01/export_cargo/${vcnId}`,
+                columns: [
+                    {title: "EGM/Shipping Bill No", field: "egm_shipping_bill_number", widthGrow: 1, editor: canEdit ? "input" : false},
+                    {title: "EGM/Shipping Bill Date", field: "egm_shipping_bill_date", widthGrow: 1, editor: canEdit ? dateEditor : false},
+                    {title: "Cargo Name", field: "cargo_name", widthGrow: 1, editor: canEdit ? "list" : false,
+                        editorParams: {values: cargoOptions, autocomplete: true, allowEmpty: true}
+                    },
+                    {title: "Customer", field: "customer_name", widthGrow: 1, editor: canEdit ? "list" : false,
+                        editorParams: {values: customerOptions, autocomplete: true, allowEmpty: true}
+                    },
+                    {title: "BL No", field: "bl_no", widthGrow: 1, editor: canEdit ? "input" : false},
+                    {title: "BL Date", field: "bl_date", widthGrow: 1, editor: canEdit ? dateEditor : false},
+                    {title: "BL Quantity", field: "bl_quantity", widthGrow: 1, editor: canEdit ? "number" : false, hozAlign: "right",
+                        editorParams: {min: 0, step: 0.01}
+                    },
+                    {title: "Quantity UOM", field: "quantity_uom", widthGrow: 1, editor: canEdit ? "list" : false,
+                        editorParams: {values: uomOptions, autocomplete: true, allowEmpty: true}
+                    },
+                    canEdit ? {title: "", field: "actions", formatter: deleteButtonFormatter, width: 60, widthGrow: 0, hozAlign: "center", headerSort: false,
+                        cellClick: function(e, cell) { deleteSubRow('export_cargo', cell.getRow().getData().id, vcnId); }
+                    } : null
+                ].filter(Boolean)
+            });
+            if (isDark) document.querySelector(`#export-cargo-table-${vcnId}`).classList.add('tabulator-dark');
+        } else {
+            subTables[vcnId].cargo = new Tabulator(`#cargo-table-${vcnId}`, {
+                layout: "fitColumns",
+                height: 150,
+                ajaxURL: `/api/module/VCN01/cargo/${vcnId}`,
+                columns: [
+                    {title: "IGM Number", field: "igm_number", widthGrow: 1, editor: canEdit ? "input" : false},
+                    {title: "IGM Manual No", field: "igm_manual_number", widthGrow: 1, editor: canEdit ? "input" : false},
+                    {title: "IGM Date", field: "igm_date", widthGrow: 1, editor: canEdit ? dateEditor : false},
+                    {title: "Cargo Name", field: "cargo_name", widthGrow: 1, editor: canEdit ? "list" : false,
+                        editorParams: {values: cargoOptions, autocomplete: true, allowEmpty: true}
+                    },
+                    {title: "Customer", field: "customer_name", widthGrow: 1, editor: canEdit ? "list" : false,
+                        editorParams: {values: customerOptions, autocomplete: true, allowEmpty: true}
+                    },
+                    {title: "BL No", field: "bl_no", widthGrow: 1, editor: canEdit ? "input" : false},
+                    {title: "BL Date", field: "bl_date", widthGrow: 1, editor: canEdit ? dateEditor : false},
+                    {title: "BL Quantity", field: "bl_quantity", widthGrow: 1, editor: canEdit ? "number" : false, hozAlign: "right",
+                        editorParams: {min: 0, step: 0.01}
+                    },
+                    {title: "Quantity UOM", field: "quantity_uom", widthGrow: 1, editor: canEdit ? "list" : false,
+                        editorParams: {values: uomOptions, autocomplete: true, allowEmpty: true}
+                    },
+                    canEdit ? {title: "", field: "actions", formatter: deleteButtonFormatter, width: 60, widthGrow: 0, hozAlign: "center", headerSort: false,
+                        cellClick: function(e, cell) { deleteSubRow('cargo', cell.getRow().getData().id, vcnId); }
+                    } : null
+                ].filter(Boolean)
+            });
+            if (isDark) document.querySelector(`#cargo-table-${vcnId}`).classList.add('tabulator-dark');
+        }
 
         // Hold options
         const holdOptions = {};
         holds.forEach(h => { holdOptions[h] = h; });
 
         // Fetch cargo names for this specific VCN for stowage plan dropdown
-        const vcnCargoRes = await fetch(`/api/module/VCN01/cargo_names/${vcnId}`);
+        const cargoNamesEndpoint = operationType === 'Export' ? 'export_cargo_names' : 'cargo_names';
+        const vcnCargoRes = await fetch(`/api/module/VCN01/${cargoNamesEndpoint}/${vcnId}`);
         const vcnCargoNames = await vcnCargoRes.json();
         const vcnCargoOptions = {};
         vcnCargoNames.forEach(c => { vcnCargoOptions[c] = c; });
@@ -796,7 +847,7 @@
         }
 
         // Update stowage totals after saving cargo or stowage
-        if (type === 'cargo' || type === 'stowage') {
+        if (type === 'cargo' || type === 'export_cargo' || type === 'stowage') {
             updateStowageTotals(vcnId);
         }
 
@@ -817,7 +868,7 @@
             if (row) row.delete();
         }
         // Update totals after deleting stowage or cargo
-        if (type === 'stowage' || type === 'cargo') {
+        if (type === 'stowage' || type === 'cargo' || type === 'export_cargo') {
             updateStowageTotals(vcnId);
         }
     }

@@ -148,6 +148,35 @@ def delete_cargo():
     model.delete_cargo_declaration(request.json.get('id'))
     return jsonify({'success': True})
 
+# Export Cargo Declaration endpoints
+@bp.route('/api/module/VCN01/export_cargo/<int:vcn_id>')
+@login_required
+def get_export_cargo(vcn_id):
+    return jsonify(model.get_export_cargo_declarations(vcn_id))
+
+@bp.route('/api/module/VCN01/export_cargo/save', methods=['POST'])
+@login_required
+def save_export_cargo():
+    perms = get_perms()
+    if not perms.get('can_add') and not perms.get('can_edit'):
+        return jsonify({'error': 'No permission'}), 403
+    row_id = model.save_export_cargo_declaration(request.json)
+    return jsonify({'success': True, 'id': row_id})
+
+@bp.route('/api/module/VCN01/export_cargo/delete', methods=['POST'])
+@login_required
+def delete_export_cargo():
+    perms = get_perms()
+    if not perms.get('can_delete'):
+        return jsonify({'error': 'No permission to delete'}), 403
+    model.delete_export_cargo_declaration(request.json.get('id'))
+    return jsonify({'success': True})
+
+@bp.route('/api/module/VCN01/export_cargo_names/<int:vcn_id>')
+@login_required
+def get_export_cargo_names(vcn_id):
+    return jsonify(model.get_export_cargo_names_for_vcn(vcn_id))
+
 # Get cargo names for a specific VCN (for stowage plan dropdown)
 @bp.route('/api/module/VCN01/cargo_names/<int:vcn_id>')
 @login_required
@@ -183,7 +212,20 @@ def delete_stowage():
 @bp.route('/api/module/VCN01/stowage/total/<int:vcn_id>')
 @login_required
 def get_stowage_total(vcn_id):
+    # Check operation_type to determine which cargo total to use
+    conn = model.get_db()
+    cur = model.get_cursor(conn)
+    cur.execute('SELECT operation_type FROM vcn_header WHERE id=%s', (vcn_id,))
+    row = cur.fetchone()
+    conn.close()
+    op_type = row['operation_type'] if row else None
+
+    if op_type == 'Export':
+        cargo_total = model.get_export_cargo_total_quantity(vcn_id)
+    else:
+        cargo_total = model.get_cargo_total_quantity(vcn_id)
+
     return jsonify({
         'stowage_total': model.get_stowage_total_quantity(vcn_id),
-        'igm_total': model.get_cargo_total_quantity(vcn_id)
+        'igm_total': cargo_total
     })

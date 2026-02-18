@@ -161,6 +161,62 @@ def save_cargo_declaration(data):
     conn.close()
     return row_id
 
+# Export Cargo Declaration sub-table operations
+def get_export_cargo_declarations(vcn_id):
+    conn = get_db()
+    cur = get_cursor(conn)
+    cur.execute('SELECT * FROM vcn_export_cargo_declaration WHERE vcn_id=%s ORDER BY id DESC', (vcn_id,))
+    rows = cur.fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
+
+def save_export_cargo_declaration(data):
+    conn = get_db()
+    cur = get_cursor(conn)
+    if data.get('id'):
+        cur.execute('''UPDATE vcn_export_cargo_declaration SET egm_shipping_bill_number=%s, egm_shipping_bill_date=%s,
+                       cargo_name=%s, customer_name=%s, bl_no=%s, bl_date=%s, bl_quantity=%s, quantity_uom=%s WHERE id=%s''',
+                   [data.get('egm_shipping_bill_number'), data.get('egm_shipping_bill_date'),
+                    data.get('cargo_name'), data.get('customer_name'),
+                    data.get('bl_no'), data.get('bl_date'), data.get('bl_quantity'),
+                    data.get('quantity_uom'), data['id']])
+        row_id = data['id']
+    else:
+        cur.execute('''INSERT INTO vcn_export_cargo_declaration (vcn_id, egm_shipping_bill_number, egm_shipping_bill_date,
+                       cargo_name, customer_name, bl_no, bl_date, bl_quantity, quantity_uom)
+                       VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s) RETURNING id''',
+                   [data['vcn_id'], data.get('egm_shipping_bill_number'), data.get('egm_shipping_bill_date'),
+                    data.get('cargo_name'), data.get('customer_name'),
+                    data.get('bl_no'), data.get('bl_date'), data.get('bl_quantity'),
+                    data.get('quantity_uom')])
+        row_id = cur.fetchone()['id']
+    conn.commit()
+    conn.close()
+    return row_id
+
+def delete_export_cargo_declaration(row_id):
+    conn = get_db()
+    cur = get_cursor(conn)
+    cur.execute('DELETE FROM vcn_export_cargo_declaration WHERE id=%s', (row_id,))
+    conn.commit()
+    conn.close()
+
+def get_export_cargo_names_for_vcn(vcn_id):
+    conn = get_db()
+    cur = get_cursor(conn)
+    cur.execute('SELECT DISTINCT cargo_name FROM vcn_export_cargo_declaration WHERE vcn_id=%s AND cargo_name IS NOT NULL', (vcn_id,))
+    rows = cur.fetchall()
+    conn.close()
+    return [r['cargo_name'] for r in rows if r['cargo_name']]
+
+def get_export_cargo_total_quantity(vcn_id):
+    conn = get_db()
+    cur = get_cursor(conn)
+    cur.execute('SELECT SUM(bl_quantity) FROM vcn_export_cargo_declaration WHERE vcn_id=%s', (vcn_id,))
+    result = cur.fetchone()['sum']
+    conn.close()
+    return result or 0
+
 def delete_cargo_declaration(row_id):
     conn = get_db()
     cur = get_cursor(conn)
@@ -199,10 +255,17 @@ def save_stowage_plan(data):
     conn = get_db()
     cur = get_cursor(conn)
 
-    # Validate that hatchwise quantity doesn't exceed IGM total
+    # Validate that hatchwise quantity doesn't exceed cargo BL total
     vcn_id = data.get('vcn_id')
     if vcn_id:
-        igm_total = get_cargo_total_quantity(vcn_id)
+        # Check operation_type to use correct cargo total
+        cur.execute('SELECT operation_type FROM vcn_header WHERE id=%s', (vcn_id,))
+        header_row = cur.fetchone()
+        op_type = header_row['operation_type'] if header_row else None
+        if op_type == 'Export':
+            igm_total = get_export_cargo_total_quantity(vcn_id)
+        else:
+            igm_total = get_cargo_total_quantity(vcn_id)
         current_stowage_total = get_stowage_total_quantity(vcn_id)
         new_quantity = data.get('hatchwise_quantity') or 0
 
