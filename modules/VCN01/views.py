@@ -54,7 +54,7 @@ def save():
 
     config = get_module_config('VCN01')
     user_id = session.get('user_id')
-    is_approver = str(config.get('approver_id')) == str(user_id)
+    is_approver = str(config.get('approver_id', '')) == str(user_id) or session.get('is_admin')
 
     if is_approver:
         pass

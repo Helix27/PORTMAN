@@ -322,8 +322,9 @@
 
     function initTable() {
         const isApprover = moduleConfig.approver_id == '{{ session.user_id }}';
+        const isAdmin = {{ 'true' if session.get('is_admin') else 'false' }};
         const needsApproval = moduleConfig.approval_add || moduleConfig.approval_edit;
-        const canEditStatus = isApprover || !needsApproval;
+        const canEditStatus = isApprover || isAdmin || !needsApproval;
         const canEdit = permissions.can_edit || permissions.can_add;
 
         const vesselOptions = {};
@@ -384,8 +385,8 @@
             {title: "Doc Date", field: "doc_date", width: 100},
             {title: "Created By", field: "created_by", width: 90},
             {title: "Doc Status", field: "doc_status",
-                editor: (canEdit && canEditStatus) ? "select" : false,
-                editorParams: {values: {"Pending": "Pending", "Approved": "Approved", "Rejected": "Rejected"}},
+                editor: (canEdit && canEditStatus) ? "list" : false,
+                editorParams: {values: ["Pending", "Approved", "Rejected"]},
                 width: 90,
                 formatter: function(cell) {
                     const val = cell.getValue();
