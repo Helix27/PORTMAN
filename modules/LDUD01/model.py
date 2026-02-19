@@ -1,5 +1,12 @@
 from database import get_db, get_cursor
 
+def _clean_empty(data):
+    """Convert empty strings to None so timestamp/date columns get NULL."""
+    for k in data:
+        if data[k] == '':
+            data[k] = None
+    return data
+
 def get_next_doc_num():
     conn = get_db()
     cur = get_cursor(conn)
@@ -69,6 +76,11 @@ def save_header(data):
     cur = get_cursor(conn)
     row_id = data.get('id')
 
+    # Convert empty strings to None so timestamp/date columns get NULL
+    for k in data:
+        if data[k] == '':
+            data[k] = None
+
     if row_id:
         cols = [k for k in data if k not in ['id', 'doc_num', 'vcn_display']]
         cur.execute(f"UPDATE ldud_header SET {', '.join([f'{c}=%s' for c in cols])} WHERE id=%s",
@@ -101,6 +113,7 @@ def get_delays(ldud_id):
     return [dict(r) for r in rows]
 
 def save_delay(data):
+    _clean_empty(data)
     conn = get_db()
     cur = get_cursor(conn)
 
@@ -165,6 +178,7 @@ def get_next_trip_number(ldud_id, barge_name):
     return (result or 0) + 1
 
 def save_barge_line(data):
+    _clean_empty(data)
     conn = get_db()
     cur = get_cursor(conn)
 
@@ -225,6 +239,7 @@ def get_anchorage(ldud_id):
     return [dict(r) for r in rows]
 
 def save_anchorage(data):
+    _clean_empty(data)
     conn = get_db()
     cur = get_cursor(conn)
     if data.get('id'):
@@ -265,6 +280,7 @@ def get_vessel_operations(ldud_id):
 
 
 def save_vessel_operation(data):
+    _clean_empty(data)
     conn = get_db()
     cur = get_cursor(conn)
     if data.get('id'):
@@ -303,6 +319,7 @@ def get_barge_cleaning(ldud_id):
 
 
 def save_barge_cleaning(data):
+    _clean_empty(data)
     conn = get_db()
     cur = get_cursor(conn)
     if data.get('id'):

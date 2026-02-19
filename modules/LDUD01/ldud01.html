@@ -312,17 +312,24 @@
         input.style.width = "100%";
         input.style.boxSizing = "border-box";
         input.style.padding = "4px";
+        var resolved = false;
+
+        function complete(val) {
+            if (resolved) return;
+            resolved = true;
+            success(val);
+        }
 
         onRendered(function() {
             input.focus();
             input.style.height = "100%";
         });
 
-        input.addEventListener("change", function() { success(input.value); });
-        input.addEventListener("blur", function() { success(input.value); });
+        input.addEventListener("change", function() { complete(input.value); });
+        input.addEventListener("blur", function() { complete(input.value); });
         input.addEventListener("keydown", function(e) {
-            if (e.key === "Enter") success(input.value);
-            if (e.key === "Escape") cancel();
+            if (e.key === "Enter") complete(input.value);
+            if (e.key === "Escape") { resolved = true; cancel(); }
         });
         return input;
     };
@@ -336,17 +343,24 @@
         input.style.width = "100%";
         input.style.boxSizing = "border-box";
         input.style.padding = "4px";
+        var resolved = false;
+
+        function complete(val) {
+            if (resolved) return;
+            resolved = true;
+            success(val);
+        }
 
         onRendered(function() {
             input.focus();
             input.style.height = "100%";
         });
 
-        input.addEventListener("change", function() { success(input.value); });
-        input.addEventListener("blur", function() { success(input.value); });
+        input.addEventListener("change", function() { complete(input.value); });
+        input.addEventListener("blur", function() { complete(input.value); });
         input.addEventListener("keydown", function(e) {
-            if (e.key === "Enter") success(input.value);
-            if (e.key === "Escape") cancel();
+            if (e.key === "Enter") complete(input.value);
+            if (e.key === "Escape") { resolved = true; cancel(); }
         });
         return input;
     };
@@ -1283,19 +1297,17 @@
             }
         }
 
-        let savedCount = 0;
-        for (const row of rows) {
+        const savePromises = rows.filter(r => r.getData().id).map(async (row) => {
             const d = row.getData();
-            if (d.id) {
-                const res = await fetch('/api/module/LDUD01/vessel_ops/save', {
-                    method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({...d, ldud_id: ldudId, end_time: null})
-                });
-                const result = await res.json();
-                if (result.success) savedCount++;
-            }
-        }
+            const res = await fetch('/api/module/LDUD01/vessel_ops/save', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({...d, ldud_id: ldudId, end_time: null})
+            });
+            return res.json();
+        });
+        const results = await Promise.all(savePromises);
+        const savedCount = results.filter(r => r.success).length;
         alert(`Saved ${savedCount} row(s)`);
     }
 
@@ -1392,30 +1404,30 @@
         if (!subTables[ldudId] || !subTables[ldudId][type]) return;
 
         const rows = subTables[ldudId][type].getRows();
-        let savedCount = 0;
-
-        for (const row of rows) {
+        const savePromises = rows.filter(r => r.getData().id).map(async (row) => {
             const data = row.getData();
-            if (data.id) {
-                const res = await fetch(`/api/module/LDUD01/${type}/save`, {
-                    method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({...data, ldud_id: ldudId})
-                });
-                const result = await res.json();
-                if (result.success) {
-                    savedCount++;
-                    // Update calculated fields for delays
-                    if (type === 'delays' && result.total_time_mins !== undefined) {
-                        row.update({total_time_mins: result.total_time_mins, total_time_hrs: result.total_time_hrs});
-                    }
-                    // Update trip number for barge lines
-                    if (type === 'barge_lines' && result.trip_number !== undefined) {
-                        row.update({trip_number: result.trip_number});
-                    }
+            const res = await fetch(`/api/module/LDUD01/${type}/save`, {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({...data, ldud_id: ldudId})
+            });
+            const result = await res.json();
+            return {row, result};
+        });
+
+        const results = await Promise.all(savePromises);
+        let savedCount = 0;
+        results.forEach(({row, result}) => {
+            if (result.success) {
+                savedCount++;
+                if (type === 'delays' && result.total_time_mins !== undefined) {
+                    row.update({total_time_mins: result.total_time_mins, total_time_hrs: result.total_time_hrs});
+                }
+                if (type === 'barge_lines' && result.trip_number !== undefined) {
+                    row.update({trip_number: result.trip_number});
                 }
             }
-        }
+        });
 
         alert(`Saved ${savedCount} row(s)`);
     }

@@ -1,5 +1,12 @@
 from database import get_db, get_cursor
 
+def _clean_empty(data):
+    """Convert empty strings to None so timestamp/date columns get NULL."""
+    for k in data:
+        if data[k] == '':
+            data[k] = None
+    return data
+
 def get_next_doc_num():
     conn = get_db()
     cur = get_cursor(conn)
@@ -29,6 +36,7 @@ def get_data(page=1, size=20):
     return [dict(r) for r in rows], total
 
 def save_header(data):
+    _clean_empty(data)
     conn = get_db()
     cur = get_cursor(conn)
     row_id = data.get('id')
@@ -65,6 +73,7 @@ def get_nominations(vcn_id):
     return [dict(r) for r in rows]
 
 def save_nomination(data):
+    _clean_empty(data)
     conn = get_db()
     cur = get_cursor(conn)
     if data.get('id'):
@@ -100,6 +109,7 @@ def get_delays(vcn_id):
     return [dict(r) for r in rows]
 
 def save_delay(data):
+    _clean_empty(data)
     conn = get_db()
     cur = get_cursor(conn)
     if data.get('id'):
@@ -140,6 +150,7 @@ def get_cargo_names_for_vcn(vcn_id):
     return [r['cargo_name'] for r in rows if r['cargo_name']]
 
 def save_cargo_declaration(data):
+    _clean_empty(data)
     conn = get_db()
     cur = get_cursor(conn)
     if data.get('id'):
@@ -171,6 +182,7 @@ def get_export_cargo_declarations(vcn_id):
     return [dict(r) for r in rows]
 
 def save_export_cargo_declaration(data):
+    _clean_empty(data)
     conn = get_db()
     cur = get_cursor(conn)
     if data.get('id'):
@@ -252,6 +264,7 @@ def get_stowage_total_quantity(vcn_id):
     return result or 0
 
 def save_stowage_plan(data):
+    _clean_empty(data)
     conn = get_db()
     cur = get_cursor(conn)
 
