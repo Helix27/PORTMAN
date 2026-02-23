@@ -124,7 +124,7 @@
         <div class="header-left">
             <img src="{{ url_for('static', filename='img/logopb.png') }}"
      alt="DPPL PMS"
-     style="height: 45px; margin-left: 20px; filter: drop-shadow(0 3px 6px rgba(0,0,0,0.35));">
+     style="height: 40px; margin-left: 20px; filter: drop-shadow(0 3px 6px rgba(0,0,0,0.35));">
 
             <span style="background: rgba(255,255,255,0.2); color: #fff; padding: 2px 8px; border-radius: 3px; font-size: 10px; font-weight: 600; letter-spacing: 0.5px;">BETA</span>
         </div>
@@ -478,8 +478,169 @@
         }
 
         // Initialize
-        
+
         renderRecent();
+
+        // ── Global date/time formatting helpers (DD-MM-YYYY HH:MM IST) ──
+        function formatDateTime(val) {
+            if (!val) return '';
+            // Parse directly from string - data is stored as naive IST datetimes
+            var s = String(val).replace(' ', 'T');
+            var parts = s.split('T');
+            if (parts.length < 2) return val;
+            var dateParts = parts[0].split('-');
+            if (dateParts.length !== 3) return val;
+            var timeParts = parts[1].split(':');
+            if (timeParts.length < 2) return val;
+            var dd = dateParts[2];
+            var mm = dateParts[1];
+            var yyyy = dateParts[0];
+            var hh = timeParts[0].padStart(2, '0');
+            var min = timeParts[1].padStart(2, '0');
+            return dd + '-' + mm + '-' + yyyy + ' ' + hh + ':' + min + ' IST';
+        }
+        function formatDate(val) {
+            if (!val) return '';
+            var parts = String(val).split('-');
+            if (parts.length === 3) return parts[2] + '-' + parts[1] + '-' + parts[0];
+            return val;
+        }
+        // Tabulator cell formatters for reuse
+        function datetimeCellFormatter(cell) { return formatDateTime(cell.getValue()); }
+        function dateCellFormatter(cell) { return formatDate(cell.getValue()); }
+
+        // ── Global Tabulator custom editors (text-based, DD-MM-YYYY HH:MM) ──
+
+        // Convert stored YYYY-MM-DDTHH:MM to display DD-MM-YYYY HH:MM
+        function _dbToDisplay(val) {
+            if (!val) return '';
+            var s = String(val).replace('T', ' ');
+            var parts = s.split(' ');
+            if (parts.length < 2) return '';
+            var d = parts[0].split('-');
+            var t = parts[1].split(':');
+            if (d.length !== 3 || t.length < 2) return '';
+            return d[2] + '-' + d[1] + '-' + d[0] + ' ' + t[0].padStart(2,'0') + ':' + t[1].padStart(2,'0');
+        }
+        // Convert display DD-MM-YYYY HH:MM back to YYYY-MM-DDTHH:MM for storage
+        function _displayToDb(val) {
+            if (!val) return '';
+            var s = String(val).trim();
+            // Expect DD-MM-YYYY HH:MM
+            var parts = s.split(' ');
+            if (parts.length < 2) return '';
+            var d = parts[0].split('-');
+            var t = parts[1].split(':');
+            if (d.length !== 3 || t.length < 2) return '';
+            var yyyy = d[2], mm = d[1], dd = d[0], hh = t[0], min = t[1];
+            if (yyyy.length !== 4 || isNaN(yyyy) || isNaN(mm) || isNaN(dd) || isNaN(hh) || isNaN(min)) return '';
+            return yyyy + '-' + mm.padStart(2,'0') + '-' + dd.padStart(2,'0') + 'T' + hh.padStart(2,'0') + ':' + min.padStart(2,'0');
+        }
+        // Convert stored YYYY-MM-DD to display DD-MM-YYYY
+        function _dbDateToDisplay(val) {
+            if (!val) return '';
+            var d = String(val).split('-');
+            if (d.length !== 3) return '';
+            return d[2] + '-' + d[1] + '-' + d[0];
+        }
+        // Convert display DD-MM-YYYY back to YYYY-MM-DD
+        function _displayDateToDb(val) {
+            if (!val) return '';
+            var d = String(val).trim().split('-');
+            if (d.length !== 3 || d[2].length !== 4) return '';
+            return d[2] + '-' + d[1].padStart(2,'0') + '-' + d[0].padStart(2,'0');
+        }
+
+        // Auto-format as user types: inserts dashes, space, colon for DD-MM-YYYY HH:MM
+        function _maskDatetime(input) {
+            input.addEventListener('input', function(e) {
+                var raw = input.value.replace(/[^\d]/g, '');
+                var out = '';
+                for (var i = 0; i < raw.length && i < 12; i++) {
+                    if (i === 2 || i === 4) out += '-';
+                    if (i === 8) out += ' ';
+                    if (i === 10) out += ':';
+                    out += raw[i];
+                }
+                input.value = out;
+            });
+        }
+        // Auto-format for DD-MM-YYYY
+        function _maskDate(input) {
+            input.addEventListener('input', function(e) {
+                var raw = input.value.replace(/[^\d]/g, '');
+                var out = '';
+                for (var i = 0; i < raw.length && i < 8; i++) {
+                    if (i === 2 || i === 4) out += '-';
+                    out += raw[i];
+                }
+                input.value = out;
+            });
+        }
+
+        var datetimeEditor = function(cell, onRendered, success, cancel) {
+            var cellValue = cell.getValue() || '';
+            var input = document.createElement("input");
+            input.type = "text";
+            input.placeholder = "DD-MM-YYYY HH:MM";
+            input.maxLength = 16;
+            input.value = _dbToDisplay(cellValue);
+            input.style.width = "100%";
+            input.style.boxSizing = "border-box";
+            input.style.padding = "4px";
+            input.style.fontFamily = "monospace";
+            input.style.fontSize = "12px";
+            var resolved = false;
+
+            _maskDatetime(input);
+
+            function complete() {
+                if (resolved) return;
+                resolved = true;
+                var dbVal = _displayToDb(input.value);
+                success(dbVal);
+            }
+
+            onRendered(function() { input.focus(); input.select(); input.style.height = "100%"; });
+            input.addEventListener("blur", function() { complete(); });
+            input.addEventListener("keydown", function(e) {
+                if (e.key === "Enter") complete();
+                if (e.key === "Escape") { resolved = true; cancel(); }
+            });
+            return input;
+        };
+
+        var dateEditor = function(cell, onRendered, success, cancel) {
+            var cellValue = cell.getValue() || '';
+            var input = document.createElement("input");
+            input.type = "text";
+            input.placeholder = "DD-MM-YYYY";
+            input.maxLength = 10;
+            input.value = _dbDateToDisplay(cellValue);
+            input.style.width = "100%";
+            input.style.boxSizing = "border-box";
+            input.style.padding = "4px";
+            input.style.fontFamily = "monospace";
+            input.style.fontSize = "12px";
+            var resolved = false;
+
+            _maskDate(input);
+
+            function complete() {
+                if (resolved) return;
+                resolved = true;
+                var dbVal = _displayDateToDb(input.value);
+                success(dbVal);
+            }
+
+            onRendered(function() { input.focus(); input.select(); input.style.height = "100%"; });
+            input.addEventListener("blur", function() { complete(); });
+            input.addEventListener("keydown", function(e) {
+                if (e.key === "Enter") complete();
+                if (e.key === "Escape") { resolved = true; cancel(); }
+            });
+            return input;
+        };
     </script>
     {% block scripts %}{% endblock %}
 </body>

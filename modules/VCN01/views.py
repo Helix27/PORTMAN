@@ -209,6 +209,11 @@ def delete_stowage():
     model.delete_stowage_plan(request.json.get('id'))
     return jsonify({'success': True})
 
+@bp.route('/api/module/VCN01/export_loading_totals/<int:vcn_id>')
+@login_required
+def get_export_loading_totals(vcn_id):
+    return jsonify(model.get_export_loading_totals(vcn_id))
+
 @bp.route('/api/module/VCN01/stowage/total/<int:vcn_id>')
 @login_required
 def get_stowage_total(vcn_id):

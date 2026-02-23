@@ -249,7 +249,7 @@ def get_cargo_total_quantity(vcn_id):
 def get_stowage_plan(vcn_id):
     conn = get_db()
     cur = get_cursor(conn)
-    cur.execute('SELECT * FROM vcn_stowage_plan WHERE vcn_id=%s ORDER BY id DESC', (vcn_id,))
+    cur.execute('SELECT * FROM vcn_stowage_plan WHERE vcn_id=%s ORDER BY id ASC', (vcn_id,))
     rows = cur.fetchall()
     conn.close()
     return [dict(r) for r in rows]
@@ -312,3 +312,16 @@ def delete_stowage_plan(row_id):
     cur.execute('DELETE FROM vcn_stowage_plan WHERE id=%s', (row_id,))
     conn.commit()
     conn.close()
+
+def get_export_loading_totals(vcn_id):
+    """Get loading totals from LDUD MV Anchorage Loading for a VCN, grouped by cargo_name for BL quantity"""
+    conn = get_db()
+    cur = get_cursor(conn)
+    cur.execute('''SELECT vo.cargo_name, SUM(vo.quantity) as total_qty
+                   FROM ldud_vessel_operations vo
+                   JOIN ldud_header h ON vo.ldud_id = h.id
+                   WHERE h.vcn_id=%s AND vo.cargo_name IS NOT NULL
+                   GROUP BY vo.cargo_name''', (vcn_id,))
+    rows = cur.fetchall()
+    conn.close()
+    return {r['cargo_name']: float(r['total_qty'] or 0) for r in rows}

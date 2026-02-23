@@ -252,7 +252,7 @@
     let cargoTypes = [];
     let docSeries = [];
     let defaultDocSeries = '';
-    let dischargeTypes = [];
+    let dischargeTypes = ['Full Discharge', 'Partial Discharge'];
     let runTypes = [];
     let delayTypes = [];
     let cargoNames = [];
@@ -287,14 +287,13 @@
     }
 
     async function loadMasterData() {
-        const [vesselsRes, agentsRes, ieRes, custRes, cargoRes, dsRes, todRes, rtRes, dmRes, cnRes, uomRes, holdRes, portRes, configRes] = await Promise.all([
+        const [vesselsRes, agentsRes, ieRes, custRes, cargoRes, dsRes, rtRes, dmRes, cnRes, uomRes, holdRes, portRes, configRes] = await Promise.all([
             fetch('/api/module/VCN01/vessels'),
             fetch('/api/module/VAM01/all'),
             fetch('/api/module/VIEM01/all'),
             fetch('/api/module/VCUM01/all'),
             fetch('/api/module/VCG01/types'),
             fetch('/api/module/VCDS01/all'),
-            fetch('/api/module/VTOD01/all'),
             fetch('/api/module/VRT01/all'),
             fetch('/api/module/VDM01/all'),
             fetch('/api/module/VCG01/names'),
@@ -312,7 +311,6 @@
         docSeries = dsData.map(d => d.name);
         const defaultDs = dsData.find(d => d.is_default);
         defaultDocSeries = defaultDs ? defaultDs.name : '';
-        dischargeTypes = await todRes.json();
         runTypes = await rtRes.json();
         delayTypes = await dmRes.json();
         cargoNames = await cnRes.json();
@@ -371,7 +369,7 @@
             {title: "Vessel Name", field: "vessel_name", width: 130},
             {title: "Vessel Agent", field: "vessel_agent_name", editor: canEdit ? "list" : false,
                 editorParams: {values: vesselAgents, autocomplete: true, allowEmpty: true}, width: 120},
-            {title: "Agent", field: "importer_exporter_name", editor: canEdit ? "list" : false,
+            {title: "Stevedore", field: "importer_exporter_name", editor: canEdit ? "list" : false,
                 editorParams: {values: importerExporters, autocomplete: true, allowEmpty: true}, width: 130},
             {title: "Customer", field: "customer_name", editor: canEdit ? "list" : false,
                 editorParams: {values: customers, autocomplete: true, allowEmpty: true}, width: 120},
@@ -380,12 +378,12 @@
             {title: "Doc Series", field: "vcn_doc_series", editor: canEdit ? "list" : false,
                 editorParams: {values: docSeries, autocomplete: true, allowEmpty: true}, width: 100},
             {title: "Discharge Type", field: "type_of_discharge", editor: canEdit ? "list" : false,
-                editorParams: {values: dischargeTypes, autocomplete: true, allowEmpty: true}, width: 110},
+                editorParams: {values: {"Full Discharge": "Full Discharge", "Partial Discharge": "Partial Discharge"}, autocomplete: false, allowEmpty: true}, width: 130},
             {title: "Load Port", field: "load_port", editor: canEdit ? "list" : false,
                 editorParams: {values: portOptions, autocomplete: true, allowEmpty: true}, width: 110},
             {title: "Discharge Port", field: "discharge_port", editor: canEdit ? "list" : false,
                 editorParams: {values: portOptions, autocomplete: true, allowEmpty: true}, width: 110},
-            {title: "Doc Date", field: "doc_date", width: 100},
+            {title: "Doc Date", field: "doc_date", width: 120, formatter: dateCellFormatter},
             {title: "Created By", field: "created_by", width: 90},
             {title: "Doc Status", field: "doc_status",
                 editor: (canEdit && canEditStatus) ? "list" : false,
@@ -478,17 +476,8 @@
                 </div>
                 <div class="sub-section-content"><div id="nominations-table-${vcnId}" class="sub-tabulator"></div></div>
             </div>
-            <div class="sub-section">
-                <div class="sub-section-header">
-                    <span>Anchoring Delays</span>
-                    <div class="sub-section-actions">
-                        ${(permissions.can_edit || permissions.can_add) ? `<button class="btn-sub-add" onclick="addSubRow('delays', ${vcnId})">+ Add</button>` : ''}
-                        ${(permissions.can_edit || permissions.can_add) ? `<button class="btn-sub-save" onclick="saveSubTable('delays', ${vcnId})">Save</button>` : ''}
-                    </div>
-                </div>
-                <div class="sub-section-content"><div id="delays-table-${vcnId}" class="sub-tabulator"></div></div>
-            </div>
             ${cargoSection}
+            ${operationType !== 'Export' ? `
             <div class="sub-section">
                 <div class="sub-section-header">
                     <span>Stowage Plan</span>
@@ -499,6 +488,16 @@
                     </div>
                 </div>
                 <div class="sub-section-content"><div id="stowage-table-${vcnId}" class="sub-tabulator"></div></div>
+            </div>` : ''}
+            <div class="sub-section">
+                <div class="sub-section-header">
+                    <span>Pre Berthing/Anchoring Delays</span>
+                    <div class="sub-section-actions">
+                        ${(permissions.can_edit || permissions.can_add) ? `<button class="btn-sub-add" onclick="addSubRow('delays', ${vcnId})">+ Add</button>` : ''}
+                        ${(permissions.can_edit || permissions.can_add) ? `<button class="btn-sub-save" onclick="saveSubTable('delays', ${vcnId})">Save</button>` : ''}
+                    </div>
+                </div>
+                <div class="sub-section-content"><div id="delays-table-${vcnId}" class="sub-tabulator"></div></div>
             </div>`;
 
         // Append to modal body
@@ -549,69 +548,7 @@
     });
 
 
-    // Custom datetime editor using HTML5 datetime-local input
-    var datetimeEditor = function(cell, onRendered, success, cancel) {
-        var cellValue = cell.getValue() || '';
-        var input = document.createElement("input");
-        input.type = "datetime-local";
-        input.value = cellValue;
-        input.style.width = "100%";
-        input.style.boxSizing = "border-box";
-        input.style.padding = "4px";
-        var resolved = false;
-
-        function complete(val) {
-            if (resolved) return;
-            resolved = true;
-            success(val);
-        }
-
-        onRendered(function() {
-            input.focus();
-            input.style.height = "100%";
-        });
-
-        input.addEventListener("change", function() { complete(input.value); });
-        input.addEventListener("blur", function() { complete(input.value); });
-        input.addEventListener("keydown", function(e) {
-            if (e.key === "Enter") complete(input.value);
-            if (e.key === "Escape") { resolved = true; cancel(); }
-        });
-
-        return input;
-    };
-
-    // Custom date editor using HTML5 date input
-    var dateEditor = function(cell, onRendered, success, cancel) {
-        var cellValue = cell.getValue() || '';
-        var input = document.createElement("input");
-        input.type = "date";
-        input.value = cellValue;
-        input.style.width = "100%";
-        input.style.boxSizing = "border-box";
-        input.style.padding = "4px";
-        var resolved = false;
-
-        function complete(val) {
-            if (resolved) return;
-            resolved = true;
-            success(val);
-        }
-
-        onRendered(function() {
-            input.focus();
-            input.style.height = "100%";
-        });
-
-        input.addEventListener("change", function() { complete(input.value); });
-        input.addEventListener("blur", function() { complete(input.value); });
-        input.addEventListener("keydown", function(e) {
-            if (e.key === "Enter") complete(input.value);
-            if (e.key === "Escape") { resolved = true; cancel(); }
-        });
-
-        return input;
-    };
+    // datetimeEditor and dateEditor are now global (defined in base.html)
 
     async function initSubTables(vcnId, operationType = 'Import') {
         const canEdit = permissions.can_edit || permissions.can_add;
@@ -636,10 +573,10 @@
             ajaxURL: `/api/module/VCN01/nominations/${vcnId}`,
             columns: [
                 {title: "ETA", field: "eta", widthGrow: 1, editor: canEdit ? datetimeEditor : false,
-                    formatter: function(cell) { return cell.getValue() ? cell.getValue().replace('T', ' ') : ''; }
+                    formatter: datetimeCellFormatter
                 },
                 {title: "ETD", field: "etd", widthGrow: 1, editor: canEdit ? datetimeEditor : false,
-                    formatter: function(cell) { return cell.getValue() ? cell.getValue().replace('T', ' ') : ''; }
+                    formatter: datetimeCellFormatter
                 },
                 {title: "Vessel Run Type", field: "vessel_run_type", widthGrow: 1, editor: canEdit ? "list" : false,
                     editorParams: {values: runTypeOptions, autocomplete: true, allowEmpty: true}
@@ -667,10 +604,10 @@
                     editorParams: {values: delayOptions, autocomplete: true, allowEmpty: true}
                 },
                 {title: "Start Time", field: "delay_start", widthGrow: 1, editor: canEdit ? datetimeEditor : false,
-                    formatter: function(cell) { return cell.getValue() ? cell.getValue().replace('T', ' ') : ''; }
+                    formatter: datetimeCellFormatter
                 },
                 {title: "End Time", field: "delay_end", widthGrow: 1, editor: canEdit ? datetimeEditor : false,
-                    formatter: function(cell) { return cell.getValue() ? cell.getValue().replace('T', ' ') : ''; }
+                    formatter: datetimeCellFormatter
                 },
                 canEdit ? {title: "", field: "actions", formatter: deleteButtonFormatter, width: 60, widthGrow: 0, hozAlign: "center", headerSort: false,
                     cellClick: function(e, cell) { deleteSubRow('delays', cell.getRow().getData().id, vcnId); }
@@ -693,9 +630,10 @@
                 layout: "fitColumns",
                 height: 150,
                 ajaxURL: `/api/module/VCN01/export_cargo/${vcnId}`,
+                dataLoaded: function() { updateExportCargoBLQuantities(vcnId); },
                 columns: [
                     {title: "EGM/Shipping Bill No", field: "egm_shipping_bill_number", widthGrow: 1, editor: canEdit ? "input" : false},
-                    {title: "EGM/Shipping Bill Date", field: "egm_shipping_bill_date", widthGrow: 1, editor: canEdit ? dateEditor : false},
+                    {title: "EGM/Shipping Bill Date", field: "egm_shipping_bill_date", widthGrow: 1, editor: canEdit ? dateEditor : false, formatter: dateCellFormatter},
                     {title: "Cargo Name", field: "cargo_name", widthGrow: 1, editor: canEdit ? "list" : false,
                         editorParams: {values: cargoOptions, autocomplete: true, allowEmpty: true}
                     },
@@ -703,9 +641,12 @@
                         editorParams: {values: customerOptions, autocomplete: true, allowEmpty: true}
                     },
                     {title: "BL No", field: "bl_no", widthGrow: 1, editor: canEdit ? "input" : false},
-                    {title: "BL Date", field: "bl_date", widthGrow: 1, editor: canEdit ? dateEditor : false},
-                    {title: "BL Quantity", field: "bl_quantity", widthGrow: 1, editor: canEdit ? "number" : false, hozAlign: "right",
-                        editorParams: {min: 0, step: 0.01}
+                    {title: "BL Date", field: "bl_date", widthGrow: 1, editor: canEdit ? dateEditor : false, formatter: dateCellFormatter},
+                    {title: "BL Quantity", field: "bl_quantity", widthGrow: 1, editor: false, hozAlign: "right",
+                        formatter: function(cell) {
+                            const val = cell.getValue();
+                            return val != null ? parseFloat(val).toFixed(2) : '<span style="color:#999;font-style:italic">auto</span>';
+                        }
                     },
                     {title: "Quantity UOM", field: "quantity_uom", widthGrow: 1, editor: canEdit ? "list" : false,
                         editorParams: {values: uomOptions, autocomplete: true, allowEmpty: true}
@@ -722,9 +663,8 @@
                 height: 150,
                 ajaxURL: `/api/module/VCN01/cargo/${vcnId}`,
                 columns: [
-                    {title: "IGM Number", field: "igm_number", widthGrow: 1, editor: canEdit ? "input" : false},
                     {title: "IGM Manual No", field: "igm_manual_number", widthGrow: 1, editor: canEdit ? "input" : false},
-                    {title: "IGM Date", field: "igm_date", widthGrow: 1, editor: canEdit ? dateEditor : false},
+                    {title: "IGM Date", field: "igm_date", widthGrow: 1, editor: canEdit ? dateEditor : false, formatter: dateCellFormatter},
                     {title: "Cargo Name", field: "cargo_name", widthGrow: 1, editor: canEdit ? "list" : false,
                         editorParams: {values: cargoOptions, autocomplete: true, allowEmpty: true}
                     },
@@ -732,7 +672,7 @@
                         editorParams: {values: customerOptions, autocomplete: true, allowEmpty: true}
                     },
                     {title: "BL No", field: "bl_no", widthGrow: 1, editor: canEdit ? "input" : false},
-                    {title: "BL Date", field: "bl_date", widthGrow: 1, editor: canEdit ? dateEditor : false},
+                    {title: "BL Date", field: "bl_date", widthGrow: 1, editor: canEdit ? dateEditor : false, formatter: dateCellFormatter},
                     {title: "BL Quantity", field: "bl_quantity", widthGrow: 1, editor: canEdit ? "number" : false, hozAlign: "right",
                         editorParams: {min: 0, step: 0.01}
                     },
@@ -747,44 +687,45 @@
             if (isDark) document.querySelector(`#cargo-table-${vcnId}`).classList.add('tabulator-dark');
         }
 
-        // Hold options
-        const holdOptions = {};
-        holds.forEach(h => { holdOptions[h] = h; });
+        if (operationType !== 'Export') {
+            // Hold options
+            const holdOptions = {};
+            holds.forEach(h => { holdOptions[h] = h; });
 
-        // Fetch cargo names for this specific VCN for stowage plan dropdown
-        const cargoNamesEndpoint = operationType === 'Export' ? 'export_cargo_names' : 'cargo_names';
-        const vcnCargoRes = await fetch(`/api/module/VCN01/${cargoNamesEndpoint}/${vcnId}`);
-        const vcnCargoNames = await vcnCargoRes.json();
-        const vcnCargoOptions = {};
-        vcnCargoNames.forEach(c => { vcnCargoOptions[c] = c; });
+            // Fetch cargo names for this specific VCN for stowage plan dropdown
+            const vcnCargoRes = await fetch(`/api/module/VCN01/cargo_names/${vcnId}`);
+            const vcnCargoNames = await vcnCargoRes.json();
+            const vcnCargoOptions = {};
+            vcnCargoNames.forEach(c => { vcnCargoOptions[c] = c; });
 
-        // Stowage Plan table
-        subTables[vcnId].stowage = new Tabulator(`#stowage-table-${vcnId}`, {
-            layout: "fitColumns",
-            height: 150,
-            ajaxURL: `/api/module/VCN01/stowage/${vcnId}`,
-            columns: [
-                {title: "Cargo Name", field: "cargo_name", widthGrow: 1, editor: canEdit ? "list" : false,
-                    editorParams: {values: vcnCargoOptions, autocomplete: true, allowEmpty: true}
-                },
-                {title: "Hold Name", field: "hold_name", widthGrow: 1, editor: canEdit ? "list" : false,
-                    editorParams: {values: holdOptions, autocomplete: true, allowEmpty: true}
-                },
-                {title: "Holdwise Qty", field: "hatchwise_quantity", widthGrow: 1, editor: canEdit ? "number" : false, hozAlign: "right",
-                    editorParams: {min: 0, step: 0.01}
-                },
-                {title: "Hold Completion Time", field: "hatch_completion_time", widthGrow: 1, editor: canEdit ? datetimeEditor : false,
-                    formatter: function(cell) { return cell.getValue() ? cell.getValue().replace('T', ' ') : ''; }
-                },
-                canEdit ? {title: "", field: "actions", formatter: deleteButtonFormatter, width: 60, widthGrow: 0, hozAlign: "center", headerSort: false,
-                    cellClick: function(e, cell) { deleteSubRow('stowage', cell.getRow().getData().id, vcnId); }
-                } : null
-            ].filter(Boolean)
-        });
-        if (isDark) document.querySelector(`#stowage-table-${vcnId}`).classList.add('tabulator-dark');
+            // Stowage Plan table
+            subTables[vcnId].stowage = new Tabulator(`#stowage-table-${vcnId}`, {
+                layout: "fitColumns",
+                height: 150,
+                ajaxURL: `/api/module/VCN01/stowage/${vcnId}`,
+                columns: [
+                    {title: "Cargo Name", field: "cargo_name", widthGrow: 1, editor: canEdit ? "list" : false,
+                        editorParams: {values: vcnCargoOptions, autocomplete: true, allowEmpty: true}
+                    },
+                    {title: "Hold Name", field: "hold_name", widthGrow: 1, editor: canEdit ? "list" : false,
+                        editorParams: {values: holdOptions, autocomplete: true, allowEmpty: true}
+                    },
+                    {title: "Holdwise Qty", field: "hatchwise_quantity", widthGrow: 1, editor: canEdit ? "number" : false, hozAlign: "right",
+                        editorParams: {min: 0, step: 0.01}
+                    },
+                    {title: "Hold Completion Time", field: "hatch_completion_time", widthGrow: 1, editor: canEdit ? datetimeEditor : false,
+                        formatter: datetimeCellFormatter
+                    },
+                    canEdit ? {title: "", field: "actions", formatter: deleteButtonFormatter, width: 60, widthGrow: 0, hozAlign: "center", headerSort: false,
+                        cellClick: function(e, cell) { deleteSubRow('stowage', cell.getRow().getData().id, vcnId); }
+                    } : null
+                ].filter(Boolean)
+            });
+            if (isDark) document.querySelector(`#stowage-table-${vcnId}`).classList.add('tabulator-dark');
 
-        // Update totals display
-        updateStowageTotals(vcnId);
+            // Update totals display
+            updateStowageTotals(vcnId);
+        }
     }
 
     async function updateStowageTotals(vcnId) {
@@ -797,6 +738,31 @@
                 totalEl.style.color = '#e53e3e';
             } else {
                 totalEl.style.color = '#38a169';
+            }
+        }
+    }
+
+    async function updateExportCargoBLQuantities(vcnId) {
+        // Fetch loading totals from LDUD MV Anchorage Loading grouped by cargo_name
+        const res = await fetch(`/api/module/VCN01/export_loading_totals/${vcnId}`);
+        const qtyByCargo = await res.json(); // {cargo_name: total_qty}
+
+        // Update each export cargo row's bl_quantity based on its cargo_name
+        if (subTables[vcnId] && subTables[vcnId].export_cargo) {
+            const rows = subTables[vcnId].export_cargo.getRows();
+            for (const row of rows) {
+                const data = row.getData();
+                const cargoName = data.cargo_name;
+                const newQty = cargoName && qtyByCargo[cargoName] ? qtyByCargo[cargoName] : null;
+                if (data.bl_quantity != newQty) {
+                    row.update({bl_quantity: newQty});
+                    // Save updated BL quantity to server
+                    await fetch('/api/module/VCN01/export_cargo/save', {
+                        method: 'POST',
+                        headers: {'Content-Type': 'application/json'},
+                        body: JSON.stringify({...data, bl_quantity: newQty})
+                    });
+                }
             }
         }
     }
@@ -818,7 +784,7 @@
         }
         if (data.id && subTables[vcnId] && subTables[vcnId][type]) {
             const newRow = {id: data.id, vcn_id: vcnId};
-            subTables[vcnId][type].addRow(newRow, true);
+            subTables[vcnId][type].addRow(newRow, false);
         }
     }
 
@@ -855,9 +821,14 @@
             alert(`Error: ${errors[0].error}`);
         }
 
-        // Update stowage totals after saving cargo or stowage
-        if (type === 'cargo' || type === 'export_cargo' || type === 'stowage') {
+        // Update stowage totals after saving cargo or stowage (Import only)
+        if (type === 'cargo' || type === 'stowage') {
             updateStowageTotals(vcnId);
+        }
+
+        // Refresh BL quantities from LDUD loading totals after export cargo save
+        if (type === 'export_cargo') {
+            updateExportCargoBLQuantities(vcnId);
         }
 
         if (!hasError) {
@@ -888,7 +859,8 @@
             created_date: getTodayDate(),
             doc_date: getTodayDate(),
             doc_status: 'Pending',
-            vcn_doc_series: defaultDocSeries
+            vcn_doc_series: defaultDocSeries,
+            type_of_discharge: 'Full Discharge'
         }, true);
     }
 

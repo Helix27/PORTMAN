@@ -28,7 +28,6 @@
     let table;
     let vesselTypes = [];
     let vesselCategories = [];
-    let gears = [];
     let dirtyRowIds = new Set();  // Track by row ID instead of position
     let autosaveTimer = null;
     let moduleConfig = {};
@@ -46,15 +45,13 @@
     }
 
     async function loadMasterData() {
-        const [typesRes, categoriesRes, gearsRes, configRes] = await Promise.all([
+        const [typesRes, categoriesRes, configRes] = await Promise.all([
             fetch('/api/module/VTM01/all'),
             fetch('/api/module/VCM01/all'),
-            fetch('/api/module/GM01/all'),
             fetch('/admin/api/config/VC01')
         ]);
         vesselTypes = await typesRes.json();
         vesselCategories = await categoriesRes.json();
-        gears = await gearsRes.json();
         moduleConfig = await configRes.json();
         initTable();
     }
@@ -140,23 +137,22 @@
 
         const columns = [
             {formatter: "rowSelection", titleFormatter: "rowSelection", hozAlign: "center", headerSort: false, width: 40},
-            {title: "Doc Num", field: "doc_num", width: 80},  // Auto-generated, read-only
+            {title: "Doc No", field: "doc_num", width: 80},
             {title: "Vessel Name", field: "vessel_name", editor: canEdit ? "input" : false, width: 150},
-            {title: "IMO Num", field: "imo_num", editor: canEdit ? "input" : false, width: 100},
-            {title: "Vessel Type Name", field: "vessel_type_name", editor: canEdit ? "list" : false, editorParams: {values: vesselTypes, autocomplete: true, allowEmpty: true}, width: 130},
-            {title: "Vessel Category Name", field: "vessel_category_name", editor: canEdit ? "list" : false, editorParams: {values: vesselCategories, autocomplete: true, allowEmpty: true}, width: 160},
-            {title: "Gear", field: "gear", editor: canEdit ? "list" : false, editorParams: {values: gears, autocomplete: true, allowEmpty: true}, width: 100},
+            {title: "IMO No", field: "imo_num", editor: canEdit ? "input" : false, width: 100},
             {title: "Call Sign", field: "call_sign", editor: canEdit ? "input" : false, width: 100},
+            {title: "MMSI No", field: "mmsi_num", editor: canEdit ? "input" : false, width: 100},
+            {title: "Vessel Type", field: "vessel_type_name", editor: canEdit ? "list" : false, editorParams: {values: vesselTypes, autocomplete: true, allowEmpty: true}, width: 130},
+            {title: "Vessel Category", field: "vessel_category_name", editor: canEdit ? "list" : false, editorParams: {values: vesselCategories, autocomplete: true, allowEmpty: true}, width: 160},
             {title: "Flag", field: "nationality", editor: canEdit ? "input" : false, width: 110},
-            {title: "MMSI Num", field: "mmsi_num", editor: canEdit ? "input" : false, width: 100},
+            {title: "Gear Type", field: "gear", editor: canEdit ? "list" : false,
+                editorParams: {values: {"Ship Gear": "Ship Gear", "Floating Crane": "Floating Crane"}, autocomplete: false, allowEmpty: true}, width: 120},
             {title: "GT", field: "gt", editor: canEdit ? "number" : false, width: 90, hozAlign: "right"},
             {title: "DWT", field: "dwt", editor: canEdit ? "number" : false, width: 90, hozAlign: "right"},
             {title: "LOA", field: "loa", editor: canEdit ? "number" : false, width: 80, hozAlign: "right"},
             {title: "Beam", field: "beam", editor: canEdit ? "number" : false, width: 70, hozAlign: "right"},
-            {title: "No of Hatches", field: "no_of_hatches", editor: canEdit ? "number" : false, width: 110, hozAlign: "right"},
-            {title: "No of Holds", field: "no_of_holds", editor: canEdit ? "number" : false, width: 100, hozAlign: "right"},
+            {title: "Nos of Hold", field: "no_of_holds", editor: canEdit ? "number" : false, width: 100, hozAlign: "right"},
             {title: "Year of Built", field: "year_of_built", editor: canEdit ? "number" : false, width: 100, hozAlign: "center"},
-            {title: "Created By", field: "created_by", width: 100},
             {title: "Created Date", field: "created_date", width: 110},
             {title: "Doc Status", field: "doc_status",
                 editor: (canEdit && canEditStatus) ? "select" : false,
@@ -206,7 +202,8 @@
         const newRowData = {
             created_by: currentUser,
             created_date: getTodayDate(),
-            doc_status: "Pending"  // Always starts as Pending
+            doc_status: "Pending",
+            gear: "Ship Gear"
         };
         table.addRow(newRowData, true);
     }

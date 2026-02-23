@@ -306,67 +306,7 @@
         initTable();
     }
 
-    // Custom datetime editor
-    var datetimeEditor = function(cell, onRendered, success, cancel) {
-        var cellValue = cell.getValue() || '';
-        var input = document.createElement("input");
-        input.type = "datetime-local";
-        input.value = cellValue;
-        input.style.width = "100%";
-        input.style.boxSizing = "border-box";
-        input.style.padding = "4px";
-        var resolved = false;
-
-        function complete(val) {
-            if (resolved) return;
-            resolved = true;
-            success(val);
-        }
-
-        onRendered(function() {
-            input.focus();
-            input.style.height = "100%";
-        });
-
-        input.addEventListener("change", function() { complete(input.value); });
-        input.addEventListener("blur", function() { complete(input.value); });
-        input.addEventListener("keydown", function(e) {
-            if (e.key === "Enter") complete(input.value);
-            if (e.key === "Escape") { resolved = true; cancel(); }
-        });
-        return input;
-    };
-
-    // Custom date editor
-    var dateEditor = function(cell, onRendered, success, cancel) {
-        var cellValue = cell.getValue() || '';
-        var input = document.createElement("input");
-        input.type = "date";
-        input.value = cellValue;
-        input.style.width = "100%";
-        input.style.boxSizing = "border-box";
-        input.style.padding = "4px";
-        var resolved = false;
-
-        function complete(val) {
-            if (resolved) return;
-            resolved = true;
-            success(val);
-        }
-
-        onRendered(function() {
-            input.focus();
-            input.style.height = "100%";
-        });
-
-        input.addEventListener("change", function() { complete(input.value); });
-        input.addEventListener("blur", function() { complete(input.value); });
-        input.addEventListener("keydown", function(e) {
-            if (e.key === "Enter") complete(input.value);
-            if (e.key === "Escape") { resolved = true; cancel(); }
-        });
-        return input;
-    };
+    // datetimeEditor and dateEditor are now global (defined in base.html)
 
     function normalizeDate(value) {
         if (!value) return '';
@@ -476,7 +416,7 @@
             newRow[def.field] = '';
             newRow.__cellIds[def.field] = [];
         });
-        tableRef.addRow(newRow, true);
+        tableRef.addRow(newRow, false);
         updateHoldSummary(ldudId);
     }
 
@@ -633,37 +573,45 @@
                     }
                 }
             },
-            {title: "Arrival Inner Anch", field: "arrival_inner_anchorage", editor: canEdit ? datetimeEditor : false, width: 140,
-                formatter: function(cell) { return cell.getValue() ? cell.getValue().replace('T', ' ') : ''; }},
-            {title: "Arrival Outer Anch", field: "arrival_outer_anchorage", editor: canEdit ? datetimeEditor : false, width: 140,
-                formatter: function(cell) { return cell.getValue() ? cell.getValue().replace('T', ' ') : ''; }},
-            {title: "Arrived MBPT", field: "arrived_mbpt", editor: canEdit ? datetimeEditor : false, width: 140,
-                formatter: function(cell) { return cell.getValue() ? cell.getValue().replace('T', ' ') : ''; }},
-            {title: "Arrived MFL", field: "arrived_mfl", editor: canEdit ? datetimeEditor : false, width: 140,
-                formatter: function(cell) { return cell.getValue() ? cell.getValue().replace('T', ' ') : ''; }},
-            {title: "Free Pratique", field: "free_pratique_granted", editor: canEdit ? datetimeEditor : false, width: 140,
-                formatter: function(cell) { return cell.getValue() ? cell.getValue().replace('T', ' ') : ''; }},
-            {title: "NOR Tendered", field: "nor_tendered", editor: canEdit ? datetimeEditor : false, width: 140,
-                formatter: function(cell) { return cell.getValue() ? cell.getValue().replace('T', ' ') : ''; }},
-            {title: "NOR Accepted", field: "nor_accepted", editor: canEdit ? datetimeEditor : false, width: 140,
-                formatter: function(cell) { return cell.getValue() ? cell.getValue().replace('T', ' ') : ''; }},
-            {title: "Discharge Start", field: "discharge_commenced", editor: canEdit ? datetimeEditor : false, width: 140,
-                formatter: function(cell) { return cell.getValue() ? cell.getValue().replace('T', ' ') : ''; }},
-            {title: "Discharge End", field: "discharge_completed", editor: canEdit ? datetimeEditor : false, width: 140,
-                formatter: function(cell) { return cell.getValue() ? cell.getValue().replace('T', ' ') : ''; }},
-            {title: "Init Survey From", field: "initial_draft_survey_from", editor: canEdit ? datetimeEditor : false, width: 140,
-                formatter: function(cell) { return cell.getValue() ? cell.getValue().replace('T', ' ') : ''; }},
-            {title: "Init Survey To", field: "initial_draft_survey_to", editor: canEdit ? datetimeEditor : false, width: 140,
-                formatter: function(cell) { return cell.getValue() ? cell.getValue().replace('T', ' ') : ''; }},
+            {title: "Cargo Name", field: "cargo_names_display", width: 150,
+                formatter: function(cell) { return cell.getValue() || '<span style="color:#999">-</span>'; }
+            },
+            {title: "BL Quantity", field: "bl_quantities_display", width: 120, hozAlign: "right",
+                formatter: function(cell) { return cell.getValue() || '<span style="color:#999">-</span>'; }
+            },
+            {title: "Balance", field: "balance_display", width: 120, hozAlign: "right",
+                titleFormatter: function(cell) { return "Balance"; },
+                formatter: function(cell) {
+                    const val = cell.getValue();
+                    const op = cell.getRow().getData().operation_type;
+                    return val != null ? parseFloat(val).toFixed(2) : '-';
+                }
+            },
+            {title: "Agent Name", field: "agent_name", width: 120},
+            {title: "Stevedore", field: "stevedore_name", width: 120},
+            {title: "NOR Tendered", field: "nor_tendered", editor: canEdit ? datetimeEditor : false, width: 150,
+                formatter: datetimeCellFormatter},
+            {title: "NOR Accepted", field: "nor_accepted", editor: canEdit ? datetimeEditor : false, width: 150,
+                formatter: datetimeCellFormatter},
+            {title: "Init Survey From", field: "initial_draft_survey_from", editor: canEdit ? datetimeEditor : false, width: 150,
+                formatter: datetimeCellFormatter},
+            {title: "Init Survey To", field: "initial_draft_survey_to", editor: canEdit ? datetimeEditor : false, width: 150,
+                formatter: datetimeCellFormatter},
             {title: "Init Survey Qty", field: "initial_draft_survey_quantity", editor: canEdit ? "number" : false, width: 100, hozAlign: "right"},
-            {title: "Final Survey From", field: "final_draft_survey_from", editor: canEdit ? datetimeEditor : false, width: 140,
-                formatter: function(cell) { return cell.getValue() ? cell.getValue().replace('T', ' ') : ''; }},
-            {title: "Final Survey To", field: "final_draft_survey_to", editor: canEdit ? datetimeEditor : false, width: 140,
-                formatter: function(cell) { return cell.getValue() ? cell.getValue().replace('T', ' ') : ''; }},
-            {title: "Custom Clearance", field: "custom_clearance", editor: canEdit ? datetimeEditor : false, width: 140,
-                formatter: function(cell) { return cell.getValue() ? cell.getValue().replace('T', ' ') : ''; }},
+            {title: "Custom Clearance", field: "custom_clearance", editor: canEdit ? datetimeEditor : false, width: 150,
+                formatter: datetimeCellFormatter},
+            {title: "Final Survey From", field: "final_draft_survey_from", editor: canEdit ? datetimeEditor : false, width: 150,
+                formatter: datetimeCellFormatter},
+            {title: "Final Survey To", field: "final_draft_survey_to", editor: canEdit ? datetimeEditor : false, width: 150,
+                formatter: datetimeCellFormatter},
             {title: "Agent/Custom/Stevedore On Board", field: "agent_stevedore_onboard", editor: canEdit ? datetimeEditor : false, width: 200,
-                formatter: function(cell) { return cell.getValue() ? cell.getValue().replace('T', ' ') : ''; }},
+                formatter: datetimeCellFormatter},
+            {title: "Discharge/Loading Started", field: "ops_started", width: 170,
+                titleFormatter: function() { return "Disch./Load. Started"; },
+                formatter: datetimeCellFormatter},
+            {title: "Discharge/Loading Completed", field: "ops_completed", width: 170,
+                titleFormatter: function() { return "Disch./Load. Completed"; },
+                formatter: datetimeCellFormatter},
             {title: "Status", field: "doc_status", width: 80,
                 formatter: function(cell) {
                     const val = cell.getValue();
@@ -689,7 +637,7 @@
                 // Build display field
                 response.data.forEach(r => {
                     r.vcn_display = r.vcn_doc_num ? `${r.vcn_doc_num} / ${r.vessel_name || ''}` : '';
-                    if (r.anchored_datetime) r.vcn_display += ` / ${r.anchored_datetime.replace('T', ' ')}`;
+                    if (r.anchored_datetime) r.vcn_display += ` / ${formatDateTime(r.anchored_datetime)}`;
                 });
                 document.getElementById('rowCount').textContent = response.data.length;
                 document.getElementById('totalCount').textContent = response.total;
@@ -1027,9 +975,9 @@
                 {title: "Delay Name", field: "delay_name", width: 120, editor: canEdit ? "list" : false,
                     editorParams: {values: delayOptions, autocomplete: true, allowEmpty: true}},
                 {title: "Start", field: "start_datetime", width: 140, editor: canEdit ? datetimeEditor : false,
-                    formatter: function(cell) { return cell.getValue() ? cell.getValue().replace('T', ' ') : ''; }},
+                    formatter: datetimeCellFormatter},
                 {title: "End", field: "end_datetime", width: 140, editor: canEdit ? datetimeEditor : false,
-                    formatter: function(cell) { return cell.getValue() ? cell.getValue().replace('T', ' ') : ''; }},
+                    formatter: datetimeCellFormatter},
                 {title: "Mins", field: "total_time_mins", width: 60, hozAlign: "right"},
                 {title: "Hrs", field: "total_time_hrs", width: 60, hozAlign: "right"},
                 {title: "Minus Hrs", field: "minus_delay_hours", width: 70, editor: canEdit ? "list" : false,
@@ -1058,13 +1006,13 @@
                 {title: "Cargo Name", field: "cargo_name", widthGrow: 1, editor: canEdit ? "list" : false,
                     editorParams: {values: cargoOptions, autocomplete: true, allowEmpty: true}},
                 {title: "Anchored", field: "anchored", widthGrow: 1, editor: canEdit ? datetimeEditor : false,
-                    formatter: function(cell) { return cell.getValue() ? cell.getValue().replace('T', ' ') : ''; }},
+                    formatter: datetimeCellFormatter},
                 {title: anchorageStartedTitle, field: "discharge_started", widthGrow: 1, editor: canEdit ? datetimeEditor : false,
-                    formatter: function(cell) { return cell.getValue() ? cell.getValue().replace('T', ' ') : ''; }},
+                    formatter: datetimeCellFormatter},
                 {title: anchorageCompletedTitle, field: "discharge_commenced", widthGrow: 1, editor: canEdit ? datetimeEditor : false,
-                    formatter: function(cell) { return cell.getValue() ? cell.getValue().replace('T', ' ') : ''; }},
+                    formatter: datetimeCellFormatter},
                 {title: "Anchor Aweigh", field: "anchor_aweigh", widthGrow: 1, editor: canEdit ? datetimeEditor : false,
-                    formatter: function(cell) { return cell.getValue() ? cell.getValue().replace('T', ' ') : ''; }},
+                    formatter: datetimeCellFormatter},
                 {title: "Cargo Quantity", field: "cargo_quantity", widthGrow: 1, editor: canEdit ? "number" : false, hozAlign: "right",
                     editorParams: {min: 0, step: 0.01}},
                 canEdit ? {title: "", field: "actions", formatter: deleteButtonFormatter, width: 50, widthGrow: 0, hozAlign: "center", headerSort: false,
@@ -1075,7 +1023,7 @@
         if (isDark) document.querySelector(`#anchorage-table-${ldudId}`).classList.add('tabulator-dark');
 
         // Barge Lines table — column order/titles differ for Export
-        const dtFmt = function(cell) { return cell.getValue() ? cell.getValue().replace('T', ' ') : ''; };
+        const dtFmt = datetimeCellFormatter;
         const delBtn = canEdit ? {title: "", field: "actions", formatter: deleteButtonFormatter, width: 50, hozAlign: "center", headerSort: false,
             cellClick: function(e, cell) { deleteSubRow('barge_lines', cell.getRow().getData().id, ldudId); }
         } : null;
@@ -1244,13 +1192,13 @@
                 {title: "HMR End", field: "hmr_end", width: 100, editor: canEdit ? "number" : false, hozAlign: "right",
                     editorParams: {min: 0, step: 0.01}},
                 {title: "Diesel Start", field: "diesel_start", width: 140, editor: canEdit ? datetimeEditor : false,
-                    formatter: function(cell) { return cell.getValue() ? cell.getValue().replace('T', ' ') : ''; }},
+                    formatter: datetimeCellFormatter},
                 {title: "Diesel End", field: "diesel_end", width: 140, editor: canEdit ? datetimeEditor : false,
-                    formatter: function(cell) { return cell.getValue() ? cell.getValue().replace('T', ' ') : ''; }},
+                    formatter: datetimeCellFormatter},
                 {title: "Start Time", field: "start_time", width: 140, editor: canEdit ? datetimeEditor : false,
-                    formatter: function(cell) { return cell.getValue() ? cell.getValue().replace('T', ' ') : ''; }},
+                    formatter: datetimeCellFormatter},
                 {title: "End Time", field: "end_time", width: 140, editor: canEdit ? datetimeEditor : false,
-                    formatter: function(cell) { return cell.getValue() ? cell.getValue().replace('T', ' ') : ''; }},
+                    formatter: datetimeCellFormatter},
                 canEdit ? {title: "", field: "actions", formatter: deleteButtonFormatter, width: 50, hozAlign: "center", headerSort: false,
                     cellClick: function(e, cell) { deleteSubRow('barge_cleaning', cell.getRow().getData().id, ldudId); }
                 } : null
@@ -1371,7 +1319,7 @@
                 });
                 const data = await res.json();
                 if (data.id && subTables[ldudId] && subTables[ldudId].vessel_ops) {
-                    subTables[ldudId].vessel_ops.addRow({id: data.id, ldud_id: ldudId}, true);
+                    subTables[ldudId].vessel_ops.addRow({id: data.id, ldud_id: ldudId}, false);
                 }
             } else {
                 addVesselOpsDateRow(ldudId);
@@ -1390,7 +1338,7 @@
             if (type === 'barge_lines' && data.trip_number) {
                 newRow.trip_number = data.trip_number;
             }
-            subTables[ldudId][type].addRow(newRow, true);
+            subTables[ldudId][type].addRow(newRow, false);
         }
     }
 

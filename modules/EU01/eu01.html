@@ -94,29 +94,7 @@
         return opts;
     }
 
-    // Custom datetime editor
-    var datetimeEditor = function(cell, onRendered, success, cancel) {
-        var cellValue = cell.getValue() || '';
-        var input = document.createElement("input");
-        input.type = "datetime-local";
-        input.value = cellValue;
-        input.style.width = "100%";
-        input.style.boxSizing = "border-box";
-        input.style.padding = "4px";
-
-        onRendered(function() {
-            input.focus();
-            input.style.height = "100%";
-        });
-
-        input.addEventListener("change", function() { success(input.value); });
-        input.addEventListener("blur", function() { success(input.value); });
-        input.addEventListener("keydown", function(e) {
-            if (e.key === "Enter") success(input.value);
-            if (e.key === "Escape") cancel();
-        });
-        return input;
-    };
+    // datetimeEditor and dateEditor are now global (defined in base.html)
 
     // Dynamic barge editor based on VCN/MBC selection
     var bargeEditor = function(cell, onRendered, success, cancel) {
@@ -206,10 +184,10 @@
             {title: "Route", field: "route_name", width: 140, editor: canEdit ? "list" : false,
                 editorParams: {values: toOptions(routeList), autocomplete: true, allowEmpty: true, listOnEmpty: true}},
             {title: "Start Time", field: "start_time", width: 150, editor: canEdit ? datetimeEditor : false,
-                formatter: function(cell) { return cell.getValue() ? cell.getValue().replace('T', ' ') : ''; }},
+                formatter: datetimeCellFormatter},
             {title: "End Time", field: "end_time", width: 150, editor: canEdit ? datetimeEditor : false,
-                formatter: function(cell) { return cell.getValue() ? cell.getValue().replace('T', ' ') : ''; }},
-            {title: "Entry Date", field: "entry_date", width: 110, editor: canEdit ? "date" : false},
+                formatter: datetimeCellFormatter},
+            {title: "Entry Date", field: "entry_date", width: 120, editor: canEdit ? "date" : false, formatter: dateCellFormatter},
             {title: "Created By", field: "created_by", width: 100}
         ];
 

@@ -296,29 +296,7 @@
         initTable();
     }
 
-    // Custom datetime editor
-    var datetimeEditor = function(cell, onRendered, success, cancel) {
-        var cellValue = cell.getValue() || '';
-        var input = document.createElement("input");
-        input.type = "datetime-local";
-        input.value = cellValue;
-        input.style.width = "100%";
-        input.style.boxSizing = "border-box";
-        input.style.padding = "4px";
-
-        onRendered(function() {
-            input.focus();
-            input.style.height = "100%";
-        });
-
-        input.addEventListener("change", function() { success(input.value); });
-        input.addEventListener("blur", function() { success(input.value); });
-        input.addEventListener("keydown", function(e) {
-            if (e.key === "Enter") success(input.value);
-            if (e.key === "Escape") cancel();
-        });
-        return input;
-    };
+    // datetimeEditor and dateEditor are now global (defined in base.html)
 
     function initTable() {
         const canEdit = permissions.can_edit || permissions.can_add;
@@ -500,17 +478,17 @@
             ajaxURL: `/api/module/MBC01/load_port/${mbcId}`,
             columns: [
                 {title: "Arrived Load Port", field: "arrived_load_port", width: 150, editor: canEdit ? datetimeEditor : false,
-                    formatter: function(cell) { return cell.getValue() ? cell.getValue().replace('T', ' ') : ''; }},
+                    formatter: datetimeCellFormatter},
                 {title: "Alongside Berth", field: "alongside_berth", width: 150, editor: canEdit ? datetimeEditor : false,
-                    formatter: function(cell) { return cell.getValue() ? cell.getValue().replace('T', ' ') : ''; }},
+                    formatter: datetimeCellFormatter},
                 {title: "Loading Commenced", field: "loading_commenced", width: 150, editor: canEdit ? datetimeEditor : false,
-                    formatter: function(cell) { return cell.getValue() ? cell.getValue().replace('T', ' ') : ''; }},
+                    formatter: datetimeCellFormatter},
                 {title: "Loading Completed", field: "loading_completed", width: 150, editor: canEdit ? datetimeEditor : false,
-                    formatter: function(cell) { return cell.getValue() ? cell.getValue().replace('T', ' ') : ''; }},
+                    formatter: datetimeCellFormatter},
                 {title: "Cast Off Load Port", field: "cast_off_load_port", width: 150, editor: canEdit ? datetimeEditor : false,
-                    formatter: function(cell) { return cell.getValue() ? cell.getValue().replace('T', ' ') : ''; }},
+                    formatter: datetimeCellFormatter},
                 {title: "ETA", field: "eta", width: 150, editor: canEdit ? datetimeEditor : false,
-                    formatter: function(cell) { return cell.getValue() ? cell.getValue().replace('T', ' ') : ''; }},
+                    formatter: datetimeCellFormatter},
                 canEdit ? {title: "", field: "actions", formatter: deleteButtonFormatter, width: 50, hozAlign: "center", headerSort: false,
                     cellClick: function(e, cell) { deleteSubRow('load_port', cell.getRow().getData().id, mbcId); }
                 } : null
@@ -525,30 +503,30 @@
             ajaxURL: `/api/module/MBC01/discharge_port/${mbcId}`,
             columns: [
                 {title: "Arrival Gull Island", field: "arrival_gull_island", width: 140, editor: canEdit ? datetimeEditor : false,
-                    formatter: function(cell) { return cell.getValue() ? cell.getValue().replace('T', ' ') : ''; }},
+                    formatter: datetimeCellFormatter},
                 {title: "Departure Gull Island", field: "departure_gull_island", width: 140, editor: canEdit ? datetimeEditor : false,
-                    formatter: function(cell) { return cell.getValue() ? cell.getValue().replace('T', ' ') : ''; }},
+                    formatter: datetimeCellFormatter},
                 {title: "MBC Arrival Port", field: "vessel_arrival_port", width: 140, editor: canEdit ? datetimeEditor : false,
-                    formatter: function(cell) { return cell.getValue() ? cell.getValue().replace('T', ' ') : ''; }},
+                    formatter: datetimeCellFormatter},
                 {title: "MBC All Made Fast At Unloading Berth", field: "vessel_all_made_fast", width: 220, editor: canEdit ? datetimeEditor : false,
-                    formatter: function(cell) { return cell.getValue() ? cell.getValue().replace('T', ' ') : ''; }},
+                    formatter: datetimeCellFormatter},
                 {title: "Unloading Commenced", field: "unloading_commenced", width: 140, editor: canEdit ? datetimeEditor : false,
-                    formatter: function(cell) { return cell.getValue() ? cell.getValue().replace('T', ' ') : ''; }},
+                    formatter: datetimeCellFormatter},
                 {title: "Cleaning Commenced", field: "cleaning_commenced", width: 140, editor: canEdit ? datetimeEditor : false,
-                    formatter: function(cell) { return cell.getValue() ? cell.getValue().replace('T', ' ') : ''; }},
+                    formatter: datetimeCellFormatter},
                 {title: "Cleaning Completed", field: "cleaning_completed", width: 140, editor: canEdit ? datetimeEditor : false,
-                    formatter: function(cell) { return cell.getValue() ? cell.getValue().replace('T', ' ') : ''; }},
+                    formatter: datetimeCellFormatter},
                 {title: "Unloading Completed", field: "unloading_completed", width: 140, editor: canEdit ? datetimeEditor : false,
-                    formatter: function(cell) { return cell.getValue() ? cell.getValue().replace('T', ' ') : ''; }},
+                    formatter: datetimeCellFormatter},
                 {title: "MBC Cast Off", field: "vessel_cast_off", width: 140, editor: canEdit ? datetimeEditor : false,
-                    formatter: function(cell) { return cell.getValue() ? cell.getValue().replace('T', ' ') : ''; }},
+                    formatter: datetimeCellFormatter},
                 {title: "Unloaded By", field: "vessel_unloaded_by", width: 100, editor: canEdit ? "input" : false},
                 {title: "Unloading Berth", field: "vessel_unloading_berth", width: 110, editor: canEdit ? "list" : false,
                     editorParams: {values: berthOptions, autocomplete: true, allowEmpty: true}},
                 {title: "Discharge Stop", field: "discharge_stop_shifting", width: 140, editor: canEdit ? datetimeEditor : false,
-                    formatter: function(cell) { return cell.getValue() ? cell.getValue().replace('T', ' ') : ''; }},
+                    formatter: datetimeCellFormatter},
                 {title: "Discharge Start", field: "discharge_start_shifting", width: 140, editor: canEdit ? datetimeEditor : false,
-                    formatter: function(cell) { return cell.getValue() ? cell.getValue().replace('T', ' ') : ''; }},
+                    formatter: datetimeCellFormatter},
                 canEdit ? {title: "", field: "actions", formatter: deleteButtonFormatter, width: 50, hozAlign: "center", headerSort: false,
                     cellClick: function(e, cell) { deleteSubRow('discharge_port', cell.getRow().getData().id, mbcId); }
                 } : null
@@ -572,13 +550,13 @@
                 {title: "HMR End", field: "hmr_end", width: 100, editor: canEdit ? "number" : false, hozAlign: "right",
                     editorParams: {min: 0, step: 0.01}},
                 {title: "Diesel Start", field: "diesel_start", width: 140, editor: canEdit ? datetimeEditor : false,
-                    formatter: function(cell) { return cell.getValue() ? cell.getValue().replace('T', ' ') : ''; }},
+                    formatter: datetimeCellFormatter},
                 {title: "Diesel End", field: "diesel_end", width: 140, editor: canEdit ? datetimeEditor : false,
-                    formatter: function(cell) { return cell.getValue() ? cell.getValue().replace('T', ' ') : ''; }},
+                    formatter: datetimeCellFormatter},
                 {title: "Start Time", field: "start_time", width: 140, editor: canEdit ? datetimeEditor : false,
-                    formatter: function(cell) { return cell.getValue() ? cell.getValue().replace('T', ' ') : ''; }},
+                    formatter: datetimeCellFormatter},
                 {title: "End Time", field: "end_time", width: 140, editor: canEdit ? datetimeEditor : false,
-                    formatter: function(cell) { return cell.getValue() ? cell.getValue().replace('T', ' ') : ''; }},
+                    formatter: datetimeCellFormatter},
                 canEdit ? {title: "", field: "actions", formatter: deleteButtonFormatter, width: 50, hozAlign: "center", headerSort: false,
                     cellClick: function(e, cell) { deleteSubRow('cleaning', cell.getRow().getData().id, mbcId); }
                 } : null

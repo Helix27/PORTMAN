@@ -30,29 +30,7 @@
 
     const canEdit = permissions.can_edit || permissions.can_add;
 
-    var datetimeEditor = function(cell, onRendered, success, cancel) {
-        var cellValue = cell.getValue() || '';
-        var input = document.createElement("input");
-        input.type = "datetime-local";
-        input.value = cellValue;
-        input.style.width = "100%";
-        input.style.boxSizing = "border-box";
-        input.style.padding = "4px";
-
-        onRendered(function() {
-            input.focus();
-            input.style.height = "100%";
-        });
-
-        input.addEventListener("change", function() { success(input.value); });
-        input.addEventListener("blur", function() { success(input.value); });
-        input.addEventListener("keydown", function(e) {
-            if (e.key === "Enter") success(input.value);
-            if (e.key === "Escape") cancel();
-        });
-
-        return input;
-    };
+    // datetimeEditor and dateEditor are now global (defined in base.html)
 
     const table = new Tabulator("#table", {
         height: "calc(100vh - 160px)",
@@ -69,7 +47,7 @@
         columns: [
             {formatter: "rowSelection", titleFormatter: "rowSelection", hozAlign: "center", headerSort: false, width: 40},
             {title: "Tide Date Time", field: "tide_datetime", editor: canEdit ? datetimeEditor : false, width: 220,
-                formatter: function(cell) { return cell.getValue() ? cell.getValue().replace('T', ' ') : ''; }},
+                formatter: datetimeCellFormatter},
             {title: "Tide (Meters)", field: "tide_meters", editor: canEdit ? "number" : false, width: 150, hozAlign: "right",
                 editorParams: {step: 0.01}}
         ],
