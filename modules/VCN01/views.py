@@ -234,3 +234,9 @@ def get_stowage_total(vcn_id):
         'stowage_total': model.get_stowage_total_quantity(vcn_id),
         'igm_total': cargo_total
     })
+
+# Hold Completion (read-only view from LDUD data)
+@bp.route('/api/module/VCN01/hold_completion/<int:vcn_id>')
+@login_required
+def get_hold_completion(vcn_id):
+    return jsonify(model.get_hold_completion_by_vcn(vcn_id))

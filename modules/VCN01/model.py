@@ -295,12 +295,12 @@ def save_stowage_plan(data):
             return None, f"Total stowage quantity ({current_stowage_total + new_quantity}) cannot exceed cargo BL quantity ({igm_total})"
 
     if data.get('id'):
-        cur.execute('UPDATE vcn_stowage_plan SET cargo_name=%s, hold_name=%s, hatchwise_quantity=%s, hatch_completion_time=%s WHERE id=%s',
-                   [data.get('cargo_name'), data.get('hold_name'), data.get('hatchwise_quantity'), data.get('hatch_completion_time'), data['id']])
+        cur.execute('UPDATE vcn_stowage_plan SET cargo_name=%s, hold_name=%s, hatchwise_quantity=%s WHERE id=%s',
+                   [data.get('cargo_name'), data.get('hold_name'), data.get('hatchwise_quantity'), data['id']])
         row_id = data['id']
     else:
-        cur.execute('INSERT INTO vcn_stowage_plan (vcn_id, cargo_name, hold_name, hatchwise_quantity, hatch_completion_time) VALUES (%s, %s, %s, %s, %s) RETURNING id',
-                   [data['vcn_id'], data.get('cargo_name'), data.get('hold_name'), data.get('hatchwise_quantity'), data.get('hatch_completion_time')])
+        cur.execute('INSERT INTO vcn_stowage_plan (vcn_id, cargo_name, hold_name, hatchwise_quantity) VALUES (%s, %s, %s, %s) RETURNING id',
+                   [data['vcn_id'], data.get('cargo_name'), data.get('hold_name'), data.get('hatchwise_quantity')])
         row_id = cur.fetchone()['id']
     conn.commit()
     conn.close()
@@ -325,3 +325,17 @@ def get_export_loading_totals(vcn_id):
     rows = cur.fetchall()
     conn.close()
     return {r['cargo_name']: float(r['total_qty'] or 0) for r in rows}
+
+
+def get_hold_completion_by_vcn(vcn_id):
+    """Get hold completion data from all LDUDs linked to this VCN"""
+    conn = get_db()
+    cur = get_cursor(conn)
+    cur.execute('''SELECT hc.*, h.doc_num as ldud_doc_num, h.operation_type
+                   FROM ldud_hold_completion hc
+                   JOIN ldud_header h ON hc.ldud_id = h.id
+                   WHERE h.vcn_id=%s
+                   ORDER BY h.id ASC, hc.id ASC''', (vcn_id,))
+    rows = cur.fetchall()
+    conn.close()
+    return [dict(r) for r in rows]

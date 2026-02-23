@@ -188,3 +188,27 @@ def delete_barge_cleaning():
         return jsonify({'error': 'No permission to delete'}), 403
     model.delete_barge_cleaning(request.json['id'])
     return jsonify({'success': True})
+
+# Hold Completion sub-table endpoints
+@bp.route('/api/module/LDUD01/hold_completion/<int:ldud_id>')
+@login_required
+def get_hold_completion(ldud_id):
+    return jsonify(model.get_hold_completion(ldud_id))
+
+@bp.route('/api/module/LDUD01/hold_completion/save', methods=['POST'])
+@login_required
+def save_hold_completion():
+    perms = get_perms()
+    if not perms.get('can_add') and not perms.get('can_edit'):
+        return jsonify({'error': 'No permission'}), 403
+    row_id = model.save_hold_completion(request.json)
+    return jsonify({'id': row_id, 'success': True})
+
+@bp.route('/api/module/LDUD01/hold_completion/delete', methods=['POST'])
+@login_required
+def delete_hold_completion():
+    perms = get_perms()
+    if not perms.get('can_delete'):
+        return jsonify({'error': 'No permission to delete'}), 403
+    model.delete_hold_completion(request.json['id'])
+    return jsonify({'success': True})

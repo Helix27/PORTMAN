@@ -75,7 +75,7 @@ def get_data(page=1, size=20):
 
     vcn_cargo = {}   # vcn_id -> {cargo_names, bl_quantities}
     vcn_agents = {}  # vcn_id -> {agent_name, stevedore_name}
-    vo_totals = {}   # ldud_id -> total quantity from vessel_operations
+    vo_by_cargo = {} # ldud_id -> {cargo_name: total_qty}
     vo_times = {}    # ldud_id -> {first_start, last_end}
 
     if vcn_ids:
@@ -110,12 +110,16 @@ def get_data(page=1, size=20):
             }
 
     if ldud_ids:
-        # Total quantity from vessel_operations per ldud
-        cur.execute('''SELECT ldud_id, SUM(quantity) as total_qty
+        # Quantity from vessel_operations per ldud, grouped by cargo_name
+        cur.execute('''SELECT ldud_id, cargo_name, SUM(quantity) as total_qty
                        FROM ldud_vessel_operations WHERE ldud_id = ANY(%s)
-                       GROUP BY ldud_id''', (ldud_ids,))
+                       GROUP BY ldud_id, cargo_name''', (ldud_ids,))
         for v in cur.fetchall():
-            vo_totals[v['ldud_id']] = float(v['total_qty'] or 0)
+            lid = v['ldud_id']
+            if lid not in vo_by_cargo:
+                vo_by_cargo[lid] = {}
+            cn = v['cargo_name'] or ''
+            vo_by_cargo[lid][cn] = float(v['total_qty'] or 0)
 
         # Earliest start_time and latest end_time from vessel_operations per ldud
         cur.execute('''SELECT ldud_id, MIN(start_time) as first_start, MAX(end_time) as last_end
@@ -131,20 +135,20 @@ def get_data(page=1, size=20):
     for r in rows:
         vid = r.get('vcn_id')
         lid = r.get('id')
-        op = r.get('operation_type', 'Import')
 
         # Cargo info from VCN
         ci = vcn_cargo.get(vid, {'names': [], 'quantities': []})
         r['cargo_names_display'] = ', '.join(ci['names']) if ci['names'] else ''
         r['bl_quantities_display'] = ', '.join(str(q) for q in ci['quantities']) if ci['quantities'] else ''
-        bl_total = sum(ci['quantities'])
 
-        # Balance: Import = BL - discharged, Export = loaded so far
-        vo_total = vo_totals.get(lid, 0)
-        if op == 'Export':
-            r['balance_display'] = vo_total
-        else:
-            r['balance_display'] = round(bl_total - vo_total, 2) if bl_total else 0
+        # Per-cargo balance: BL qty - ops qty for each cargo
+        cargo_ops = vo_by_cargo.get(lid, {})
+        balances = []
+        for i, name in enumerate(ci['names']):
+            bl_qty = ci['quantities'][i]
+            ops_qty = cargo_ops.get(name, 0)
+            balances.append(round(bl_qty - ops_qty, 2))
+        r['balance_display'] = ', '.join(str(b) for b in balances) if balances else ''
 
         # Agent and Stevedore
         ai = vcn_agents.get(vid, {})
@@ -285,13 +289,18 @@ def save_barge_line(data):
         cur.execute('''UPDATE ldud_barge_lines SET trip_number=%s, hold_name=%s, barge_name=%s, contractor_name=%s, cargo_name=%s,
                       bpt_bfl=%s, along_side_vessel=%s, commenced_loading=%s, completed_loading=%s, cast_off_mv=%s,
                       anchored_gull_island=%s, aweigh_gull_island=%s, along_side_berth=%s, commence_discharge_berth=%s,
-                      completed_discharge_berth=%s, cast_off_berth=%s, cast_off_berth_nt=%s, discharge_quantity=%s WHERE id=%s''',
+                      completed_discharge_berth=%s, cast_off_berth=%s, cast_off_berth_nt=%s, discharge_quantity=%s,
+                      crane_loaded_from=%s, trip_start=%s, amf_at_port=%s, cast_off_port=%s, port_crane=%s,
+                      cast_off_loading_berth=%s, anchored_gull_island_empty=%s, aweigh_gull_island_empty=%s WHERE id=%s''',
                    [trip_number, data.get('hold_name'), data.get('barge_name'), data.get('contractor_name'), data.get('cargo_name'),
                     data.get('bpt_bfl'), data.get('along_side_vessel'), data.get('commenced_loading'),
                     data.get('completed_loading'), data.get('cast_off_mv'), data.get('anchored_gull_island'),
                     data.get('aweigh_gull_island'), data.get('along_side_berth'), data.get('commence_discharge_berth'),
                     data.get('completed_discharge_berth'), data.get('cast_off_berth'), data.get('cast_off_berth_nt'),
-                    data.get('discharge_quantity'), data['id']])
+                    data.get('discharge_quantity'), data.get('crane_loaded_from'), data.get('trip_start'),
+                    data.get('amf_at_port'), data.get('cast_off_port'), data.get('port_crane'),
+                    data.get('cast_off_loading_berth'), data.get('anchored_gull_island_empty'),
+                    data.get('aweigh_gull_island_empty'), data['id']])
         row_id = data['id']
     else:
         trip_number = 1
@@ -301,14 +310,19 @@ def save_barge_line(data):
         cur.execute('''INSERT INTO ldud_barge_lines (ldud_id, trip_number, hold_name, barge_name, contractor_name, cargo_name,
                       bpt_bfl, along_side_vessel, commenced_loading, completed_loading, cast_off_mv,
                       anchored_gull_island, aweigh_gull_island, along_side_berth, commence_discharge_berth,
-                      completed_discharge_berth, cast_off_berth, cast_off_berth_nt, discharge_quantity)
-                      VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s) RETURNING id''',
+                      completed_discharge_berth, cast_off_berth, cast_off_berth_nt, discharge_quantity,
+                      crane_loaded_from, trip_start, amf_at_port, cast_off_port, port_crane,
+                      cast_off_loading_berth, anchored_gull_island_empty, aweigh_gull_island_empty)
+                      VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s) RETURNING id''',
                    [data['ldud_id'], trip_number, data.get('hold_name'), data.get('barge_name'), data.get('contractor_name'), data.get('cargo_name'),
                     data.get('bpt_bfl'), data.get('along_side_vessel'), data.get('commenced_loading'),
                     data.get('completed_loading'), data.get('cast_off_mv'), data.get('anchored_gull_island'),
                     data.get('aweigh_gull_island'), data.get('along_side_berth'), data.get('commence_discharge_berth'),
                     data.get('completed_discharge_berth'), data.get('cast_off_berth'), data.get('cast_off_berth_nt'),
-                    data.get('discharge_quantity')])
+                    data.get('discharge_quantity'), data.get('crane_loaded_from'), data.get('trip_start'),
+                    data.get('amf_at_port'), data.get('cast_off_port'), data.get('port_crane'),
+                    data.get('cast_off_loading_berth'), data.get('anchored_gull_island_empty'),
+                    data.get('aweigh_gull_island_empty')])
         row_id = cur.fetchone()['id']
     conn.commit()
     conn.close()
@@ -441,5 +455,41 @@ def delete_barge_cleaning(row_id):
     conn = get_db()
     cur = get_cursor(conn)
     cur.execute('DELETE FROM ldud_barge_cleaning WHERE id=%s', (row_id,))
+    conn.commit()
+    conn.close()
+
+
+# Hold Completion sub-table operations
+def get_hold_completion(ldud_id):
+    conn = get_db()
+    cur = get_cursor(conn)
+    cur.execute('SELECT * FROM ldud_hold_completion WHERE ldud_id=%s ORDER BY id ASC', (ldud_id,))
+    rows = cur.fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
+
+
+def save_hold_completion(data):
+    _clean_empty(data)
+    conn = get_db()
+    cur = get_cursor(conn)
+    if data.get('id'):
+        cur.execute('''UPDATE ldud_hold_completion SET hold_name=%s, commenced=%s, completed=%s WHERE id=%s''',
+                   [data.get('hold_name'), data.get('commenced'), data.get('completed'), data['id']])
+        row_id = data['id']
+    else:
+        cur.execute('''INSERT INTO ldud_hold_completion (ldud_id, hold_name, commenced, completed)
+                      VALUES (%s, %s, %s, %s) RETURNING id''',
+                   [data['ldud_id'], data.get('hold_name'), data.get('commenced'), data.get('completed')])
+        row_id = cur.fetchone()['id']
+    conn.commit()
+    conn.close()
+    return row_id
+
+
+def delete_hold_completion(row_id):
+    conn = get_db()
+    cur = get_cursor(conn)
+    cur.execute('DELETE FROM ldud_hold_completion WHERE id=%s', (row_id,))
     conn.commit()
     conn.close()
