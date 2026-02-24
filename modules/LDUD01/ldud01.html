@@ -691,7 +691,6 @@
                     </div>
                 </div>
                 <div class="sub-section-content">
-                    <div id="hold-summary-${ldudId}" style="padding: 10px; background: #f1f5f9; border-bottom: 1px solid #cbd5e0; font-size: 12px;"></div>
                     <div id="vessel_ops-table-${ldudId}" class="sub-tabulator"></div>
                 </div>
             </div>`;
@@ -748,7 +747,6 @@
                 <div class="sub-section-header">
                     <span>${operationType === 'Export' ? 'Hold Loading Completion' : 'Hold Discharge Completion'}</span>
                     <div class="sub-section-actions">
-                        ${operationType === 'Export' && canAct ? `<button class="btn-sub-add" onclick="addSubRow('hold_completion', ${ldudId})">+ Add</button>` : ''}
                         ${canAct ? `<button class="btn-sub-save" onclick="saveSubTable('hold_completion', ${ldudId})">Save</button>` : ''}
                     </div>
                 </div>
@@ -1228,38 +1226,116 @@
             });
             if (isDark) document.querySelector(`#vessel_ops-table-${ldudId}`).classList.add('tabulator-dark');
         } else {
-            // Import: existing pivot table driven by stowage plan
-            const vesselOpsHoldColumns = getHoldDefs(ldudId).map(def => ({
-                title: def.hold_name,
-                field: def.field,
+            // Import: pivot table with column groups showing Hold (Cargo) headers and stowage qty sub-headers
+            const holdDefs = getHoldDefs(ldudId);
+
+            // Build column groups: each hold gets a group with title "Hold XX (Cargo)"
+            const vesselOpsHoldColumnGroups = holdDefs.map((def, idx) => {
+                const cargoLabel = def.cargo_name ? `(${def.cargo_name})` : '';
+                const stowageQty = parseFloat(def.stowage_qty || 0).toFixed(2);
+                return {
+                    title: `${def.hold_name} ${cargoLabel}`,
+                    columns: [{
+                        title: `H${idx + 1} Total Qty: ${stowageQty}`,
+                        field: def.field,
+                        width: 140,
+                        hozAlign: "right",
+                        editor: canEdit ? "number" : false,
+                        editorParams: {min: 0, step: 0.01},
+                        cellEdited: function() { updateHoldSummary(ldudId); },
+                        // Bottom calc: two rows - Total Discharge and Balance On Board
+                        bottomCalc: function(values) {
+                            let sum = 0;
+                            values.forEach(v => { const n = parseFloat(v || 0); if (Number.isFinite(n)) sum += n; });
+                            return sum;
+                        },
+                        bottomCalcFormatter: function(cell) {
+                            const col = cell.getColumn();
+                            const field = col.getField();
+                            // Find the matching holdDef for this field
+                            const matchDef = holdDefs.find(d => d.field === field);
+                            const stowage = matchDef ? parseFloat(matchDef.stowage_qty || 0) : 0;
+                            const discharged = parseFloat(cell.getValue() || 0);
+                            const balance = stowage - discharged;
+                            const balColor = balance < 0 ? '#e53e3e' : balance === 0 ? '#38a169' : '#1f2937';
+                            return `<div style="line-height:1.8;">
+                                <div style="border-bottom:1px solid #cbd5e0;padding-bottom:2px;">${discharged > 0 ? discharged.toFixed(2) : ''}</div>
+                                <div style="color:${balColor};padding-top:2px;">${balance.toFixed(2)}</div>
+                            </div>`;
+                        }
+                    }]
+                };
+            });
+
+            // Total Day Qty column - sums all hold fields for the row
+            const totalDayQtyCol = {
+                title: "Total Day Qty",
+                field: "total_day_qty",
                 width: 120,
                 hozAlign: "right",
-                editor: canEdit ? "number" : false,
-                editorParams: {min: 0, step: 0.01},
-                headerTooltip: `Stowage Qty: ${parseFloat(def.stowage_qty || 0).toFixed(2)}${def.cargo_name ? ` | Cargo: ${def.cargo_name}` : ''}`,
-                cellEdited: function() { updateHoldSummary(ldudId); }
-            }));
+                formatter: function(cell) {
+                    const data = cell.getRow().getData();
+                    let total = 0;
+                    holdDefs.forEach(def => {
+                        const v = parseFloat(data[def.field] || 0);
+                        if (Number.isFinite(v)) total += v;
+                    });
+                    return total > 0 ? total.toFixed(2) : '';
+                },
+                bottomCalc: function(values, data) {
+                    let grandTotal = 0;
+                    (data || []).forEach(row => {
+                        holdDefs.forEach(def => {
+                            const v = parseFloat(row[def.field] || 0);
+                            if (Number.isFinite(v)) grandTotal += v;
+                        });
+                    });
+                    return grandTotal;
+                },
+                bottomCalcFormatter: function(cell) {
+                    const totalDischarged = parseFloat(cell.getValue() || 0);
+                    let totalStowage = 0;
+                    holdDefs.forEach(def => { totalStowage += parseFloat(def.stowage_qty || 0); });
+                    const totalBalance = totalStowage - totalDischarged;
+                    const balColor = totalBalance < 0 ? '#e53e3e' : totalBalance === 0 ? '#38a169' : '#1f2937';
+                    return `<div style="line-height:1.8;font-weight:700;">
+                        <div style="border-bottom:1px solid #cbd5e0;padding-bottom:2px;">${totalDischarged > 0 ? totalDischarged.toFixed(2) : ''}</div>
+                        <div style="color:${balColor};padding-top:2px;">${totalBalance.toFixed(2)}</div>
+                    </div>`;
+                }
+            };
+
+            // Date column with bottomCalc labels
+            const dateCol = {
+                title: "Date", field: "op_date", width: 130, editor: canEdit ? dateEditor : false,
+                bottomCalcFormatter: function() {
+                    return `<div style="line-height:1.8;font-weight:700;">
+                        <div style="border-bottom:1px solid #cbd5e0;padding-bottom:2px;color:#8B6914;">Total Discharge</div>
+                        <div style="color:#2563eb;padding-top:2px;">Balance On Board</div>
+                    </div>`;
+                },
+                bottomCalc: function() { return ''; }
+            };
 
             subTables[ldudId].vessel_ops = new Tabulator(`#vessel_ops-table-${ldudId}`, {
                 layout: "fitDataFill",
-                height: 200,
+                height: 300,
                 ajaxURL: `/api/module/LDUD01/vessel_ops/${ldudId}`,
                 ajaxResponse: function(url, params, response) {
                     const pivotRows = buildVesselOpsRowsFromApi(ldudId, response);
-                    setTimeout(() => updateHoldSummary(ldudId), 50);
                     return pivotRows;
                 },
+                columnHeaderVertAlign: "bottom",
                 columns: [
-                    {title: "Date", field: "op_date", width: 130, editor: canEdit ? dateEditor : false},
-                    ...vesselOpsHoldColumns,
+                    dateCol,
+                    ...vesselOpsHoldColumnGroups,
+                    totalDayQtyCol,
                     canEdit ? {title: "", field: "actions", formatter: deleteButtonFormatter, width: 50, hozAlign: "center", headerSort: false,
                         cellClick: function(e, cell) { deleteVesselOpsDateRow(ldudId, cell.getRow()); }
                     } : null
                 ].filter(Boolean)
             });
             if (isDark) document.querySelector(`#vessel_ops-table-${ldudId}`).classList.add('tabulator-dark');
-
-            updateHoldSummary(ldudId);
         }
 
         // Barge Cleaning Lines table
@@ -1323,69 +1399,84 @@
             } catch (e) { return ''; }
         }
 
-        if (operationType === 'Export') {
-            // Export: hold names editable, sourced from MV Anchorage Loading holds
-            const exportHoldOpts = {};
-            holdMasterList.forEach(h => { exportHoldOpts[h] = h; });
-
-            subTables[ldudId].hold_completion = new Tabulator(`#hold_completion-table-${ldudId}`, {
-                layout: "fitColumns",
-                height: 200,
-                ajaxURL: `/api/module/LDUD01/hold_completion/${ldudId}`,
-                columns: [
-                    {title: "Hold Name", field: "hold_name", widthGrow: 1, editor: canEdit ? "list" : false,
-                        editorParams: {values: exportHoldOpts, autocomplete: true, allowEmpty: true}},
-                    {title: "Loading Commenced", field: "commenced", widthGrow: 1, editor: canEdit ? datetimeEditor : false,
-                        formatter: datetimeCellFormatter},
-                    {title: "Loading Completed", field: "completed", widthGrow: 1, editor: canEdit ? datetimeEditor : false,
-                        formatter: datetimeCellFormatter},
-                    {title: "Total Time", field: "total_time", widthGrow: 0.5, hozAlign: "center",
-                        formatter: holdTotalTimeFormatter},
-                    canEdit ? {title: "", field: "actions", formatter: deleteButtonFormatter, width: 50, widthGrow: 0, hozAlign: "center", headerSort: false,
-                        cellClick: function(e, cell) { deleteSubRow('hold_completion', cell.getRow().getData().id, ldudId); }
-                    } : null
-                ].filter(Boolean)
-            });
-        } else {
-            // Import: hold names fixed from stowage plan
-            subTables[ldudId].hold_completion = new Tabulator(`#hold_completion-table-${ldudId}`, {
-                layout: "fitColumns",
-                height: 200,
-                ajaxURL: `/api/module/LDUD01/hold_completion/${ldudId}`,
-                ajaxResponse: function(url, params, response) {
-                    // Pre-populate holds from stowage plan if no existing rows
-                    const stowageHolds = Object.keys(stowageHoldMeta[ldudId] || {}).sort(sortHoldNames);
-                    if (response.length === 0 && stowageHolds.length > 0) {
-                        // Auto-create rows for each stowage hold
-                        const createPromises = stowageHolds.map(holdName =>
-                            fetch('/api/module/LDUD01/hold_completion/save', {
-                                method: 'POST',
-                                headers: {'Content-Type': 'application/json'},
-                                body: JSON.stringify({ldud_id: ldudId, hold_name: holdName})
-                            }).then(r => r.json())
-                        );
-                        Promise.all(createPromises).then(results => {
-                            const rows = results.filter(r => r.id).map((r, i) => ({
-                                id: r.id, ldud_id: ldudId, hold_name: stowageHolds[i],
-                                commenced: null, completed: null
-                            }));
-                            subTables[ldudId].hold_completion.setData(rows);
-                        });
-                        return [];
-                    }
-                    return response;
-                },
-                columns: [
-                    {title: "Hold Name", field: "hold_name", widthGrow: 1},
-                    {title: "Discharge Commenced", field: "commenced", widthGrow: 1, editor: canEdit ? datetimeEditor : false,
-                        formatter: datetimeCellFormatter},
-                    {title: "Discharge Completed", field: "completed", widthGrow: 1, editor: canEdit ? datetimeEditor : false,
-                        formatter: datetimeCellFormatter},
-                    {title: "Total Time", field: "total_time", widthGrow: 0.5, hozAlign: "center",
-                        formatter: holdTotalTimeFormatter}
-                ]
-            });
+        // Dynamically sync hold completion rows from source holds
+        // Import: holds come from stowage plan; Export: holds come from MV Anchorage Loading (vessel_ops)
+        function getSourceHolds() {
+            if (operationType === 'Export') {
+                // Get unique hold names from vessel_ops (MV Anchorage Loading) table
+                const holdsSet = new Set();
+                if (subTables[ldudId] && subTables[ldudId].vessel_ops) {
+                    subTables[ldudId].vessel_ops.getRows().forEach(row => {
+                        const hn = row.getData().hold_name;
+                        if (hn) hn.split(',').forEach(h => holdsSet.add(h.trim()));
+                    });
+                }
+                return Array.from(holdsSet).sort(sortHoldNames);
+            } else {
+                return Object.keys(stowageHoldMeta[ldudId] || {}).sort(sortHoldNames);
+            }
         }
+
+        async function syncHoldCompletionRows(existingRows) {
+            const sourceHolds = getSourceHolds();
+            const existingHoldNames = existingRows.map(r => r.hold_name);
+            // Create rows for holds that don't exist yet
+            const missingHolds = sourceHolds.filter(h => !existingHoldNames.includes(h));
+            // Delete rows for holds that are no longer in source
+            const extraRows = existingRows.filter(r => !sourceHolds.includes(r.hold_name));
+
+            const createPromises = missingHolds.map(holdName =>
+                fetch('/api/module/LDUD01/hold_completion/save', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({ldud_id: ldudId, hold_name: holdName})
+                }).then(r => r.json())
+            );
+            const deletePromises = extraRows.map(r =>
+                fetch('/api/module/LDUD01/hold_completion/delete', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({id: r.id})
+                })
+            );
+            await Promise.all([...createPromises, ...deletePromises]);
+
+            if (missingHolds.length > 0 || extraRows.length > 0) {
+                // Refetch the full list after sync
+                const res = await fetch(`/api/module/LDUD01/hold_completion/${ldudId}`);
+                return await res.json();
+            }
+            return existingRows;
+        }
+
+        const holdCompCommencedTitle = operationType === 'Export' ? 'Loading Commenced' : 'Discharge Commenced';
+        const holdCompCompletedTitle = operationType === 'Export' ? 'Loading Completed' : 'Discharge Completed';
+
+        subTables[ldudId].hold_completion = new Tabulator(`#hold_completion-table-${ldudId}`, {
+            layout: "fitColumns",
+            height: 200,
+            ajaxURL: `/api/module/LDUD01/hold_completion/${ldudId}`,
+            ajaxResponse: function(url, params, response) {
+                // Sync holds asynchronously then update the table
+                syncHoldCompletionRows(response).then(synced => {
+                    if (synced !== response) {
+                        subTables[ldudId].hold_completion.setData(synced);
+                    }
+                });
+                // Sort by source hold order for now
+                const sourceHolds = getSourceHolds();
+                return response.sort((a, b) => sourceHolds.indexOf(a.hold_name) - sourceHolds.indexOf(b.hold_name));
+            },
+            columns: [
+                {title: "Hold Name", field: "hold_name", widthGrow: 1},
+                {title: holdCompCommencedTitle, field: "commenced", widthGrow: 1, editor: canEdit ? datetimeEditor : false,
+                    formatter: datetimeCellFormatter},
+                {title: holdCompCompletedTitle, field: "completed", widthGrow: 1, editor: canEdit ? datetimeEditor : false,
+                    formatter: datetimeCellFormatter},
+                {title: "Total Time", field: "total_time", widthGrow: 0.5, hozAlign: "center",
+                    formatter: holdTotalTimeFormatter}
+            ]
+        });
         if (isDark) document.querySelector(`#hold_completion-table-${ldudId}`).classList.add('tabulator-dark');
     }
 
@@ -1445,49 +1536,10 @@
     }
 
     function updateHoldSummary(ldudId) {
-        const summaryEl = document.getElementById(`hold-summary-${ldudId}`);
-        if (!summaryEl) return;
-
-        // Calculate stowage quantities per hold
-        const stowageByHold = {};
-        const holdMeta = stowageHoldMeta[ldudId] || {};
-        Object.keys(holdMeta).forEach(hold => {
-            stowageByHold[hold] = parseFloat(holdMeta[hold].stowage_qty || 0);
-        });
-
-        // Calculate discharged quantities per hold from Vessel Operations grid
-        const dischargedByHold = getVesselOpsDischargedByHold(ldudId);
-
-        // Build summary HTML
-        const holds = Object.keys(stowageByHold).sort(sortHoldNames);
-        if (holds.length === 0) {
-            summaryEl.innerHTML = '<span style="color: #718096;">No stowage plan data available for selected VCN</span>';
-            return;
+        // Trigger recalc on the vessel_ops table so bottomCalc rows update
+        if (subTables[ldudId] && subTables[ldudId].vessel_ops) {
+            subTables[ldudId].vessel_ops.recalc();
         }
-
-        let summaryHTML = '<strong>Holdwise Qty / Balance:</strong> ';
-        holds.forEach((hold) => {
-            const stowage = stowageByHold[hold] || 0;
-            const discharged = dischargedByHold[hold] || 0;
-            const remaining = stowage - discharged;
-            const percentage = stowage > 0 ? ((discharged / stowage) * 100).toFixed(1) : 0;
-
-            let color = '#38a169'; // green
-            if (discharged > stowage) {
-                color = '#e53e3e'; // red - over discharged
-            } else if (remaining > 0) {
-                color = '#d69e2e'; // yellow - incomplete
-            }
-
-            summaryHTML += `<span style="margin-right: 20px;">
-                <strong>${hold}:</strong>
-                <span style="color: ${color};">${discharged.toFixed(2)} / ${stowage.toFixed(2)}</span>
-                <span style="color: #1f2937; font-size: 11px;"> (Bal: ${remaining.toFixed(2)})</span>
-                <span style="color: #718096; font-size: 11px;">(${percentage}%)</span>
-            </span>`;
-        });
-
-        summaryEl.innerHTML = summaryHTML;
     }
 
     async function addSubRow(type, ldudId) {
