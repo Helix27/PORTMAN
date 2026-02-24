@@ -247,6 +247,8 @@
     let uomList = [];
     let berthList = [];
     let payloaderList = [];
+    let customerList = [];
+    let equipmentList = [];
     let subTables = {};
     let currentMbcId = null;
 
@@ -272,7 +274,7 @@
     }
 
     async function loadMasterData() {
-        const [dsRes, mbcRes, otRes, ctRes, cnRes, uomRes, berthRes, pplRes] = await Promise.all([
+        const [dsRes, mbcRes, otRes, ctRes, cnRes, uomRes, berthRes, pplRes, custRes, equipRes] = await Promise.all([
             fetch('/api/module/MBCDS01/all'),
             fetch('/api/module/MBCM01/all'),
             fetch('/api/module/EU01/operation-types'),
@@ -280,7 +282,9 @@
             fetch('/api/module/VCG01/names'),
             fetch('/api/module/VQM01/all'),
             fetch('/api/module/PBM01/all'),
-            fetch('/api/module/PPL01/all')
+            fetch('/api/module/PPL01/all'),
+            fetch('/api/module/VCUM01/all'),
+            fetch('/api/module/VEM01/all')
         ]);
         const dsData = await dsRes.json();
         docSeriesList = dsData.map(d => d.name);
@@ -293,6 +297,8 @@
         uomList = await uomRes.json();
         berthList = await berthRes.json();
         payloaderList = await pplRes.json();
+        customerList = await custRes.json();
+        equipmentList = await equipRes.json();
         initTable();
     }
 
@@ -338,14 +344,14 @@
                     openDetailsModal(data);
                 }
             },
+            {title: "Operation Type", field: "operation_type", editor: canEdit ? "list" : false, width: 110,
+                editorParams: {values: {'Import': 'Import', 'Export': 'Export'}}},
             {title: "Doc Num", field: "doc_num", width: 100},
             {title: "Doc Series", field: "doc_series", editor: canEdit ? "list" : false, width: 100,
                 editorParams: {values: dsOptions, autocomplete: true, allowEmpty: true}},
             {title: "Doc Date", field: "doc_date", width: 100, editor: canEdit ? "date" : false},
             {title: "MBC Name", field: "mbc_name", editor: canEdit ? "list" : false, width: 120,
                 editorParams: {values: mbcOptions, autocomplete: true, allowEmpty: true}},
-            {title: "Operation Type", field: "operation_type", editor: canEdit ? "list" : false, width: 110,
-                editorParams: {values: otOptions, autocomplete: true, allowEmpty: true}},
             {title: "Cargo Type", field: "cargo_type", editor: canEdit ? "list" : false, width: 100,
                 editorParams: {values: ctOptions, autocomplete: true, allowEmpty: true}},
             {title: "Cargo Name", field: "cargo_name", editor: canEdit ? "list" : false, width: 120,
@@ -390,52 +396,101 @@
 
     async function openDetailsModal(data) {
         const mbcId = data.id;
+        const operationType = data.operation_type || 'Import';
         currentMbcId = mbcId;
 
-        document.getElementById('modalTitle').textContent = `Details for ${data.doc_num || 'MBC'}`;
+        document.getElementById('modalTitle').textContent = `Details for ${data.doc_num || 'MBC'} (${operationType})`;
 
         const modalBody = document.getElementById('modalSubTables');
         modalBody.innerHTML = '';
+        const canAct = permissions.can_edit || permissions.can_add;
 
         const subContainer = document.createElement('div');
         subContainer.className = 'sub-table-container';
-        subContainer.innerHTML = `
-            <div class="sub-section">
-                <div class="sub-section-header">
-                    <span>Load Port Details</span>
-                    <div class="sub-section-actions">
-                        ${(permissions.can_edit || permissions.can_add) ? `<button class="btn-sub-add" onclick="addSubRow('load_port', ${mbcId})">+ Add</button>` : ''}
-                        ${(permissions.can_edit || permissions.can_add) ? `<button class="btn-sub-save" onclick="saveSubTable('load_port', ${mbcId})">Save</button>` : ''}
+
+        if (operationType === 'Export') {
+            // Export: Load Port Details Export + Cleaning + Customer Details (no Discharge Port)
+            subContainer.innerHTML = `
+                <div class="sub-section">
+                    <div class="sub-section-header">
+                        <span>Load Port Details Export</span>
+                        <div class="sub-section-actions">
+                            ${canAct ? `<button class="btn-sub-add" onclick="addSubRow('export_load_port', ${mbcId})">+ Add</button>` : ''}
+                            ${canAct ? `<button class="btn-sub-save" onclick="saveSubTable('export_load_port', ${mbcId})">Save</button>` : ''}
+                        </div>
                     </div>
+                    <div class="sub-section-content"><div id="export_load_port-table-${mbcId}" class="sub-tabulator"></div></div>
                 </div>
-                <div class="sub-section-content"><div id="load_port-table-${mbcId}" class="sub-tabulator"></div></div>
-            </div>
-            <div class="sub-section">
-                <div class="sub-section-header">
-                    <span>Discharge Port Details</span>
-                    <div class="sub-section-actions">
-                        ${(permissions.can_edit || permissions.can_add) ? `<button class="btn-sub-add" onclick="addSubRow('discharge_port', ${mbcId})">+ Add</button>` : ''}
-                        ${(permissions.can_edit || permissions.can_add) ? `<button class="btn-sub-save" onclick="saveSubTable('discharge_port', ${mbcId})">Save</button>` : ''}
+                <div class="sub-section">
+                    <div class="sub-section-header">
+                        <span>MBC Cleaning Details</span>
+                        <div class="sub-section-actions">
+                            ${canAct ? `<button class="btn-sub-add" onclick="addSubRow('cleaning', ${mbcId})">+ Add</button>` : ''}
+                            ${canAct ? `<button class="btn-sub-save" onclick="saveSubTable('cleaning', ${mbcId})">Save</button>` : ''}
+                        </div>
                     </div>
+                    <div class="sub-section-content"><div id="cleaning-table-${mbcId}" class="sub-tabulator"></div></div>
                 </div>
-                <div class="sub-section-content"><div id="discharge_port-table-${mbcId}" class="sub-tabulator"></div></div>
-            </div>
-            <div class="sub-section">
-                <div class="sub-section-header">
-                    <span>MBC Cleaning Details</span>
-                    <div class="sub-section-actions">
-                        ${(permissions.can_edit || permissions.can_add) ? `<button class="btn-sub-add" onclick="addSubRow('cleaning', ${mbcId})">+ Add</button>` : ''}
-                        ${(permissions.can_edit || permissions.can_add) ? `<button class="btn-sub-save" onclick="saveSubTable('cleaning', ${mbcId})">Save</button>` : ''}
+                <div class="sub-section">
+                    <div class="sub-section-header">
+                        <span>Customer Details</span>
+                        <div class="sub-section-actions">
+                            ${canAct ? `<button class="btn-sub-add" onclick="addSubRow('customer_details', ${mbcId})">+ Add</button>` : ''}
+                            ${canAct ? `<button class="btn-sub-save" onclick="saveSubTable('customer_details', ${mbcId})">Save</button>` : ''}
+                        </div>
                     </div>
+                    <div class="sub-section-content"><div id="customer_details-table-${mbcId}" class="sub-tabulator"></div></div>
+                </div>`;
+        } else {
+            // Import: Load Port Details + Discharge Port Details + Cleaning + Customer Details
+            subContainer.innerHTML = `
+                <div class="sub-section">
+                    <div class="sub-section-header">
+                        <span>Load Port Details</span>
+                        <div class="sub-section-actions">
+                            ${canAct ? `<button class="btn-sub-add" onclick="addSubRow('load_port', ${mbcId})">+ Add</button>` : ''}
+                            ${canAct ? `<button class="btn-sub-save" onclick="saveSubTable('load_port', ${mbcId})">Save</button>` : ''}
+                        </div>
+                    </div>
+                    <div class="sub-section-content"><div id="load_port-table-${mbcId}" class="sub-tabulator"></div></div>
                 </div>
-                <div class="sub-section-content"><div id="cleaning-table-${mbcId}" class="sub-tabulator"></div></div>
-            </div>`;
+                <div class="sub-section">
+                    <div class="sub-section-header">
+                        <span>Discharge Port Details</span>
+                        <div class="sub-section-actions">
+                            ${canAct ? `<button class="btn-sub-add" onclick="addSubRow('discharge_port', ${mbcId})">+ Add</button>` : ''}
+                            ${canAct ? `<button class="btn-sub-save" onclick="saveSubTable('discharge_port', ${mbcId})">Save</button>` : ''}
+                        </div>
+                    </div>
+                    <div class="sub-section-content"><div id="discharge_port-table-${mbcId}" class="sub-tabulator"></div></div>
+                </div>
+                <div class="sub-section">
+                    <div class="sub-section-header">
+                        <span>MBC Cleaning Details</span>
+                        <div class="sub-section-actions">
+                            ${canAct ? `<button class="btn-sub-add" onclick="addSubRow('cleaning', ${mbcId})">+ Add</button>` : ''}
+                            ${canAct ? `<button class="btn-sub-save" onclick="saveSubTable('cleaning', ${mbcId})">Save</button>` : ''}
+                        </div>
+                    </div>
+                    <div class="sub-section-content"><div id="cleaning-table-${mbcId}" class="sub-tabulator"></div></div>
+                </div>
+                <div class="sub-section">
+                    <div class="sub-section-header">
+                        <span>Customer Details</span>
+                        <div class="sub-section-actions">
+                            ${canAct ? `<button class="btn-sub-add" onclick="addSubRow('customer_details', ${mbcId})">+ Add</button>` : ''}
+                            ${canAct ? `<button class="btn-sub-save" onclick="saveSubTable('customer_details', ${mbcId})">Save</button>` : ''}
+                        </div>
+                    </div>
+                    <div class="sub-section-content"><div id="customer_details-table-${mbcId}" class="sub-tabulator"></div></div>
+                </div>`;
+        }
 
         modalBody.appendChild(subContainer);
         document.getElementById('detailsModal').classList.add('active');
 
         subTables[mbcId] = {};
-        await initSubTables(mbcId);
+        await initSubTables(mbcId, operationType);
     }
 
     function closeDetailsModal() {
@@ -464,77 +519,93 @@
         });
     });
 
-    async function initSubTables(mbcId) {
+    async function initSubTables(mbcId, operationType) {
         const canEdit = permissions.can_edit || permissions.can_add;
         const isDark = localStorage.getItem('theme') === 'dark';
 
         const berthOptions = {};
         berthList.forEach(b => { berthOptions[b] = b; });
 
-        // Load Port Details table
-        subTables[mbcId].load_port = new Tabulator(`#load_port-table-${mbcId}`, {
-            layout: "fitDataFill",
-            height: 150,
-            ajaxURL: `/api/module/MBC01/load_port/${mbcId}`,
-            columns: [
-                {title: "Arrived Load Port", field: "arrived_load_port", width: 150, editor: canEdit ? datetimeEditor : false,
-                    formatter: datetimeCellFormatter},
-                {title: "Alongside Berth", field: "alongside_berth", width: 150, editor: canEdit ? datetimeEditor : false,
-                    formatter: datetimeCellFormatter},
-                {title: "Loading Commenced", field: "loading_commenced", width: 150, editor: canEdit ? datetimeEditor : false,
-                    formatter: datetimeCellFormatter},
-                {title: "Loading Completed", field: "loading_completed", width: 150, editor: canEdit ? datetimeEditor : false,
-                    formatter: datetimeCellFormatter},
-                {title: "Cast Off Load Port", field: "cast_off_load_port", width: 150, editor: canEdit ? datetimeEditor : false,
-                    formatter: datetimeCellFormatter},
-                {title: "ETA", field: "eta", width: 150, editor: canEdit ? datetimeEditor : false,
-                    formatter: datetimeCellFormatter},
-                canEdit ? {title: "", field: "actions", formatter: deleteButtonFormatter, width: 50, hozAlign: "center", headerSort: false,
-                    cellClick: function(e, cell) { deleteSubRow('load_port', cell.getRow().getData().id, mbcId); }
-                } : null
-            ].filter(Boolean)
-        });
-        if (isDark) document.querySelector(`#load_port-table-${mbcId}`).classList.add('tabulator-dark');
+        const equipOptions = {};
+        equipmentList.forEach(e => { equipOptions[e] = e; });
 
-        // Discharge Port Details table
-        subTables[mbcId].discharge_port = new Tabulator(`#discharge_port-table-${mbcId}`, {
-            layout: "fitDataFill",
-            height: 150,
-            ajaxURL: `/api/module/MBC01/discharge_port/${mbcId}`,
-            columns: [
-                {title: "Arrival Gull Island", field: "arrival_gull_island", width: 140, editor: canEdit ? datetimeEditor : false,
-                    formatter: datetimeCellFormatter},
-                {title: "Departure Gull Island", field: "departure_gull_island", width: 140, editor: canEdit ? datetimeEditor : false,
-                    formatter: datetimeCellFormatter},
-                {title: "MBC Arrival Port", field: "vessel_arrival_port", width: 140, editor: canEdit ? datetimeEditor : false,
-                    formatter: datetimeCellFormatter},
-                {title: "MBC All Made Fast At Unloading Berth", field: "vessel_all_made_fast", width: 220, editor: canEdit ? datetimeEditor : false,
-                    formatter: datetimeCellFormatter},
-                {title: "Unloading Commenced", field: "unloading_commenced", width: 140, editor: canEdit ? datetimeEditor : false,
-                    formatter: datetimeCellFormatter},
-                {title: "Cleaning Commenced", field: "cleaning_commenced", width: 140, editor: canEdit ? datetimeEditor : false,
-                    formatter: datetimeCellFormatter},
-                {title: "Cleaning Completed", field: "cleaning_completed", width: 140, editor: canEdit ? datetimeEditor : false,
-                    formatter: datetimeCellFormatter},
-                {title: "Unloading Completed", field: "unloading_completed", width: 140, editor: canEdit ? datetimeEditor : false,
-                    formatter: datetimeCellFormatter},
-                {title: "MBC Cast Off", field: "vessel_cast_off", width: 140, editor: canEdit ? datetimeEditor : false,
-                    formatter: datetimeCellFormatter},
-                {title: "Unloaded By", field: "vessel_unloaded_by", width: 100, editor: canEdit ? "input" : false},
-                {title: "Unloading Berth", field: "vessel_unloading_berth", width: 110, editor: canEdit ? "list" : false,
-                    editorParams: {values: berthOptions, autocomplete: true, allowEmpty: true}},
-                {title: "Discharge Stop", field: "discharge_stop_shifting", width: 140, editor: canEdit ? datetimeEditor : false,
-                    formatter: datetimeCellFormatter},
-                {title: "Discharge Start", field: "discharge_start_shifting", width: 140, editor: canEdit ? datetimeEditor : false,
-                    formatter: datetimeCellFormatter},
-                canEdit ? {title: "", field: "actions", formatter: deleteButtonFormatter, width: 50, hozAlign: "center", headerSort: false,
-                    cellClick: function(e, cell) { deleteSubRow('discharge_port', cell.getRow().getData().id, mbcId); }
-                } : null
-            ].filter(Boolean)
-        });
-        if (isDark) document.querySelector(`#discharge_port-table-${mbcId}`).classList.add('tabulator-dark');
+        const customerOptions = {};
+        customerList.forEach(c => { customerOptions[c] = c; });
 
-        // MBC Cleaning Details table
+        const dtFmt = datetimeCellFormatter;
+        const delBtn = function(type) {
+            return canEdit ? {title: "", field: "actions", formatter: deleteButtonFormatter, width: 50, hozAlign: "center", headerSort: false,
+                cellClick: function(e, cell) { deleteSubRow(type, cell.getRow().getData().id, mbcId); }
+            } : null;
+        };
+
+        if (operationType === 'Export') {
+            // Export Load Port Details table
+            subTables[mbcId].export_load_port = new Tabulator(`#export_load_port-table-${mbcId}`, {
+                layout: "fitDataFill",
+                height: 150,
+                ajaxURL: `/api/module/MBC01/export_load_port/${mbcId}`,
+                columns: [
+                    {title: "Arrived at Port", field: "arrived_at_port", width: 140, editor: canEdit ? datetimeEditor : false, formatter: dtFmt},
+                    {title: "Alongside at Berth", field: "alongside_at_berth", width: 140, editor: canEdit ? datetimeEditor : false, formatter: dtFmt},
+                    {title: "Loading Commenced", field: "loading_commenced", width: 140, editor: canEdit ? datetimeEditor : false, formatter: dtFmt},
+                    {title: "Loading Completed", field: "loading_completed", width: 140, editor: canEdit ? datetimeEditor : false, formatter: dtFmt},
+                    {title: "Cast off From Berth", field: "cast_off_from_berth", width: 140, editor: canEdit ? datetimeEditor : false, formatter: dtFmt},
+                    {title: "Sailed Out From Port", field: "sailed_out_from_port", width: 140, editor: canEdit ? datetimeEditor : false, formatter: dtFmt},
+                    {title: "ETA at Gull Island", field: "eta_at_gull_island", width: 140, editor: canEdit ? datetimeEditor : false, formatter: dtFmt},
+                    {title: "Unloaded By", field: "unloaded_by", width: 120, editor: canEdit ? "list" : false,
+                        editorParams: {values: equipOptions, autocomplete: true, allowEmpty: true}},
+                    {title: "Berth Master", field: "berth_master", width: 120, editor: canEdit ? "list" : false,
+                        editorParams: {values: berthOptions, autocomplete: true, allowEmpty: true}},
+                    delBtn('export_load_port')
+                ].filter(Boolean)
+            });
+            if (isDark) document.querySelector(`#export_load_port-table-${mbcId}`).classList.add('tabulator-dark');
+
+        } else {
+            // Import: Load Port Details table
+            subTables[mbcId].load_port = new Tabulator(`#load_port-table-${mbcId}`, {
+                layout: "fitDataFill",
+                height: 150,
+                ajaxURL: `/api/module/MBC01/load_port/${mbcId}`,
+                columns: [
+                    {title: "Arrived Load Port", field: "arrived_load_port", width: 150, editor: canEdit ? datetimeEditor : false, formatter: dtFmt},
+                    {title: "Alongside Berth", field: "alongside_berth", width: 150, editor: canEdit ? datetimeEditor : false, formatter: dtFmt},
+                    {title: "Loading Commenced", field: "loading_commenced", width: 150, editor: canEdit ? datetimeEditor : false, formatter: dtFmt},
+                    {title: "Loading Completed", field: "loading_completed", width: 150, editor: canEdit ? datetimeEditor : false, formatter: dtFmt},
+                    {title: "Cast Off Load Port", field: "cast_off_load_port", width: 150, editor: canEdit ? datetimeEditor : false, formatter: dtFmt},
+                    {title: "ETA at Gull Island", field: "eta", width: 150, editor: canEdit ? datetimeEditor : false, formatter: dtFmt},
+                    delBtn('load_port')
+                ].filter(Boolean)
+            });
+            if (isDark) document.querySelector(`#load_port-table-${mbcId}`).classList.add('tabulator-dark');
+
+            // Import: Discharge Port Details table
+            subTables[mbcId].discharge_port = new Tabulator(`#discharge_port-table-${mbcId}`, {
+                layout: "fitDataFill",
+                height: 150,
+                ajaxURL: `/api/module/MBC01/discharge_port/${mbcId}`,
+                columns: [
+                    {title: "Arrival Gull Island", field: "arrival_gull_island", width: 140, editor: canEdit ? datetimeEditor : false, formatter: dtFmt},
+                    {title: "Departure Gull Island", field: "departure_gull_island", width: 150, editor: canEdit ? datetimeEditor : false, formatter: dtFmt},
+                    {title: "MBC Arrival Port", field: "vessel_arrival_port", width: 140, editor: canEdit ? datetimeEditor : false, formatter: dtFmt},
+                    {title: "MBC AMF at Unloading Berth", field: "vessel_all_made_fast", width: 200, editor: canEdit ? datetimeEditor : false, formatter: dtFmt},
+                    {title: "Unloading Commenced", field: "unloading_commenced", width: 140, editor: canEdit ? datetimeEditor : false, formatter: dtFmt},
+                    {title: "Cleaning Commenced", field: "cleaning_commenced", width: 140, editor: canEdit ? datetimeEditor : false, formatter: dtFmt},
+                    {title: "Unloading Completed", field: "unloading_completed", width: 140, editor: canEdit ? datetimeEditor : false, formatter: dtFmt},
+                    {title: "MBC Cast Off", field: "vessel_cast_off", width: 140, editor: canEdit ? datetimeEditor : false, formatter: dtFmt},
+                    {title: "Unloaded By", field: "vessel_unloaded_by", width: 100, editor: canEdit ? "input" : false},
+                    {title: "Unloading Berth", field: "vessel_unloading_berth", width: 110, editor: canEdit ? "list" : false,
+                        editorParams: {values: berthOptions, autocomplete: true, allowEmpty: true}},
+                    {title: "Discharge Stop", field: "discharge_stop_shifting", width: 140, editor: canEdit ? datetimeEditor : false, formatter: dtFmt},
+                    {title: "Discharge Start", field: "discharge_start_shifting", width: 140, editor: canEdit ? datetimeEditor : false, formatter: dtFmt},
+                    delBtn('discharge_port')
+                ].filter(Boolean)
+            });
+            if (isDark) document.querySelector(`#discharge_port-table-${mbcId}`).classList.add('tabulator-dark');
+        }
+
+        // MBC Cleaning Details table (common for both Import and Export)
         const pplOptions = {};
         payloaderList.forEach(p => { pplOptions[p] = p; });
 
@@ -549,21 +620,31 @@
                     editorParams: {min: 0, step: 0.01}},
                 {title: "HMR End", field: "hmr_end", width: 100, editor: canEdit ? "number" : false, hozAlign: "right",
                     editorParams: {min: 0, step: 0.01}},
-                {title: "Diesel Start", field: "diesel_start", width: 140, editor: canEdit ? datetimeEditor : false,
-                    formatter: datetimeCellFormatter},
-                {title: "Diesel End", field: "diesel_end", width: 140, editor: canEdit ? datetimeEditor : false,
-                    formatter: datetimeCellFormatter},
-                {title: "Start Time", field: "start_time", width: 140, editor: canEdit ? datetimeEditor : false,
-                    formatter: datetimeCellFormatter},
-                {title: "End Time", field: "end_time", width: 140, editor: canEdit ? datetimeEditor : false,
-                    formatter: datetimeCellFormatter},
-                canEdit ? {title: "", field: "actions", formatter: deleteButtonFormatter, width: 50, hozAlign: "center", headerSort: false,
-                    cellClick: function(e, cell) { deleteSubRow('cleaning', cell.getRow().getData().id, mbcId); }
-                } : null
+                {title: "Diesel Start", field: "diesel_start", width: 140, editor: canEdit ? datetimeEditor : false, formatter: dtFmt},
+                {title: "Diesel End", field: "diesel_end", width: 140, editor: canEdit ? datetimeEditor : false, formatter: dtFmt},
+                {title: "Start Time", field: "start_time", width: 140, editor: canEdit ? datetimeEditor : false, formatter: dtFmt},
+                {title: "End Time", field: "end_time", width: 140, editor: canEdit ? datetimeEditor : false, formatter: dtFmt},
+                delBtn('cleaning')
             ].filter(Boolean)
         });
         if (isDark) document.querySelector(`#cleaning-table-${mbcId}`).classList.add('tabulator-dark');
 
+        // Customer Details table (common for both Import and Export)
+        subTables[mbcId].customer_details = new Tabulator(`#customer_details-table-${mbcId}`, {
+            layout: "fitDataFill",
+            height: 150,
+            ajaxURL: `/api/module/MBC01/customer_details/${mbcId}`,
+            columns: [
+                {title: "Customer", field: "customer_name", width: 200, editor: canEdit ? "list" : false,
+                    editorParams: {values: customerOptions, autocomplete: true, allowEmpty: true}},
+                {title: "Bill of Coastal Goods No.", field: "bill_of_coastal_goods_no", width: 180, editor: canEdit ? "input" : false},
+                {title: "Quantity", field: "quantity", width: 100, hozAlign: "right", editor: canEdit ? "number" : false,
+                    editorParams: {min: 0, step: 0.01}},
+                {title: "Material PO", field: "material_po", width: 150, editor: canEdit ? "input" : false},
+                delBtn('customer_details')
+            ].filter(Boolean)
+        });
+        if (isDark) document.querySelector(`#customer_details-table-${mbcId}`).classList.add('tabulator-dark');
     }
 
     function deleteButtonFormatter(cell) {
@@ -579,7 +660,7 @@
         const data = await res.json();
         if (data.id && subTables[mbcId] && subTables[mbcId][type]) {
             const newRow = {id: data.id, mbc_id: mbcId};
-            subTables[mbcId][type].addRow(newRow, true);
+            subTables[mbcId][type].addRow(newRow, false);
         }
     }
 

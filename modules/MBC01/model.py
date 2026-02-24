@@ -199,3 +199,91 @@ def delete_cleaning_detail(row_id):
     cur.execute('DELETE FROM mbc_cleaning_details WHERE id=%s', (row_id,))
     conn.commit()
     conn.close()
+
+
+# Export Load Port Lines sub-table operations
+def get_export_load_port_lines(mbc_id):
+    conn = get_db()
+    cur = get_cursor(conn)
+    cur.execute('SELECT * FROM mbc_export_load_port_lines WHERE mbc_id=%s ORDER BY id DESC', (mbc_id,))
+    rows = cur.fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
+
+
+def save_export_load_port_line(data):
+    conn = get_db()
+    cur = get_cursor(conn)
+
+    if data.get('id'):
+        cur.execute('''UPDATE mbc_export_load_port_lines SET
+                      arrived_at_port=%s, alongside_at_berth=%s, loading_commenced=%s,
+                      loading_completed=%s, cast_off_from_berth=%s, sailed_out_from_port=%s,
+                      eta_at_gull_island=%s, unloaded_by=%s, berth_master=%s
+                      WHERE id=%s''',
+                   [data.get('arrived_at_port'), data.get('alongside_at_berth'), data.get('loading_commenced'),
+                    data.get('loading_completed'), data.get('cast_off_from_berth'), data.get('sailed_out_from_port'),
+                    data.get('eta_at_gull_island'), data.get('unloaded_by'), data.get('berth_master'), data['id']])
+        row_id = data['id']
+    else:
+        cur.execute('''INSERT INTO mbc_export_load_port_lines
+                      (mbc_id, arrived_at_port, alongside_at_berth, loading_commenced, loading_completed,
+                       cast_off_from_berth, sailed_out_from_port, eta_at_gull_island, unloaded_by, berth_master)
+                      VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s) RETURNING id''',
+                   [data['mbc_id'], data.get('arrived_at_port'), data.get('alongside_at_berth'),
+                    data.get('loading_commenced'), data.get('loading_completed'),
+                    data.get('cast_off_from_berth'), data.get('sailed_out_from_port'),
+                    data.get('eta_at_gull_island'), data.get('unloaded_by'), data.get('berth_master')])
+        row_id = cur.fetchone()['id']
+    conn.commit()
+    conn.close()
+    return row_id
+
+
+def delete_export_load_port_line(row_id):
+    conn = get_db()
+    cur = get_cursor(conn)
+    cur.execute('DELETE FROM mbc_export_load_port_lines WHERE id=%s', (row_id,))
+    conn.commit()
+    conn.close()
+
+
+# Customer Details sub-table operations
+def get_customer_details(mbc_id):
+    conn = get_db()
+    cur = get_cursor(conn)
+    cur.execute('SELECT * FROM mbc_customer_details WHERE mbc_id=%s ORDER BY id DESC', (mbc_id,))
+    rows = cur.fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
+
+
+def save_customer_detail(data):
+    conn = get_db()
+    cur = get_cursor(conn)
+
+    if data.get('id'):
+        cur.execute('''UPDATE mbc_customer_details SET
+                      customer_name=%s, bill_of_coastal_goods_no=%s, quantity=%s, material_po=%s
+                      WHERE id=%s''',
+                   [data.get('customer_name'), data.get('bill_of_coastal_goods_no'),
+                    data.get('quantity'), data.get('material_po'), data['id']])
+        row_id = data['id']
+    else:
+        cur.execute('''INSERT INTO mbc_customer_details
+                      (mbc_id, customer_name, bill_of_coastal_goods_no, quantity, material_po)
+                      VALUES (%s, %s, %s, %s, %s) RETURNING id''',
+                   [data['mbc_id'], data.get('customer_name'), data.get('bill_of_coastal_goods_no'),
+                    data.get('quantity'), data.get('material_po')])
+        row_id = cur.fetchone()['id']
+    conn.commit()
+    conn.close()
+    return row_id
+
+
+def delete_customer_detail(row_id):
+    conn = get_db()
+    cur = get_cursor(conn)
+    cur.execute('DELETE FROM mbc_customer_details WHERE id=%s', (row_id,))
+    conn.commit()
+    conn.close()

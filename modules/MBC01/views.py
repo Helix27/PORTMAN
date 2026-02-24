@@ -132,3 +132,53 @@ def delete_cleaning_detail():
         return jsonify({'error': 'No permission to delete'}), 403
     model.delete_cleaning_detail(request.json['id'])
     return jsonify({'success': True})
+
+# Export Load Port Lines sub-table endpoints
+@bp.route('/api/module/MBC01/export_load_port/<int:mbc_id>')
+@login_required
+def get_export_load_port_lines(mbc_id):
+    return jsonify(model.get_export_load_port_lines(mbc_id))
+
+@bp.route('/api/module/MBC01/export_load_port/save', methods=['POST'])
+@login_required
+def save_export_load_port_line():
+    perms = get_perms()
+    if not perms.get('can_add') and not perms.get('can_edit'):
+        return jsonify({'error': 'No permission'}), 403
+    data = request.json
+    row_id = model.save_export_load_port_line(data)
+    return jsonify({'id': row_id, 'success': True})
+
+@bp.route('/api/module/MBC01/export_load_port/delete', methods=['POST'])
+@login_required
+def delete_export_load_port_line():
+    perms = get_perms()
+    if not perms.get('can_delete'):
+        return jsonify({'error': 'No permission to delete'}), 403
+    model.delete_export_load_port_line(request.json['id'])
+    return jsonify({'success': True})
+
+# Customer Details sub-table endpoints
+@bp.route('/api/module/MBC01/customer_details/<int:mbc_id>')
+@login_required
+def get_customer_details(mbc_id):
+    return jsonify(model.get_customer_details(mbc_id))
+
+@bp.route('/api/module/MBC01/customer_details/save', methods=['POST'])
+@login_required
+def save_customer_detail():
+    perms = get_perms()
+    if not perms.get('can_add') and not perms.get('can_edit'):
+        return jsonify({'error': 'No permission'}), 403
+    data = request.json
+    row_id = model.save_customer_detail(data)
+    return jsonify({'id': row_id, 'success': True})
+
+@bp.route('/api/module/MBC01/customer_details/delete', methods=['POST'])
+@login_required
+def delete_customer_detail():
+    perms = get_perms()
+    if not perms.get('can_delete'):
+        return jsonify({'error': 'No permission to delete'}), 403
+    model.delete_customer_detail(request.json['id'])
+    return jsonify({'success': True})
