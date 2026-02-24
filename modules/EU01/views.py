@@ -34,7 +34,8 @@ def view():
 def get_data():
     page = request.args.get('page', 1, type=int)
     size = request.args.get('size', 20, type=int)
-    return jsonify(model.get_all_lines(page, size))
+    equipment_name = request.args.get('equipment', None)
+    return jsonify(model.get_all_lines(page, size, equipment_name))
 
 @bp.route('/api/module/EU01/save', methods=['POST'])
 @login_required
@@ -148,21 +149,18 @@ def get_uom():
 @bp.route('/api/module/EU01/barges/<int:vcn_id>')
 @login_required
 def get_barges_for_vcn(vcn_id):
-    """Get barges from a specific VCN's LDUD barge lines"""
     barges = model.get_vcn_barges(vcn_id)
     return jsonify(barges)
 
 @bp.route('/api/module/EU01/mbc-names')
 @login_required
 def get_mbc_names():
-    """Get all MBC names from master"""
     names = model.get_mbc_names()
     return jsonify(names)
 
 @bp.route('/api/module/EU01/routes')
 @login_required
 def get_routes():
-    """Get all conveyor routes"""
     conn = get_db()
     cur = get_cursor(conn)
     cur.execute('SELECT route_name FROM conveyor_routes WHERE is_active = 1 ORDER BY route_name')
@@ -170,3 +168,49 @@ def get_routes():
     conn.close()
     return jsonify([r['route_name'] for r in rows])
 
+@bp.route('/api/module/EU01/systems')
+@login_required
+def get_systems():
+    conn = get_db()
+    cur = get_cursor(conn)
+    cur.execute("SELECT name FROM port_systems WHERE name IS NOT NULL AND name != '' ORDER BY name")
+    rows = cur.fetchall()
+    conn.close()
+    return jsonify([r['name'] for r in rows])
+
+@bp.route('/api/module/EU01/berths')
+@login_required
+def get_berths():
+    conn = get_db()
+    cur = get_cursor(conn)
+    cur.execute('SELECT berth_name FROM port_berth_master ORDER BY berth_name')
+    rows = cur.fetchall()
+    conn.close()
+    return jsonify([r['berth_name'] for r in rows])
+
+@bp.route('/api/module/EU01/shift-incharge')
+@login_required
+def get_shift_incharge():
+    conn = get_db()
+    cur = get_cursor(conn)
+    cur.execute("SELECT name FROM port_shift_incharge WHERE name IS NOT NULL AND name != '' ORDER BY name")
+    rows = cur.fetchall()
+    conn.close()
+    return jsonify([r['name'] for r in rows])
+
+@bp.route('/api/module/EU01/shift-operators')
+@login_required
+def get_shift_operators():
+    conn = get_db()
+    cur = get_cursor(conn)
+    cur.execute("SELECT name FROM port_shift_operators WHERE name IS NOT NULL AND name != '' ORDER BY name")
+    rows = cur.fetchall()
+    conn.close()
+    return jsonify([r['name'] for r in rows])
+
+@bp.route('/api/module/EU01/barge-cargos/<int:vcn_id>')
+@login_required
+def get_barge_cargos(vcn_id):
+    barge_name = request.args.get('barge', '')
+    cargos = model.get_barge_cargos(vcn_id, barge_name)
+    return jsonify(cargos)

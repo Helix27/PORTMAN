@@ -69,6 +69,22 @@ def save_data(data):
     conn.close()
     return row_id
 
+def bulk_insert(rows):
+    conn = get_db()
+    cur = get_cursor(conn)
+    inserted = 0
+    for row in rows:
+        if not row.get('cargo_type') and not row.get('cargo_name'):
+            continue
+        cur.execute(f"""INSERT INTO {TABLE} (cargo_type, cargo_category, cargo_name, cargo_category_2, cargo_sub_category, cargo_sub_category_2)
+                       VALUES (%s, %s, %s, %s, %s, %s)""",
+                   [row.get('cargo_type', ''), row.get('cargo_category', ''), row.get('cargo_name', ''),
+                    row.get('cargo_category_2'), row.get('cargo_sub_category'), row.get('cargo_sub_category_2')])
+        inserted += 1
+    conn.commit()
+    conn.close()
+    return inserted
+
 def delete_data(row_id):
     conn = get_db()
     cur = conn.cursor()

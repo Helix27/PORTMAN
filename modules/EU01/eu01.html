@@ -3,20 +3,113 @@
 {% block title %}Equipment Utilization - PORTMAN{% endblock %}
 
 {% block content %}
+<style>
+    .eu-btn-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+        gap: 18px;
+        padding: 40px 20px;
+        min-height: calc(100vh - 200px);
+        align-content: start;
+    }
+    .eq-pushable {
+        position: relative;
+        border: none;
+        background: transparent;
+        padding: 0;
+        cursor: pointer;
+        outline-offset: 4px;
+        transition: filter 250ms;
+        user-select: none;
+        touch-action: manipulation;
+        width: 100%;
+    }
+    .eq-shadow {
+        position: absolute;
+        top: 0; left: 0;
+        width: 100%; height: 100%;
+        border-radius: 12px;
+        background: hsl(0deg 0% 0% / 0.25);
+        will-change: transform;
+        transform: translateY(2px);
+        transition: transform 600ms cubic-bezier(.3, .7, .4, 1);
+    }
+    .eq-edge {
+        position: absolute;
+        top: 0; left: 0;
+        width: 100%; height: 100%;
+        border-radius: 12px;
+        background: linear-gradient(
+            to left,
+            hsl(340deg 100% 16%) 0%,
+            hsl(340deg 100% 32%) 8%,
+            hsl(340deg 100% 32%) 92%,
+            hsl(340deg 100% 16%) 100%
+        );
+    }
+    .eq-front {
+        display: block;
+        position: relative;
+        padding: 14px 20px;
+        border-radius: 12px;
+        font-size: 1.1rem;
+        color: white;
+        background: hsl(345deg 100% 47%);
+        will-change: transform;
+        transform: translateY(-4px);
+        transition: transform 600ms cubic-bezier(.3, .7, .4, 1);
+        text-align: center;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+    .eq-pushable:hover { filter: brightness(110%); }
+    .eq-pushable:hover .eq-front {
+        transform: translateY(-6px);
+        transition: transform 250ms cubic-bezier(.3, .7, .4, 1.5);
+    }
+    .eq-pushable:active .eq-front {
+        transform: translateY(-2px);
+        transition: transform 34ms;
+    }
+    .eq-pushable:hover .eq-shadow {
+        transform: translateY(4px);
+        transition: transform 250ms cubic-bezier(.3, .7, .4, 1.5);
+    }
+    .eq-pushable:active .eq-shadow {
+        transform: translateY(1px);
+        transition: transform 34ms;
+    }
+    .eq-pushable:focus:not(:focus-visible) { outline: none; }
+
+    #equipmentView { display: none; }
+    #buttonView { display: block; }
+</style>
 <div class="module-header">
     <h2>Equipment Utilization</h2>
     <span class="module-code">EU01</span>
     <span id="saveStatus" class="save-status"></span>
 </div>
 
-<div class="toolbar">
-    {% if permissions.can_add %}<button class="btn btn-add" onclick="addRow()">+ Add Row</button>{% endif %}
-    {% if permissions.can_delete %}<button class="btn btn-delete" onclick="deleteSelected()">Delete Selected</button>{% endif %}
-    {% if permissions.can_add or permissions.can_edit %}<button class="btn btn-save" onclick="saveAll()">Save (Ctrl+S)</button>{% endif %}
-    <div class="row-info">Rows: <span id="rowCount">0</span> / <span id="totalCount">0</span></div>
+<!-- Equipment Button Grid -->
+<div id="buttonView">
+    <div class="eu-btn-grid" id="eqButtonGrid">
+        <p style="color:#888;">Loading equipment...</p>
+    </div>
 </div>
 
-<div id="table"></div>
+<!-- Equipment Table View (hidden initially) -->
+<div id="equipmentView">
+    <div class="toolbar">
+        <button class="btn" onclick="goBack()" style="background:#6c757d;color:#fff;">Back</button>
+        <span id="currentEquipLabel" style="font-weight:bold;font-size:1.1rem;margin:0 12px;"></span>
+        {% if permissions.can_add %}<button class="btn btn-add" onclick="addRow()">+ Add Row</button>{% endif %}
+        {% if permissions.can_delete %}<button class="btn btn-delete" onclick="deleteSelected()">Delete Selected</button>{% endif %}
+        {% if permissions.can_add or permissions.can_edit %}<button class="btn btn-save" onclick="saveAll()">Save (Ctrl+S)</button>{% endif %}
+        <div class="row-info">Rows: <span id="rowCount">0</span> / <span id="totalCount">0</span></div>
+    </div>
+    <div id="table"></div>
+</div>
 {% endblock %}
 
 {% block scripts %}
@@ -24,15 +117,20 @@
     addToRecent('EU01', 'Equipment Utilization');
 
     let table;
-    let vcnOptions = [];  // Array of {value, label, type, id}
-    let mbcOptions = [];  // Array of {value, label, type, id}
-    let mbcNames = [];    // MBC names from master
+    let currentEquipment = null;
+    let vcnOptions = [];
+    let mbcOptions = [];
+    let mbcNames = [];
     let equipmentList = [];
     let delayList = [];
     let cargoList = [];
     let operationTypes = [];
     let uomList = [];
     let routeList = [];
+    let systemList = [];
+    let berthList = [];
+    let shiftInchargeList = [];
+    let shiftOperatorList = [];
 
     const currentUser = '{{ session.username }}';
     const permissions = {
@@ -56,7 +154,7 @@
     }
 
     async function loadMasterData() {
-        const [vcn, mbc, mbcNamesRes, equip, delays, cargo, ops, uom, routes] = await Promise.all([
+        const [vcn, mbc, mbcNamesRes, equip, delays, cargo, ops, uom, routes, systems, berths, incharge, operators] = await Promise.all([
             fetch('/api/module/EU01/vcn-options').then(r => r.json()),
             fetch('/api/module/EU01/mbc-options').then(r => r.json()),
             fetch('/api/module/EU01/mbc-names').then(r => r.json()),
@@ -65,7 +163,11 @@
             fetch('/api/module/EU01/cargo').then(r => r.json()),
             fetch('/api/module/EU01/operation-types').then(r => r.json()),
             fetch('/api/module/EU01/uom').then(r => r.json()),
-            fetch('/api/module/EU01/routes').then(r => r.json())
+            fetch('/api/module/EU01/routes').then(r => r.json()),
+            fetch('/api/module/EU01/systems').then(r => r.json()),
+            fetch('/api/module/EU01/berths').then(r => r.json()),
+            fetch('/api/module/EU01/shift-incharge').then(r => r.json()),
+            fetch('/api/module/EU01/shift-operators').then(r => r.json())
         ]);
 
         vcnOptions = vcn;
@@ -77,8 +179,47 @@
         operationTypes = ops;
         uomList = uom;
         routeList = routes;
+        systemList = systems;
+        berthList = berths;
+        shiftInchargeList = incharge;
+        shiftOperatorList = operators;
 
-        initTable();
+        renderEquipmentButtons();
+    }
+
+    function renderEquipmentButtons() {
+        const grid = document.getElementById('eqButtonGrid');
+        if (equipmentList.length === 0) {
+            grid.innerHTML = '<p style="color:#888;">No equipment found. Add equipment in Equipment Master (VEM01).</p>';
+            return;
+        }
+        grid.innerHTML = '';
+        equipmentList.forEach(name => {
+            const btn = document.createElement('button');
+            btn.className = 'eq-pushable';
+            btn.onclick = () => openEquipmentTable(name);
+            btn.innerHTML = `
+                <span class="eq-shadow"></span>
+                <span class="eq-edge"></span>
+                <span class="eq-front">${name}</span>
+            `;
+            grid.appendChild(btn);
+        });
+    }
+
+    function openEquipmentTable(equipName) {
+        currentEquipment = equipName;
+        document.getElementById('buttonView').style.display = 'none';
+        document.getElementById('equipmentView').style.display = 'block';
+        document.getElementById('currentEquipLabel').textContent = equipName;
+        initTable(equipName);
+    }
+
+    function goBack() {
+        currentEquipment = null;
+        document.getElementById('equipmentView').style.display = 'none';
+        document.getElementById('buttonView').style.display = 'block';
+        if (table) { table.destroy(); table = null; }
     }
 
     function toOptions(arr) {
@@ -94,36 +235,22 @@
         return opts;
     }
 
-    // datetimeEditor and dateEditor are now global (defined in base.html)
-
     // Dynamic barge editor based on VCN/MBC selection
     var bargeEditor = function(cell, onRendered, success, cancel) {
         const row = cell.getRow();
         const rowData = row.getData();
         const sourceDisplay = rowData.source_display || '';
 
-        // Determine if it's a VCN or MBC selection
         let options = [];
-
-        // Check if it's a VCN selection
         const vcnMatch = vcnOptions.find(v => v.label === sourceDisplay);
         if (vcnMatch) {
-            // Fetch barges for this VCN
             fetch(`/api/module/EU01/barges/${vcnMatch.id}`)
                 .then(r => r.json())
-                .then(barges => {
-                    options = barges;
-                    renderSelect(options);
-                });
+                .then(barges => { options = barges; renderSelect(options); });
         } else {
-            // Check if it's an MBC selection - use MBC names from master
             const mbcMatch = mbcOptions.find(m => m.label === sourceDisplay);
-            if (mbcMatch) {
-                options = mbcNames;
-                renderSelect(options);
-            } else {
-                renderSelect(options);
-            }
+            if (mbcMatch) { options = mbcNames; renderSelect(options); }
+            else { renderSelect(options); }
         }
 
         var select = document.createElement("select");
@@ -141,64 +268,132 @@
                 select.appendChild(option);
             });
         }
-
-        // Initially render empty, will be populated by fetch or directly
         renderSelect([]);
 
-        onRendered(function() {
-            select.focus();
-        });
-
+        onRendered(function() { select.focus(); });
         select.addEventListener("change", function() { success(select.value); });
         select.addEventListener("blur", function() { success(select.value); });
         select.addEventListener("keydown", function(e) {
             if (e.key === "Enter") success(select.value);
             if (e.key === "Escape") cancel();
         });
-
         return select;
     };
 
-    function initTable() {
+    // Dynamic cargo editor - auto-picks if single cargo, dropdown if multiple
+    var cargoEditor = function(cell, onRendered, success, cancel) {
+        const row = cell.getRow();
+        const rowData = row.getData();
+        const sourceDisplay = rowData.source_display || '';
+        const bargeName = rowData.barge_name || '';
+
+        var select = document.createElement("select");
+        select.style.width = "100%";
+        select.style.boxSizing = "border-box";
+        select.style.padding = "4px";
+
+        function renderSelect(opts) {
+            select.innerHTML = '<option value=""></option>';
+            opts.forEach(opt => {
+                const option = document.createElement("option");
+                option.value = opt;
+                option.textContent = opt;
+                if (opt === cell.getValue()) option.selected = true;
+                select.appendChild(option);
+            });
+        }
+
+        // Try to get cargo from barge
+        const vcnMatch = vcnOptions.find(v => v.label === sourceDisplay);
+        if (vcnMatch && bargeName) {
+            fetch(`/api/module/EU01/barge-cargos/${vcnMatch.id}?barge=${encodeURIComponent(bargeName)}`)
+                .then(r => r.json())
+                .then(cargos => {
+                    if (cargos.length === 1) {
+                        success(cargos[0]);
+                        return;
+                    }
+                    if (cargos.length > 1) {
+                        renderSelect(cargos);
+                        return;
+                    }
+                    renderSelect(cargoList);
+                });
+        } else {
+            renderSelect(cargoList);
+        }
+
+        renderSelect([]);
+
+        onRendered(function() { select.focus(); });
+        select.addEventListener("change", function() { success(select.value); });
+        select.addEventListener("blur", function() { success(select.value); });
+        select.addEventListener("keydown", function(e) {
+            if (e.key === "Enter") success(select.value);
+            if (e.key === "Escape") cancel();
+        });
+        return select;
+    };
+
+    // HH:MM time editor
+    var timeEditor = function(cell, onRendered, success, cancel) {
+        var input = document.createElement("input");
+        input.type = "time";
+        input.value = cell.getValue() || '';
+        input.style.width = "100%";
+        input.style.boxSizing = "border-box";
+        input.style.padding = "4px";
+
+        onRendered(function() { input.focus(); });
+        input.addEventListener("change", function() { success(input.value); });
+        input.addEventListener("blur", function() { success(input.value); });
+        input.addEventListener("keydown", function(e) {
+            if (e.key === "Enter") success(input.value);
+            if (e.key === "Escape") cancel();
+        });
+        return input;
+    };
+
+    function initTable(equipName) {
+        if (table) { table.destroy(); table = null; }
+
         const canEdit = permissions.can_edit || permissions.can_add;
 
         const columns = [
             {formatter: "rowSelection", titleFormatter: "rowSelection", hozAlign: "center", headerSort: false, width: 40},
-            {title: "ID", field: "id", width: 60},
+            {title: "Date", field: "entry_date", width: 120, editor: canEdit ? "date" : false, formatter: dateCellFormatter},
+            {title: "Shift", field: "shift", width: 80, editor: canEdit ? "list" : false,
+                editorParams: {values: {'': '', 'A': 'A', 'B': 'B', 'C': 'C'}}},
+            {title: "From", field: "from_time", width: 90, editor: canEdit ? timeEditor : false},
+            {title: "To", field: "to_time", width: 90, editor: canEdit ? timeEditor : false},
             {title: "VCN / MBC", field: "source_display", width: 280, editor: canEdit ? "list" : false,
                 editorParams: {values: getVcnMbcOptions(), autocomplete: true, allowEmpty: true, listOnEmpty: true}},
             {title: "Barge / MBC Name", field: "barge_name", width: 150, editor: canEdit ? bargeEditor : false},
-            {title: "Equipment", field: "equipment_name", width: 140, editor: canEdit ? "list" : false,
-                editorParams: {values: toOptions(equipmentList), autocomplete: true, allowEmpty: true, listOnEmpty: true}},
-            {title: "Operator", field: "operator_name", width: 120, editor: canEdit ? "input" : false},
+            {title: "Cargo", field: "cargo_name", width: 140, editor: canEdit ? cargoEditor : false},
             {title: "Delay", field: "delay_name", width: 140, editor: canEdit ? "list" : false,
                 editorParams: {values: toOptions(delayList), autocomplete: true, allowEmpty: true, listOnEmpty: true}},
-            {title: "Cargo", field: "cargo_name", width: 140, editor: canEdit ? "list" : false,
-                editorParams: {values: toOptions(cargoList), autocomplete: true, allowEmpty: true, listOnEmpty: true}},
-            {title: "Operation", field: "operation_type", width: 120, editor: canEdit ? "list" : false,
-                editorParams: {values: toOptions(operationTypes), autocomplete: true, allowEmpty: true, listOnEmpty: true}},
-            {title: "Qty", field: "quantity", width: 90, hozAlign: "right", editor: canEdit ? "number" : false,
-                editorParams: {min: 0, step: 0.01}},
-            {title: "UOM", field: "quantity_uom", width: 80, editor: canEdit ? "list" : false,
-                editorParams: {values: toOptions(uomList), autocomplete: true, allowEmpty: true, listOnEmpty: true}},
+            {title: "System", field: "system_name", width: 130, editor: canEdit ? "list" : false,
+                editorParams: {values: toOptions(systemList), autocomplete: true, allowEmpty: true, listOnEmpty: true}},
             {title: "Route", field: "route_name", width: 140, editor: canEdit ? "list" : false,
                 editorParams: {values: toOptions(routeList), autocomplete: true, allowEmpty: true, listOnEmpty: true}},
-            {title: "Start Time", field: "start_time", width: 150, editor: canEdit ? datetimeEditor : false,
-                formatter: datetimeCellFormatter},
-            {title: "End Time", field: "end_time", width: 150, editor: canEdit ? datetimeEditor : false,
-                formatter: datetimeCellFormatter},
-            {title: "Entry Date", field: "entry_date", width: 120, editor: canEdit ? "date" : false, formatter: dateCellFormatter},
-            {title: "Created By", field: "created_by", width: 100}
+            {title: "Berth", field: "berth_name", width: 130, editor: canEdit ? "list" : false,
+                editorParams: {values: toOptions(berthList), autocomplete: true, allowEmpty: true, listOnEmpty: true}},
+            {title: "Shift Incharge", field: "shift_incharge", width: 140, editor: canEdit ? "list" : false,
+                editorParams: {values: toOptions(shiftInchargeList), autocomplete: true, allowEmpty: true, listOnEmpty: true}},
+            {title: "Operator", field: "operator_name", width: 140, editor: canEdit ? "list" : false,
+                editorParams: {values: toOptions(shiftOperatorList), autocomplete: true, allowEmpty: true, listOnEmpty: true}},
+            {title: "Remarks", field: "remarks", width: 200, editor: canEdit ? "input" : false}
         ];
 
         table = new Tabulator("#table", {
-            height: "calc(100vh - 160px)",
+            height: "calc(100vh - 200px)",
             layout: "fitDataFill",
             columns: columns,
             pagination: true,
             paginationMode: "remote",
             paginationSize: 20,
             ajaxURL: "/api/module/EU01/data",
+            ajaxParams: {equipment: equipName},
             ajaxResponse: function(url, params, response) {
                 document.getElementById('rowCount').textContent = response.data.length;
                 document.getElementById('totalCount').textContent = response.total;
@@ -211,17 +406,30 @@
         table.on("cellEdited", function(cell) {
             if (cell.getField() === "source_display") {
                 const sourceDisplay = cell.getValue() || '';
-                // Check if it's an MBC selection (format: doc_num / mbc_name / doc_date)
                 const mbcMatch = mbcOptions.find(m => m.label === sourceDisplay);
                 if (mbcMatch) {
-                    // Extract MBC name from the display (second part)
                     const parts = sourceDisplay.split(' / ');
                     if (parts.length >= 2) {
                         cell.getRow().update({barge_name: parts[1]});
                     }
                 } else {
-                    // VCN selected - clear barge_name, user will select from dropdown
                     cell.getRow().update({barge_name: ''});
+                }
+            }
+            // Auto-pick cargo when barge is selected and only one cargo
+            if (cell.getField() === "barge_name") {
+                const rowData = cell.getRow().getData();
+                const sourceDisplay = rowData.source_display || '';
+                const bargeName = cell.getValue() || '';
+                const vcnMatch = vcnOptions.find(v => v.label === sourceDisplay);
+                if (vcnMatch && bargeName) {
+                    fetch(`/api/module/EU01/barge-cargos/${vcnMatch.id}?barge=${encodeURIComponent(bargeName)}`)
+                        .then(r => r.json())
+                        .then(cargos => {
+                            if (cargos.length === 1) {
+                                cell.getRow().update({cargo_name: cargos[0]});
+                            }
+                        });
                 }
             }
         });
@@ -234,8 +442,9 @@
     function addRow() {
         table.addRow({
             created_by: currentUser,
-            entry_date: getTodayDate()
-        }, true);
+            entry_date: getTodayDate(),
+            equipment_name: currentEquipment
+        }, false);
     }
 
     function deleteSelected() {
@@ -244,7 +453,6 @@
         if (!confirm(`Delete ${selected.length} row(s)?`)) return;
 
         const ids = selected.map(row => row.getData().id).filter(id => id);
-
         if (ids.length > 0) {
             fetch("/api/module/EU01/delete", {
                 method: 'POST',
@@ -262,20 +470,16 @@
 
         for (const row of rows) {
             const data = row.getData();
-            // Skip empty rows
-            if (!data.source_display && !data.barge_name && !data.equipment_name && !data.id) continue;
+            if (!data.source_display && !data.barge_name && !data.id) continue;
 
-            // Determine source type and id from selection
+            // Set equipment name
+            data.equipment_name = currentEquipment;
+
+            // Determine source type and id
             const vcnMatch = vcnOptions.find(v => v.label === data.source_display);
             const mbcMatch = mbcOptions.find(m => m.label === data.source_display);
-
-            if (vcnMatch) {
-                data.source_type = 'VCN';
-                data.source_id = vcnMatch.id;
-            } else if (mbcMatch) {
-                data.source_type = 'MBC';
-                data.source_id = mbcMatch.id;
-            }
+            if (vcnMatch) { data.source_type = 'VCN'; data.source_id = vcnMatch.id; }
+            else if (mbcMatch) { data.source_type = 'MBC'; data.source_id = mbcMatch.id; }
 
             const res = await fetch("/api/module/EU01/save", {
                 method: 'POST',
@@ -283,10 +487,7 @@
                 body: JSON.stringify(data)
             });
             const result = await res.json();
-            if (result.id) {
-                row.update({id: result.id});
-                savedCount++;
-            }
+            if (result.id) { row.update({id: result.id}); savedCount++; }
         }
         showStatus(`Saved ${savedCount} row(s)`, 'saved');
     }
