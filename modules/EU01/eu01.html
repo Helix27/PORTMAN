@@ -126,6 +126,7 @@
     let cargoList = [];
     let operationTypes = [];
     let uomList = [];
+    let defaultUom = '';
     let routeList = [];
     let systemList = [];
     let berthList = [];
@@ -177,7 +178,8 @@
         delayList = delays;
         cargoList = cargo;
         operationTypes = ops;
-        uomList = uom;
+        uomList = uom.names || uom;
+        defaultUom = uom.default || '';
         routeList = routes;
         systemList = systems;
         berthList = berths;
@@ -382,6 +384,10 @@
                 editorParams: {values: toOptions(shiftInchargeList), autocomplete: true, allowEmpty: true, listOnEmpty: true}},
             {title: "Operator", field: "operator_name", width: 140, editor: canEdit ? "list" : false,
                 editorParams: {values: toOptions(shiftOperatorList), autocomplete: true, allowEmpty: true, listOnEmpty: true}},
+            {title: "Quantity", field: "quantity", width: 100, hozAlign: "right",
+                editor: canEdit ? "number" : false, editorParams: {min: 0, step: 0.01}},
+            {title: "Qty UOM", field: "quantity_uom", width: 110, editor: canEdit ? "list" : false,
+                editorParams: {values: toOptions(uomList), autocomplete: true, allowEmpty: true, listOnEmpty: true}},
             {title: "Remarks", field: "remarks", width: 200, editor: canEdit ? "input" : false}
         ];
 
@@ -443,7 +449,8 @@
         table.addRow({
             created_by: currentUser,
             entry_date: getTodayDate(),
-            equipment_name: currentEquipment
+            equipment_name: currentEquipment,
+            quantity_uom: defaultUom || undefined
         }, false);
     }
 

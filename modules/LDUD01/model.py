@@ -505,3 +505,25 @@ def delete_hold_completion(row_id):
     cur.execute('DELETE FROM ldud_hold_completion WHERE id=%s', (row_id,))
     conn.commit()
     conn.close()
+
+
+# Hold Cargo Config operations
+def get_hold_cargo(ldud_id):
+    conn = get_db()
+    cur = get_cursor(conn)
+    cur.execute('SELECT hold_name, cargo_name FROM ldud_hold_cargo WHERE ldud_id=%s', (ldud_id,))
+    rows = cur.fetchall()
+    conn.close()
+    return {r['hold_name']: r['cargo_name'] or '' for r in rows}
+
+
+def save_hold_cargo(ldud_id, hold_name, cargo_name):
+    conn = get_db()
+    cur = get_cursor(conn)
+    cur.execute('''
+        INSERT INTO ldud_hold_cargo (ldud_id, hold_name, cargo_name)
+        VALUES (%s, %s, %s)
+        ON CONFLICT (ldud_id, hold_name) DO UPDATE SET cargo_name = EXCLUDED.cargo_name
+    ''', (ldud_id, hold_name, cargo_name or None))
+    conn.commit()
+    conn.close()

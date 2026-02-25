@@ -240,3 +240,8 @@ def get_stowage_total(vcn_id):
 @login_required
 def get_hold_completion(vcn_id):
     return jsonify(model.get_hold_completion_by_vcn(vcn_id))
+
+@bp.route('/api/module/VCN01/vessel_holds/<int:vcn_id>')
+@login_required
+def get_vessel_holds(vcn_id):
+    return jsonify({'no_of_holds': model.get_vessel_holds(vcn_id)})

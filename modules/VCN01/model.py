@@ -339,3 +339,18 @@ def get_hold_completion_by_vcn(vcn_id):
     rows = cur.fetchall()
     conn.close()
     return [dict(r) for r in rows]
+
+
+def get_vessel_holds(vcn_id):
+    """Return no_of_holds for the vessel linked to this VCN."""
+    conn = get_db()
+    cur = get_cursor(conn)
+    cur.execute('''
+        SELECT COALESCE(v.no_of_holds, 0) AS no_of_holds
+        FROM vcn_header h
+        LEFT JOIN vessels v ON v.vessel_name = h.vessel_name
+        WHERE h.id = %s
+    ''', (vcn_id,))
+    row = cur.fetchone()
+    conn.close()
+    return row['no_of_holds'] if row else 0

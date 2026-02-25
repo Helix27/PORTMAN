@@ -27,6 +27,8 @@
         can_delete: {{ permissions.can_delete|default(0) }}
     };
 
+    const canEdit = permissions.can_edit || permissions.can_add;
+
     let table = new Tabulator("#table", {
         height: "calc(100vh - 160px)",
         layout: "fitColumns",
@@ -37,7 +39,19 @@
         columns: [
             {formatter: "rowSelection", titleFormatter: "rowSelection", hozAlign: "center", headerSort: false, width: 40},
             {title: "ID", field: "id", width: 70},
-            {title: "UOM Name", field: "name", editor: permissions.can_edit || permissions.can_add ? "input" : false}
+            {title: "UOM Name", field: "name", editor: canEdit ? "input" : false},
+            {title: "Default", field: "is_default", hozAlign: "center", width: 80, headerSort: false,
+                formatter: function(cell) {
+                    const checked = cell.getValue() ? 'checked' : '';
+                    return `<input type="radio" name="default_uom" ${checked} ${canEdit ? '' : 'disabled'}>`;
+                },
+                cellClick: function(e, cell) {
+                    if (!canEdit) return;
+                    if (e.target.tagName !== 'INPUT') return;
+                    table.getRows().forEach(r => r.update({is_default: false}));
+                    cell.getRow().update({is_default: true});
+                }
+            }
         ],
         selectable: true
     });

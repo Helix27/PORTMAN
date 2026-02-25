@@ -141,10 +141,12 @@ def get_operation_types():
 def get_uom():
     conn = get_db()
     cur = get_cursor(conn)
-    cur.execute('SELECT name FROM quantity_uom ORDER BY name')
+    cur.execute('SELECT name, is_default FROM quantity_uom ORDER BY name')
     rows = cur.fetchall()
     conn.close()
-    return jsonify([r['name'] for r in rows])
+    names = [r['name'] for r in rows]
+    default_uom = next((r['name'] for r in rows if r['is_default']), '')
+    return jsonify({'names': names, 'default': default_uom})
 
 @bp.route('/api/module/EU01/barges/<int:vcn_id>')
 @login_required

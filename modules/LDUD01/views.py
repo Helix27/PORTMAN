@@ -212,3 +212,19 @@ def delete_hold_completion():
         return jsonify({'error': 'No permission to delete'}), 403
     model.delete_hold_completion(request.json['id'])
     return jsonify({'success': True})
+
+# Hold Cargo Config endpoints
+@bp.route('/api/module/LDUD01/hold_cargo/<int:ldud_id>')
+@login_required
+def get_hold_cargo(ldud_id):
+    return jsonify(model.get_hold_cargo(ldud_id))
+
+@bp.route('/api/module/LDUD01/hold_cargo/save', methods=['POST'])
+@login_required
+def save_hold_cargo():
+    perms = get_perms()
+    if not perms.get('can_add') and not perms.get('can_edit'):
+        return jsonify({'error': 'No permission'}), 403
+    data = request.json
+    model.save_hold_cargo(data['ldud_id'], data['hold_name'], data.get('cargo_name', ''))
+    return jsonify({'success': True})

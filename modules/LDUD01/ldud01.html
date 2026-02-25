@@ -259,6 +259,7 @@
     let stowageHoldMeta = {}; // Hold metadata per LDUD ID
     let vesselOpsHoldFields = {}; // Dynamic vessel ops hold columns per LDUD ID
     let currentOperationTypes = {}; // Track operation type per ldud ID
+    let holdCargoConfig = {}; // Per-hold cargo config per LDUD ID
     let currentLdudId = null;
 
     const currentUser = '{{ session.username }}';
@@ -455,7 +456,7 @@
             });
 
             if (hasQty && !opDate) {
-                alert('Date is required for rows where discharge quantity is entered.');
+                alert('Date is required for rows where quantity is entered.');
                 return;
             }
         }
@@ -681,11 +682,12 @@
                 <div class="sub-section-header">
                     <span>MV Anchorage Loading</span>
                     <div class="sub-section-actions">
-                        ${canAct ? `<button class="btn-sub-add" onclick="addSubRow('vessel_ops', ${ldudId})">+ Add</button>` : ''}
+                        ${canAct ? `<button class="btn-sub-add" onclick="addVesselOpsDateRow(${ldudId})">+ Add</button>` : ''}
                         ${canAct ? `<button class="btn-sub-save" onclick="saveSubTable('vessel_ops', ${ldudId})">Save</button>` : ''}
                     </div>
                 </div>
                 <div class="sub-section-content">
+                    <div id="hold-cargo-panel-${ldudId}" style="padding:6px 10px;background:#eff6ff;border-bottom:1px solid #bfdbfe;display:flex;flex-wrap:wrap;gap:6px;align-items:center;font-size:11px;min-height:34px;"></div>
                     <div id="vessel_ops-table-${ldudId}" class="sub-tabulator"></div>
                 </div>
             </div>`;
@@ -695,11 +697,12 @@
                 <div class="sub-section-header">
                     <span>MV Anchorage Discharge</span>
                     <div class="sub-section-actions">
-                        ${canAct ? `<button class="btn-sub-add" onclick="addSubRow('vessel_ops', ${ldudId})">+ Add</button>` : ''}
+                        ${canAct ? `<button class="btn-sub-add" onclick="addVesselOpsDateRow(${ldudId})">+ Add</button>` : ''}
                         ${canAct ? `<button class="btn-sub-save" onclick="saveSubTable('vessel_ops', ${ldudId})">Save</button>` : ''}
                     </div>
                 </div>
                 <div class="sub-section-content">
+                    <div id="hold-cargo-panel-${ldudId}" style="padding:6px 10px;background:#eff6ff;border-bottom:1px solid #bfdbfe;display:flex;flex-wrap:wrap;gap:6px;align-items:center;font-size:11px;min-height:34px;"></div>
                     <div id="vessel_ops-table-${ldudId}" class="sub-tabulator"></div>
                 </div>
             </div>`;
@@ -809,6 +812,73 @@
         });
     });
 
+    function renderHoldCargoPanel(ldudId, operationType) {
+        const panel = document.getElementById(`hold-cargo-panel-${ldudId}`);
+        if (!panel) return;
+        const holdDefs = getHoldDefs(ldudId);
+        const canEdit = permissions.can_edit || permissions.can_add;
+
+        // Clear panel
+        panel.innerHTML = '';
+
+        if (!holdDefs.length) {
+            const msg = document.createElement('span');
+            msg.style.cssText = 'color:#94a3b8;font-style:italic;font-size:11px;';
+            msg.textContent = operationType === 'Export' ? 'No holds — set No. of Holds on vessel in VC01' : 'No holds in stowage plan';
+            panel.appendChild(msg);
+            return;
+        }
+
+        const label = document.createElement('span');
+        label.style.cssText = 'font-weight:600;color:#1e40af;white-space:nowrap;margin-right:4px;font-size:11px;';
+        label.textContent = 'Cargo per Hold:';
+        panel.appendChild(label);
+
+        holdDefs.forEach(def => {
+            const wrap = document.createElement('span');
+            wrap.style.cssText = 'display:inline-flex;align-items:center;gap:3px;background:white;border:1px solid #bfdbfe;border-radius:4px;padding:2px 6px;';
+
+            const holdLbl = document.createElement('span');
+            holdLbl.style.cssText = 'font-weight:600;color:#374151;white-space:nowrap;font-size:11px;';
+            holdLbl.textContent = def.hold_name + ':';
+
+            const sel = document.createElement('select');
+            const isEditable = canEdit && operationType === 'Export';
+            sel.style.cssText = `font-size:11px;border:none;outline:none;background:transparent;cursor:${isEditable ? 'pointer' : 'default'};max-width:150px;`;
+            if (!isEditable) sel.disabled = true;
+
+            const emptyOpt = document.createElement('option');
+            emptyOpt.value = ''; emptyOpt.textContent = '-- Select --';
+            sel.appendChild(emptyOpt);
+
+            cargoNames.forEach(c => {
+                const opt = document.createElement('option');
+                opt.value = c; opt.textContent = c;
+                if (c === def.cargo_name) opt.selected = true;
+                sel.appendChild(opt);
+            });
+
+            sel.onchange = function() { saveHoldCargo(ldudId, def.hold_name, this.value); };
+
+            wrap.appendChild(holdLbl);
+            wrap.appendChild(sel);
+            panel.appendChild(wrap);
+        });
+    }
+
+    async function saveHoldCargo(ldudId, holdName, cargoName) {
+        // Update local holdDefs
+        const def = (vesselOpsHoldFields[ldudId] || []).find(d => d.hold_name === holdName);
+        if (def) def.cargo_name = cargoName;
+        if (holdCargoConfig[ldudId]) holdCargoConfig[ldudId][holdName] = cargoName;
+
+        await fetch('/api/module/LDUD01/hold_cargo/save', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({ldud_id: ldudId, hold_name: holdName, cargo_name: cargoName})
+        });
+    }
+
     async function initSubTables(ldudId, operationType = 'Import') {
         const canEdit = permissions.can_edit || permissions.can_add;
         const isDark = localStorage.getItem('theme') === 'dark';
@@ -866,6 +936,35 @@
             }));
         } else {
             stowagePlanData[ldudId] = [];
+        }
+
+        // Fetch hold cargo config (per-hold cargo overrides)
+        const holdCargoRes = await fetch(`/api/module/LDUD01/hold_cargo/${ldudId}`);
+        holdCargoConfig[ldudId] = await holdCargoRes.json();
+
+        if (operationType === 'Export' && vcnId) {
+            // Build export holds from vessel's no_of_holds
+            const vesselHoldsRes = await fetch(`/api/module/VCN01/vessel_holds/${vcnId}`);
+            const vesselHoldsData = await vesselHoldsRes.json();
+            const numHolds = vesselHoldsData.no_of_holds || 0;
+            const exportHolds = [];
+            for (let i = 1; i <= numHolds; i++) {
+                const holdName = `Hold ${i}`;
+                exportHolds.push({
+                    hold_name: holdName,
+                    field: `hold_${i}`,
+                    stowage_qty: 0,
+                    cargo_name: holdCargoConfig[ldudId][holdName] || ''
+                });
+            }
+            vesselOpsHoldFields[ldudId] = exportHolds;
+        } else if (operationType !== 'Export') {
+            // Import: override stowage cargo with saved holdCargoConfig
+            vesselOpsHoldFields[ldudId].forEach(def => {
+                if (holdCargoConfig[ldudId][def.hold_name]) {
+                    def.cargo_name = holdCargoConfig[ldudId][def.hold_name];
+                }
+            });
         }
 
         const delayOptions = {};
@@ -1201,74 +1300,45 @@
         });
         if (isDark) document.querySelector(`#barge_lines-table-${ldudId}`).classList.add('tabulator-dark');
 
-        if (operationType === 'Export') {
-            // Export: simple row-based loading ops table using hold master
-            const holdMasterOpts = {};
-            holdMasterList.forEach(h => { holdMasterOpts[h] = h; });
-
-            // Fetch export cargo names for this VCN for dropdown
-            let exportCargoNamesOpts = {};
-            if (vcnId) {
-                const ecnRes = await fetch(`/api/module/VCN01/export_cargo_names/${vcnId}`);
-                const ecnNames = await ecnRes.json();
-                ecnNames.forEach(n => { exportCargoNamesOpts[n] = n; });
-            }
-
-            subTables[ldudId].vessel_ops = new Tabulator(`#vessel_ops-table-${ldudId}`, {
-                layout: "fitDataFill",
-                height: 200,
-                ajaxURL: `/api/module/LDUD01/vessel_ops/${ldudId}`,
-                columns: [
-                    {title: "Date", field: "start_time", width: 130, editor: canEdit ? dateEditor : false,
-                        formatter: function(cell) { const v = cell.getValue(); return v ? String(v).slice(0, 10) : ''; }
-                    },
-                    {title: "Hold Name", field: "hold_name", width: 130, editor: canEdit ? "list" : false,
-                        editorParams: {values: holdMasterOpts, autocomplete: true, allowEmpty: true}},
-                    {title: "Cargo Name", field: "cargo_name", width: 140, editor: canEdit ? "list" : false,
-                        editorParams: {values: exportCargoNamesOpts, autocomplete: true, allowEmpty: true}},
-                    {title: "Quantity", field: "quantity", width: 100, hozAlign: "right",
-                        editor: canEdit ? "number" : false, editorParams: {min: 0, step: 0.01}},
-                    canEdit ? {title: "", field: "actions", formatter: deleteButtonFormatter, width: 50, hozAlign: "center", headerSort: false,
-                        cellClick: function(e, cell) { deleteSubRow('vessel_ops', cell.getRow().getData().id, ldudId); }
-                    } : null
-                ].filter(Boolean)
-            });
-            if (isDark) document.querySelector(`#vessel_ops-table-${ldudId}`).classList.add('tabulator-dark');
-        } else {
-            // Import: pivot table with column groups showing Hold (Cargo) headers and stowage qty sub-headers
+        {
+            // Both Import and Export use a pivot table layout.
+            // Import: holds from stowage plan, shows Balance On Board
+            // Export: holds from vessel no_of_holds, shows Total Loaded only
             const holdDefs = getHoldDefs(ldudId);
+            const isExport = operationType === 'Export';
 
             // Build column groups: each hold gets a group with title "Hold XX (Cargo)"
             const vesselOpsHoldColumnGroups = holdDefs.map((def, idx) => {
-                const cargoLabel = def.cargo_name ? `(${def.cargo_name})` : '';
-                const stowageQty = parseFloat(def.stowage_qty || 0).toFixed(2);
+                const cargoLabel = def.cargo_name ? ` (${def.cargo_name})` : '';
+                const subTitle = isExport
+                    ? `H${idx + 1}`
+                    : `H${idx + 1} Stow: ${parseFloat(def.stowage_qty || 0).toFixed(2)}`;
                 return {
-                    title: `${def.hold_name} ${cargoLabel}`,
+                    title: `${def.hold_name}${cargoLabel}`,
                     columns: [{
-                        title: `H${idx + 1} Total Qty: ${stowageQty}`,
+                        title: subTitle,
                         field: def.field,
                         width: 140,
                         hozAlign: "right",
                         editor: canEdit ? "number" : false,
                         editorParams: {min: 0, step: 0.01},
                         cellEdited: function() { updateHoldSummary(ldudId); },
-                        // Bottom calc: two rows - Total Discharge and Balance On Board
                         bottomCalc: function(values) {
                             let sum = 0;
                             values.forEach(v => { const n = parseFloat(v || 0); if (Number.isFinite(n)) sum += n; });
                             return sum;
                         },
                         bottomCalcFormatter: function(cell) {
-                            const col = cell.getColumn();
-                            const field = col.getField();
-                            // Find the matching holdDef for this field
-                            const matchDef = holdDefs.find(d => d.field === field);
+                            const total = parseFloat(cell.getValue() || 0);
+                            if (isExport) {
+                                return total > 0 ? `<div style="font-weight:600;color:#15803d;">${total.toFixed(2)}</div>` : '';
+                            }
+                            const matchDef = holdDefs.find(d => d.field === cell.getColumn().getField());
                             const stowage = matchDef ? parseFloat(matchDef.stowage_qty || 0) : 0;
-                            const discharged = parseFloat(cell.getValue() || 0);
-                            const balance = stowage - discharged;
+                            const balance = stowage - total;
                             const balColor = balance < 0 ? '#e53e3e' : balance === 0 ? '#38a169' : '#1f2937';
                             return `<div style="line-height:1.8;">
-                                <div style="border-bottom:1px solid #cbd5e0;padding-bottom:2px;">${discharged > 0 ? discharged.toFixed(2) : ''}</div>
+                                <div style="border-bottom:1px solid #cbd5e0;padding-bottom:2px;">${total > 0 ? total.toFixed(2) : ''}</div>
                                 <div style="color:${balColor};padding-top:2px;">${balance.toFixed(2)}</div>
                             </div>`;
                         }
@@ -1276,11 +1346,12 @@
                 };
             });
 
-            // Total Day Qty column - sums all hold fields for the row
+            // Total column
+            const totalLabel = isExport ? 'Total Loaded' : 'Total Day Qty';
             const totalDayQtyCol = {
-                title: "Total Day Qty",
+                title: totalLabel,
                 field: "total_day_qty",
-                width: 120,
+                width: 130,
                 hozAlign: "right",
                 formatter: function(cell) {
                     const data = cell.getRow().getData();
@@ -1302,22 +1373,28 @@
                     return grandTotal;
                 },
                 bottomCalcFormatter: function(cell) {
-                    const totalDischarged = parseFloat(cell.getValue() || 0);
+                    const grand = parseFloat(cell.getValue() || 0);
+                    if (isExport) {
+                        return `<div style="font-weight:700;color:#15803d;">${grand > 0 ? grand.toFixed(2) : ''}</div>`;
+                    }
                     let totalStowage = 0;
                     holdDefs.forEach(def => { totalStowage += parseFloat(def.stowage_qty || 0); });
-                    const totalBalance = totalStowage - totalDischarged;
+                    const totalBalance = totalStowage - grand;
                     const balColor = totalBalance < 0 ? '#e53e3e' : totalBalance === 0 ? '#38a169' : '#1f2937';
                     return `<div style="line-height:1.8;font-weight:700;">
-                        <div style="border-bottom:1px solid #cbd5e0;padding-bottom:2px;">${totalDischarged > 0 ? totalDischarged.toFixed(2) : ''}</div>
+                        <div style="border-bottom:1px solid #cbd5e0;padding-bottom:2px;">${grand > 0 ? grand.toFixed(2) : ''}</div>
                         <div style="color:${balColor};padding-top:2px;">${totalBalance.toFixed(2)}</div>
                     </div>`;
                 }
             };
 
-            // Date column with bottomCalc labels
+            // Date column with bottom label
             const dateCol = {
                 title: "Date", field: "op_date", width: 130, editor: canEdit ? dateEditor : false,
                 bottomCalcFormatter: function() {
+                    if (isExport) {
+                        return `<div style="font-weight:700;color:#15803d;">Total Loaded</div>`;
+                    }
                     return `<div style="line-height:1.8;font-weight:700;">
                         <div style="border-bottom:1px solid #cbd5e0;padding-bottom:2px;color:#8B6914;">Total Discharge</div>
                         <div style="color:#2563eb;padding-top:2px;">Balance On Board</div>
@@ -1331,8 +1408,7 @@
                 height: 300,
                 ajaxURL: `/api/module/LDUD01/vessel_ops/${ldudId}`,
                 ajaxResponse: function(url, params, response) {
-                    const pivotRows = buildVesselOpsRowsFromApi(ldudId, response);
-                    return pivotRows;
+                    return buildVesselOpsRowsFromApi(ldudId, response);
                 },
                 columnHeaderVertAlign: "bottom",
                 columns: [
@@ -1345,6 +1421,9 @@
                 ].filter(Boolean)
             });
             if (isDark) document.querySelector(`#vessel_ops-table-${ldudId}`).classList.add('tabulator-dark');
+
+            // Render cargo-per-hold panel above the table
+            renderHoldCargoPanel(ldudId, operationType);
         }
 
         // Barge Cleaning Lines table
@@ -1553,20 +1632,7 @@
 
     async function addSubRow(type, ldudId) {
         if (type === 'vessel_ops') {
-            if (currentOperationTypes[ldudId] === 'Export') {
-                // Simple row add for export
-                const res = await fetch('/api/module/LDUD01/vessel_ops/save', {
-                    method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({ldud_id: ldudId})
-                });
-                const data = await res.json();
-                if (data.id && subTables[ldudId] && subTables[ldudId].vessel_ops) {
-                    subTables[ldudId].vessel_ops.addRow({id: data.id, ldud_id: ldudId}, false);
-                }
-            } else {
-                addVesselOpsDateRow(ldudId);
-            }
+            addVesselOpsDateRow(ldudId);
             return;
         }
 
@@ -1594,11 +1660,7 @@
 
     async function saveSubTable(type, ldudId) {
         if (type === 'vessel_ops') {
-            if (currentOperationTypes[ldudId] === 'Export') {
-                await saveExportVesselOpsTable(ldudId);
-            } else {
-                await saveVesselOpsTable(ldudId);
-            }
+            await saveVesselOpsTable(ldudId);
             return;
         }
 
