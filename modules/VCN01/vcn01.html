@@ -290,7 +290,7 @@
         const [vesselsRes, agentsRes, ieRes, custRes, cargoRes, dsRes, rtRes, dmRes, cnRes, uomRes, holdRes, portRes, configRes] = await Promise.all([
             fetch('/api/module/VCN01/vessels'),
             fetch('/api/module/VAM01/all'),
-            fetch('/api/module/VIEM01/all'),
+            fetch('/api/module/VSDM01/all'),
             fetch('/api/module/VCUM01/all'),
             fetch('/api/module/VCG01/types'),
             fetch('/api/module/VCDS01/all'),
@@ -602,7 +602,7 @@
             ajaxURL: `/api/module/VCN01/delays/${vcnId}`,
             columns: [
                 {title: "Delay Name", field: "delay_name", widthGrow: 1, editor: canEdit ? "list" : false,
-                    editorParams: {values: delayOptions, autocomplete: true, allowEmpty: true}
+                    editorParams: {values: delayOptions, autocomplete: true, allowEmpty: true, listOnEmpty: true}
                 },
                 {title: "Start Time", field: "delay_start", widthGrow: 1, editor: canEdit ? datetimeEditor : false,
                     formatter: datetimeCellFormatter

@@ -19,42 +19,33 @@ def get_next_doc_num():
 def _build_vcn_list(rows):
     result = []
     for r in rows:
+        doc_date = r.get('doc_date') or ''
+        op_type = r.get('operation_type') or ''
         display = f"{r['vcn_doc_num']} / {r['vessel_name']}"
-        if r['anchorage_arrival']:
-            display += f" / {r['anchorage_arrival'].replace('T', ' ')}"
+        if doc_date:
+            display += f" / {doc_date}"
+        if op_type:
+            display += f" / {op_type}"
         result.append({
             'value': display,
             'vcn_id': r['id'],
             'vcn_doc_num': r['vcn_doc_num'],
             'vessel_name': r['vessel_name'],
-            'anchored_datetime': r['anchorage_arrival']
+            'anchored_datetime': r.get('anchorage_arrival'),
+            'doc_date': doc_date,
+            'operation_type': op_type
         })
     return result
 
 def get_vcn_list():
-    """Get all approved VCN entries with anchored datetime for dropdown"""
+    """Get all approved VCN entries with doc date and operation type for dropdown"""
     conn = get_db()
     cur = get_cursor(conn)
     cur.execute('''
-        SELECT h.id, h.vcn_doc_num, h.vessel_name, a.anchorage_arrival
+        SELECT h.id, h.vcn_doc_num, h.vessel_name, h.doc_date, h.operation_type, a.anchorage_arrival
         FROM vcn_header h
         LEFT JOIN vcn_anchorage a ON a.vcn_id = h.id
         WHERE h.doc_status = 'Approved'
-        ORDER BY h.vcn_doc_num DESC
-    ''')
-    rows = cur.fetchall()
-    conn.close()
-    return _build_vcn_list(rows)
-
-def get_export_vcn_list():
-    """Get only Export operation type approved VCN entries for dropdown"""
-    conn = get_db()
-    cur = get_cursor(conn)
-    cur.execute('''
-        SELECT h.id, h.vcn_doc_num, h.vessel_name, a.anchorage_arrival
-        FROM vcn_header h
-        LEFT JOIN vcn_anchorage a ON a.vcn_id = h.id
-        WHERE h.doc_status = 'Approved' AND h.operation_type = 'Export'
         ORDER BY h.vcn_doc_num DESC
     ''')
     rows = cur.fetchall()
@@ -75,32 +66,42 @@ def get_data(page=1, size=20):
 
     vcn_cargo = {}   # vcn_id -> {cargo_names, bl_quantities}
     vcn_agents = {}  # vcn_id -> {agent_name, stevedore_name}
+    vcn_meta = {}    # vcn_id -> {doc_date}
     vo_by_cargo = {} # ldud_id -> {cargo_name: total_qty}
     vo_times = {}    # ldud_id -> {first_start, last_end}
 
     if vcn_ids:
-        # Cargo names and BL quantities from VCN cargo declarations (Import + Export)
-        cur.execute('''SELECT vcn_id, cargo_name, bl_quantity FROM vcn_cargo_declaration
+        # Fetch doc_date for display
+        cur.execute('SELECT id, doc_date FROM vcn_header WHERE id = ANY(%s)', (vcn_ids,))
+        for v in cur.fetchall():
+            vcn_meta[v['id']] = {'doc_date': v['doc_date'] or ''}
+
+        # Cargo names, BL quantities and UOM from VCN cargo declarations (Import + Export)
+        cur.execute('''SELECT vcn_id, cargo_name, bl_quantity, quantity_uom FROM vcn_cargo_declaration
                        WHERE vcn_id = ANY(%s) AND cargo_name IS NOT NULL''', (vcn_ids,))
         import_cargo = cur.fetchall()
-        cur.execute('''SELECT vcn_id, cargo_name, bl_quantity FROM vcn_export_cargo_declaration
+        cur.execute('''SELECT vcn_id, cargo_name, bl_quantity, quantity_uom FROM vcn_export_cargo_declaration
                        WHERE vcn_id = ANY(%s) AND cargo_name IS NOT NULL''', (vcn_ids,))
         export_cargo = cur.fetchall()
         for row_list in [import_cargo, export_cargo]:
             for c in row_list:
                 vid = c['vcn_id']
                 if vid not in vcn_cargo:
-                    vcn_cargo[vid] = {'names': [], 'quantities': []}
+                    vcn_cargo[vid] = {'names': [], 'quantities': [], 'uoms': []}
                 name = c['cargo_name']
                 qty = float(c['bl_quantity'] or 0)
+                uom = c['quantity_uom'] or ''
                 if name not in vcn_cargo[vid]['names']:
                     vcn_cargo[vid]['names'].append(name)
                     vcn_cargo[vid]['quantities'].append(qty)
+                    vcn_cargo[vid]['uoms'].append(uom)
                 else:
                     idx = vcn_cargo[vid]['names'].index(name)
                     vcn_cargo[vid]['quantities'][idx] += qty
+                    if not vcn_cargo[vid]['uoms'][idx] and uom:
+                        vcn_cargo[vid]['uoms'][idx] = uom
 
-        # Agent and Stevedore from VCN header
+        # Agent, Stevedore and meta from VCN header
         cur.execute('''SELECT id, vessel_agent_name, importer_exporter_name
                        FROM vcn_header WHERE id = ANY(%s)''', (vcn_ids,))
         for v in cur.fetchall():
@@ -121,9 +122,9 @@ def get_data(page=1, size=20):
             cn = v['cargo_name'] or ''
             vo_by_cargo[lid][cn] = float(v['total_qty'] or 0)
 
-        # Earliest start_time and latest end_time from vessel_operations per ldud
-        cur.execute('''SELECT ldud_id, MIN(start_time) as first_start, MAX(end_time) as last_end
-                       FROM ldud_vessel_operations WHERE ldud_id = ANY(%s)
+        # Earliest discharge_started and latest discharge_commenced from anchorage recording
+        cur.execute('''SELECT ldud_id, MIN(discharge_started) as first_start, MAX(discharge_commenced) as last_end
+                       FROM ldud_anchorage WHERE ldud_id = ANY(%s)
                        GROUP BY ldud_id''', (ldud_ids,))
         for v in cur.fetchall():
             vo_times[v['ldud_id']] = {
@@ -137,9 +138,14 @@ def get_data(page=1, size=20):
         lid = r.get('id')
 
         # Cargo info from VCN
-        ci = vcn_cargo.get(vid, {'names': [], 'quantities': []})
+        ci = vcn_cargo.get(vid, {'names': [], 'quantities': [], 'uoms': []})
+        uoms = ci.get('uoms', [])
         r['cargo_names_display'] = ', '.join(ci['names']) if ci['names'] else ''
-        r['bl_quantities_display'] = ', '.join(str(q) for q in ci['quantities']) if ci['quantities'] else ''
+        bl_parts = []
+        for i, q in enumerate(ci['quantities']):
+            uom = uoms[i] if i < len(uoms) else ''
+            bl_parts.append(f"{int(round(q))} {uom}".strip())
+        r['bl_quantities_display'] = ', '.join(bl_parts) if bl_parts else ''
 
         # Per-cargo balance: BL qty - ops qty for each cargo
         cargo_ops = vo_by_cargo.get(lid, {})
@@ -147,8 +153,14 @@ def get_data(page=1, size=20):
         for i, name in enumerate(ci['names']):
             bl_qty = ci['quantities'][i]
             ops_qty = cargo_ops.get(name, 0)
-            balances.append(round(bl_qty - ops_qty, 2))
-        r['balance_display'] = ', '.join(str(b) for b in balances) if balances else ''
+            uom = uoms[i] if i < len(uoms) else ''
+            bal = int(round(bl_qty - ops_qty))
+            balances.append(f"{bal} {uom}".strip())
+        r['balance_display'] = ', '.join(balances) if balances else ''
+
+        # VCN doc date for display
+        vm = vcn_meta.get(vid, {})
+        r['vcn_doc_date'] = vm.get('doc_date', '')
 
         # Agent and Stevedore
         ai = vcn_agents.get(vid, {})
@@ -174,7 +186,7 @@ def save_header(data):
             data[k] = None
 
     if row_id:
-        _computed = {'id', 'doc_num', 'vcn_display', 'cargo_names_display', 'bl_quantities_display',
+        _computed = {'id', 'doc_num', 'vcn_display', 'vcn_doc_date', 'cargo_names_display', 'bl_quantities_display',
                      'balance_display', 'agent_name', 'stevedore_name', 'ops_started', 'ops_completed'}
         cols = [k for k in data if k not in _computed]
         cur.execute(f"UPDATE ldud_header SET {', '.join([f'{c}=%s' for c in cols])} WHERE id=%s",

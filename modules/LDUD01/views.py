@@ -43,7 +43,7 @@ def get_vcn_list():
 @bp.route('/api/module/LDUD01/vcn_list/export')
 @login_required
 def get_export_vcn_list():
-    return jsonify(model.get_export_vcn_list())
+    return jsonify(model.get_vcn_list())
 
 @bp.route('/api/module/LDUD01/save', methods=['POST'])
 @login_required

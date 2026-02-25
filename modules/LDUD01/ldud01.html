@@ -246,7 +246,6 @@
 
     let table;
     let vcnList = [];
-    let exportVcnList = [];
     let delayTypes = [];
     let bargeList = [];
     let contractorList = [];
@@ -284,9 +283,8 @@
     }
 
     async function loadMasterData() {
-        const [vcnRes, exportVcnRes, delayRes, bargeRes, contractorRes, cargoRes, ancRes, pplRes, holdsRes, equipRes] = await Promise.all([
+        const [vcnRes, delayRes, bargeRes, contractorRes, cargoRes, ancRes, pplRes, holdsRes, equipRes] = await Promise.all([
             fetch('/api/module/LDUD01/vcn_list'),
-            fetch('/api/module/LDUD01/vcn_list/export'),
             fetch('/api/module/VDM01/all'),
             fetch('/api/module/VBM01/all'),
             fetch('/api/module/VSDM01/all'),
@@ -297,7 +295,6 @@
             fetch('/api/module/VEM01/all')
         ]);
         vcnList = await vcnRes.json();
-        exportVcnList = await exportVcnRes.json();
         delayTypes = await delayRes.json();
         bargeList = await bargeRes.json();
         contractorList = await contractorRes.json();
@@ -524,13 +521,30 @@
         }
     }
 
+    const CARGO_COLORS = [
+        {bg:'#dbeafe', text:'#1d4ed8', border:'#93c5fd'},  // blue
+        {bg:'#dcfce7', text:'#15803d', border:'#86efac'},  // green
+        {bg:'#fef9c3', text:'#a16207', border:'#fde047'},  // yellow
+        {bg:'#fce7f3', text:'#be185d', border:'#f9a8d4'},  // pink
+        {bg:'#ede9fe', text:'#6d28d9', border:'#c4b5fd'},  // purple
+        {bg:'#ffedd5', text:'#c2410c', border:'#fdba74'},  // orange
+        {bg:'#cffafe', text:'#0e7490', border:'#67e8f9'},  // cyan
+        {bg:'#f1f5f9', text:'#475569', border:'#cbd5e1'},  // slate
+    ];
+
+    function cargoColorBadges(valStr) {
+        if (!valStr) return '<span style="color:#999">-</span>';
+        const parts = valStr.split(', ').filter(Boolean);
+        return parts.map((p, i) => {
+            const c = CARGO_COLORS[i % CARGO_COLORS.length];
+            return `<span style="display:inline-block;padding:1px 7px;border-radius:10px;font-size:11px;font-weight:600;background:${c.bg};color:${c.text};border:1px solid ${c.border};margin:1px 2px;">${p}</span>`;
+        }).join('');
+    }
+
     function initTable() {
         const canEdit = permissions.can_edit || permissions.can_add;
         const vcnOptions = {};
         vcnList.forEach(v => { vcnOptions[v.value] = v.value; });
-
-        const exportVcnOptions = {};
-        exportVcnList.forEach(v => { exportVcnOptions[v.value] = v.value; });
 
         const columns = [
             {formatter: "rowSelection", titleFormatter: "rowSelection", hozAlign: "center", headerSort: false, width: 40},
@@ -551,39 +565,33 @@
                     openDetailsModal(data);
                 }
             },
-            {title: "Operation Type", field: "operation_type", editor: canEdit ? "list" : false,
-                editorParams: {values: {"Import": "Import", "Export": "Export"}, autocomplete: false, allowEmpty: true}, width: 110},
-            {title: "Doc Num", field: "doc_num", width: 80},
-            {title: "VCN / Vessel / Anchored", field: "vcn_display", editor: canEdit ? "list" : false,
-                editorParams: function(cell) {
-                    const opType = cell.getRow().getData().operation_type;
-                    const opts = opType === 'Export' ? exportVcnOptions : vcnOptions;
-                    return {values: opts, autocomplete: true, allowEmpty: true};
-                },
-                width: 250,
+            {title: "VCN / Vessel / Doc", field: "vcn_display", editor: canEdit ? "list" : false,
+                editorParams: {values: vcnOptions, autocomplete: true, allowEmpty: true, listOnEmpty: true},
+                width: 280,
                 cellEdited: function(cell) {
                     const val = cell.getValue();
-                    const opType = cell.getRow().getData().operation_type;
-                    const list = opType === 'Export' ? exportVcnList : vcnList;
-                    const vcn = list.find(v => v.value === val);
+                    const vcn = vcnList.find(v => v.value === val);
                     if (vcn) {
                         cell.getRow().update({
                             vcn_id: vcn.vcn_id,
                             vcn_doc_num: vcn.vcn_doc_num,
                             vessel_name: vcn.vessel_name,
-                            anchored_datetime: vcn.anchored_datetime
+                            anchored_datetime: vcn.anchored_datetime,
+                            operation_type: vcn.operation_type
                         });
                     }
                 }
             },
-            {title: "Cargo Name", field: "cargo_names_display", width: 150,
-                formatter: function(cell) { return cell.getValue() || '<span style="color:#999">-</span>'; }
+            {title: "Doc Num", field: "doc_num", width: 80},
+            {title: "Operation Type", field: "operation_type", editor: false, width: 110},
+            {title: "Cargo Name", field: "cargo_names_display", width: 200,
+                formatter: function(cell) { return cargoColorBadges(cell.getValue()); }
             },
-            {title: "BL Quantity", field: "bl_quantities_display", width: 120, hozAlign: "right",
-                formatter: function(cell) { return cell.getValue() || '<span style="color:#999">-</span>'; }
+            {title: "BL Quantity", field: "bl_quantities_display", width: 160,
+                formatter: function(cell) { return cargoColorBadges(cell.getValue()); }
             },
-            {title: "Balance (Load/Disch)", field: "balance_display", width: 140, hozAlign: "right",
-                formatter: function(cell) { return cell.getValue() || '<span style="color:#999">-</span>'; }
+            {title: "Balance (Load/Disch)", field: "balance_display", width: 180,
+                formatter: function(cell) { return cargoColorBadges(cell.getValue()); }
             },
             {title: "Agent Name", field: "agent_name", width: 120},
             {title: "Stevedore", field: "stevedore_name", width: 120},
@@ -632,10 +640,11 @@
             paginationSize: 20,
             ajaxURL: "/api/module/LDUD01/data",
             ajaxResponse: function(url, params, response) {
-                // Build display field
+                // Build display field using doc_date and operation_type from VCN
                 response.data.forEach(r => {
                     r.vcn_display = r.vcn_doc_num ? `${r.vcn_doc_num} / ${r.vessel_name || ''}` : '';
-                    if (r.anchored_datetime) r.vcn_display += ` / ${formatDateTime(r.anchored_datetime)}`;
+                    if (r.vcn_doc_date) r.vcn_display += ` / ${r.vcn_doc_date}`;
+                    if (r.operation_type) r.vcn_display += ` / ${r.operation_type}`;
                 });
                 document.getElementById('rowCount').textContent = response.data.length;
                 document.getElementById('totalCount').textContent = response.total;
@@ -1086,8 +1095,6 @@
             columns: [
                 {title: "Anchorage Name", field: "anchorage_name", widthGrow: 1, editor: canEdit ? "list" : false,
                     editorParams: {values: anchorageOptions, autocomplete: true, allowEmpty: true}},
-                {title: "Cargo Name", field: "cargo_name", widthGrow: 1, editor: canEdit ? "list" : false,
-                    editorParams: {values: cargoOptions, autocomplete: true, allowEmpty: true}},
                 {title: "Anchored", field: "anchored", widthGrow: 1, editor: canEdit ? datetimeEditor : false,
                     formatter: datetimeCellFormatter},
                 {title: anchorageStartedTitle, field: "discharge_started", widthGrow: 1, editor: canEdit ? datetimeEditor : false,
@@ -1172,6 +1179,8 @@
                 {title: "Qty", field: "discharge_quantity", width: 80, editor: canEdit ? "number" : false, hozAlign: "right",
                     editorParams: {min: 0, step: 0.01}},
                 {title: "Cast Off MV", field: "cast_off_mv", width: 130, editor: canEdit ? datetimeEditor : false, formatter: dtFmt},
+                {title: "Anch Gull Island (Loaded)", field: "anchored_gull_island_empty", width: 155, editor: canEdit ? datetimeEditor : false, formatter: dtFmt},
+                {title: "Aweigh Gull Island (Loaded)", field: "aweigh_gull_island_empty", width: 160, editor: canEdit ? datetimeEditor : false, formatter: dtFmt},
                 {title: "AMF at Port", field: "amf_at_port", width: 130, editor: canEdit ? datetimeEditor : false, formatter: dtFmt},
                 {title: "Alongside Berth", field: "along_side_berth", width: 130, editor: canEdit ? datetimeEditor : false, formatter: dtFmt},
                 {title: "Discharge Start", field: "commence_discharge_berth", width: 130, editor: canEdit ? datetimeEditor : false, formatter: dtFmt},
@@ -1572,6 +1581,13 @@
             if (type === 'barge_lines' && data.trip_number) {
                 newRow.trip_number = data.trip_number;
             }
+            if (type === 'barge_lines' && currentOperationTypes[ldudId] !== 'Export') {
+                const mainRow = table.getRows().find(r => r.getData().id === ldudId);
+                if (mainRow) {
+                    const stevedore = mainRow.getData().stevedore_name;
+                    if (stevedore) newRow.contractor_name = stevedore;
+                }
+            }
             subTables[ldudId][type].addRow(newRow, false);
         }
     }
@@ -1635,8 +1651,7 @@
         table.addRow({
             created_by: currentUser,
             created_date: getTodayDate(),
-            doc_status: 'Pending',
-            operation_type: 'Import'
+            doc_status: 'Pending'
         }, true);
     }
 
