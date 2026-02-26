@@ -129,7 +129,7 @@ def save_bill_line(data):
 
     # Mark the EU line as billed if eu_line_id is provided
     if data.get('eu_line_id'):
-        cur.execute('UPDATE eu_lines SET is_billed = 1, bill_id = %s WHERE id = %s',
+        cur.execute('UPDATE lueu_lines SET is_billed = 1, bill_id = %s WHERE id = %s',
                      [data.get('bill_id'), data.get('eu_line_id')])
 
     # Mark the service record as billed if service_record_id is provided
@@ -156,7 +156,7 @@ def delete_bill(bill_id):
     conn = get_db()
     cur = get_cursor(conn)
     # Unmark EU lines as billed
-    cur.execute('''UPDATE eu_lines SET is_billed=0, bill_id=NULL
+    cur.execute('''UPDATE lueu_lines SET is_billed=0, bill_id=NULL
         WHERE bill_id IN (SELECT id FROM bill_header WHERE id=%s)''', (bill_id,))
     # Unmark service records as billed
     cur.execute('''UPDATE service_records SET is_billed=0, bill_id=NULL

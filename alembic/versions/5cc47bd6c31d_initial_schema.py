@@ -606,9 +606,9 @@ def upgrade() -> None:
         )
     ''')
 
-    # === EU01 (Equipment Utilization) ===
+    # === LUEU01 (Load Unload Equipment Utilization) ===
     op.execute('''
-        CREATE TABLE IF NOT EXISTS eu_lines (
+        CREATE TABLE IF NOT EXISTS lueu_lines (
             id SERIAL PRIMARY KEY,
             source_type TEXT,
             source_id INTEGER,
@@ -727,7 +727,7 @@ def upgrade() -> None:
             sac_code TEXT,
             remarks TEXT,
             FOREIGN KEY (bill_id) REFERENCES bill_header(id) ON DELETE CASCADE,
-            FOREIGN KEY (eu_line_id) REFERENCES eu_lines(id),
+            FOREIGN KEY (eu_line_id) REFERENCES lueu_lines(id),
             FOREIGN KEY (service_type_id) REFERENCES finance_service_types(id),
             FOREIGN KEY (gst_rate_id) REFERENCES gst_rates(id)
         )
@@ -852,7 +852,7 @@ def downgrade() -> None:
     op.execute('DROP TABLE IF EXISTS vex_mbc_lines CASCADE')
     op.execute('DROP TABLE IF EXISTS vex_barge_lines CASCADE')
     op.execute('DROP TABLE IF EXISTS vex_header CASCADE')
-    op.execute('DROP TABLE IF EXISTS eu_lines CASCADE')
+    op.execute('DROP TABLE IF EXISTS lueu_lines CASCADE')
     op.execute('DROP TABLE IF EXISTS mbc_discharge_port_lines CASCADE')
     op.execute('DROP TABLE IF EXISTS mbc_load_port_lines CASCADE')
     op.execute('DROP TABLE IF EXISTS mbc_delays CASCADE')

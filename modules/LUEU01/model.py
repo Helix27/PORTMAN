@@ -7,14 +7,14 @@ def get_all_lines(page=1, size=20, equipment_name=None):
     offset = (page - 1) * size
 
     if equipment_name:
-        cur.execute('SELECT COUNT(*) as cnt FROM eu_lines WHERE equipment_name = %s', [equipment_name])
+        cur.execute('SELECT COUNT(*) as cnt FROM lueu_lines WHERE equipment_name = %s', [equipment_name])
         total = cur.fetchone()['cnt']
-        cur.execute('SELECT * FROM eu_lines WHERE equipment_name = %s ORDER BY id DESC LIMIT %s OFFSET %s',
+        cur.execute('SELECT * FROM lueu_lines WHERE equipment_name = %s ORDER BY id DESC LIMIT %s OFFSET %s',
                     [equipment_name, size, offset])
     else:
-        cur.execute('SELECT COUNT(*) as cnt FROM eu_lines')
+        cur.execute('SELECT COUNT(*) as cnt FROM lueu_lines')
         total = cur.fetchone()['cnt']
-        cur.execute('SELECT * FROM eu_lines ORDER BY id DESC LIMIT %s OFFSET %s', [size, offset])
+        cur.execute('SELECT * FROM lueu_lines ORDER BY id DESC LIMIT %s OFFSET %s', [size, offset])
 
     rows = cur.fetchall()
     conn.close()
@@ -34,7 +34,7 @@ def save_line(data):
 
     if line_id:
         cur.execute('''
-            UPDATE eu_lines SET
+            UPDATE lueu_lines SET
                 source_type = %s, source_id = %s, source_display = %s, barge_name = %s,
                 equipment_name = %s, operator_name = %s, delay_name = %s, cargo_name = %s,
                 operation_type = %s, quantity = %s, quantity_uom = %s, route_name = %s,
@@ -54,7 +54,7 @@ def save_line(data):
     else:
         from datetime import datetime
         cur.execute('''
-            INSERT INTO eu_lines
+            INSERT INTO lueu_lines
             (source_type, source_id, source_display, barge_name, equipment_name, operator_name,
              delay_name, cargo_name, operation_type, quantity, quantity_uom, route_name,
              start_time, end_time, entry_date, created_by, created_date,
@@ -82,7 +82,7 @@ def delete_lines(ids):
     conn = get_db()
     cur = get_cursor(conn)
     for line_id in ids:
-        cur.execute('DELETE FROM eu_lines WHERE id = %s', [line_id])
+        cur.execute('DELETE FROM lueu_lines WHERE id = %s', [line_id])
     conn.commit()
     conn.close()
 
@@ -148,9 +148,9 @@ def get_barge_cargos(vcn_id, barge_name):
     cargos = []
     if ldud:
         cur.execute('''
-            SELECT DISTINCT cargo FROM ldud_barge_lines
-            WHERE ldud_id = %s AND barge_name = %s AND cargo IS NOT NULL AND cargo != ''
+            SELECT DISTINCT cargo_name FROM ldud_barge_lines
+            WHERE ldud_id = %s AND barge_name = %s AND cargo_name IS NOT NULL AND cargo_name != ''
         ''', [ldud['id'], barge_name])
-        cargos = [r['cargo'] for r in cur.fetchall()]
+        cargos = [r['cargo_name'] for r in cur.fetchall()]
     conn.close()
     return cargos

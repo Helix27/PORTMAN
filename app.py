@@ -42,7 +42,7 @@ from modules.PBM01 import bp as pbm01_bp, MODULE_INFO as pbm01_info
 from modules.MBCDS01 import bp as mbcds01_bp, MODULE_INFO as mbcds01_info
 from modules.MBC01 import bp as mbc01_bp, MODULE_INFO as mbc01_info
 from modules.PPL01 import bp as ppl01_bp, MODULE_INFO as ppl01_info
-from modules.EU01 import bp as eu01_bp, MODULE_INFO as eu01_info
+from modules.LUEU01 import bp as eu01_bp, MODULE_INFO as eu01_info
 from modules.CRM01 import bp as crm01_bp, MODULE_INFO as crm01_info
 
 # Import finance modules

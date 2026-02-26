@@ -63,7 +63,7 @@ def generate_bill():
     # Import other module models
     from modules.VCN01 import model as vcn_model
     from modules.MBC01 import model as mbc_model
-    from modules.EU01 import model as eu_model
+    from modules.LUEU01 import model as eu_model
     from modules.VIEM01 import model as viem_model
     from modules.VCUM01 import model as vcum_model
 
@@ -579,7 +579,7 @@ def export_einvoice():
 
 
 @bp.route('/api/module/FIN01/eu-lines/<source_type>/<int:source_id>')
-def get_eu_lines(source_type, source_id):
+def get_lueu_lines(source_type, source_id):
     """Get all EU lines for a specific source (both billed and unbilled)"""
     if 'user_id' not in session:
         return jsonify({'error': 'Not logged in'}), 401
@@ -588,7 +588,7 @@ def get_eu_lines(source_type, source_id):
     cur = get_cursor(conn)
     cur.execute('''
         SELECT el.*, st.service_name
-        FROM eu_lines el
+        FROM lueu_lines el
         LEFT JOIN finance_service_types st ON el.service_type_id = st.id
         WHERE el.source_type = %s AND el.source_id = %s
         ORDER BY el.is_billed ASC, el.id

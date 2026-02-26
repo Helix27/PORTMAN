@@ -26,17 +26,19 @@ def clear_mock_data():
 
     # Order matters: child tables first, then parents
     tables_to_clear = [
-        # Service records (EAV)
-        'service_record_values',
-        'service_records',
-        'service_field_definitions',
-        # Invoices → Bills → EU lines
+        # Invoices → Bills (must come before service_records due to FK)
         'invoice_lines',
         'invoice_header',
         'bill_lines',
         'bill_header',
+        # Service records (EAV) — after bill_lines cleared
+        'service_record_values',
+        'service_records',
+        'service_field_definitions',
         # EU lines
-        'eu_lines',
+
+        # EU lines
+        'lueu_lines',
         # MBC subtables → header
         'mbc_delays',
         'mbc_discharge_port_lines',
@@ -64,6 +66,10 @@ def clear_mock_data():
         # Master tables (populated by this script, not by migrations)
         'conveyor_routes',
         'port_berth_master',
+        'port_delay_types',
+        'port_systems',
+        'port_shift_incharge',
+        'port_shift_operators',
         'mbc_master',
         'vessel_cargo',
         'vessel_delay_types',
@@ -492,9 +498,10 @@ def populate_vcn_records():
 
         # Add anchorage
         cur.execute("""
-            INSERT INTO vcn_anchorage (vcn_id, latitude, longitude, anchored_time)
+            INSERT INTO vcn_anchorage (vcn_id, anchorage_name, anchorage_arrival, anchorage_departure)
             VALUES (%s, %s, %s, %s)
-        """, [vcn_id, f'18.{950+idx}', f'72.{830+idx}', base_date.strftime('%Y-%m-%dT08:00')])
+        """, [vcn_id, 'Outer Anchorage', base_date.strftime('%Y-%m-%dT08:00'),
+              (base_date + timedelta(hours=6)).strftime('%Y-%m-%dT14:00')])
 
         # Add cargo declaration
         cargo_name = ['Thermal Coal', 'Iron Ore Fines', 'Coking Coal'][idx % 3]
@@ -698,7 +705,7 @@ def populate_eu_records():
             start = base_time + timedelta(hours=hour)
             end = start + timedelta(hours=4)
             cur.execute("""
-                INSERT INTO eu_lines (source_type, source_id, source_display, equipment_name, operator_name,
+                INSERT INTO lueu_lines (source_type, source_id, source_display, equipment_name, operator_name,
                                       cargo_name, operation_type, quantity, quantity_uom,
                                       start_time, end_time, entry_date, created_by, created_date, is_billed)
                 VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
@@ -726,7 +733,7 @@ def populate_eu_records():
 
         # Conveyor operations for LDUD
         cur.execute("""
-            INSERT INTO eu_lines (source_type, source_id, source_display, barge_name, equipment_name,
+            INSERT INTO lueu_lines (source_type, source_id, source_display, barge_name, equipment_name,
                                   operator_name, cargo_name, operation_type, quantity, quantity_uom,
                                   route_name, start_time, end_time, entry_date, created_by, created_date, is_billed)
             VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
@@ -749,7 +756,7 @@ def populate_eu_records():
 
         # Ship unloader for MBC
         cur.execute("""
-            INSERT INTO eu_lines (source_type, source_id, source_display, barge_name, equipment_name,
+            INSERT INTO lueu_lines (source_type, source_id, source_display, barge_name, equipment_name,
                                   operator_name, cargo_name, operation_type, quantity, quantity_uom,
                                   start_time, end_time, entry_date, created_by, created_date, is_billed)
             VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
@@ -1136,55 +1143,111 @@ def populate_service_records():
     print(f"[OK] Populated {record_count} service records with EAV field values (grab hiring, storage, delays)")
 
 
-def main():
-    print("\n" + "="*50)
-    print("PORTMAN Mock Data Population Script (PostgreSQL)")
-    print("="*50 + "\n")
+def populate_port_delay_types():
+    """PDM01 - Port Delay Types (used by LUEU01 delays dropdown)"""
+    delays = [
+        'Equipment Breakdown', 'Weather Delay', 'Power Failure', 'Conveyor Stoppage',
+        'Labour Dispute', 'Maintenance', 'Port Congestion', 'Tidal Restrictions',
+        'Rain Delay', 'Night Restriction', 'Berth Unavailability', 'Customs Hold'
+    ]
+    conn = get_db()
+    cur = conn.cursor()
+    for d in delays:
+        cur.execute('INSERT INTO port_delay_types (name) VALUES (%s) ON CONFLICT DO NOTHING', [d])
+    conn.commit()
+    conn.close()
+    print(f"[OK] Populated {len(delays)} port delay types")
 
-    print("Clearing existing mock data...")
+
+def populate_port_systems():
+    """Port Systems Master (used by LUEU01 system dropdown)"""
+    systems = [
+        'Conveyor System 1', 'Conveyor System 2', 'Ship Unloader 1', 'Ship Unloader 2',
+        'Stacker Reclaimer 1', 'Stacker Reclaimer 2', 'Grab Crane 1', 'Grab Crane 2',
+        'Belt Conveyor A', 'Belt Conveyor B'
+    ]
+    conn = get_db()
+    cur = conn.cursor()
+    for s in systems:
+        cur.execute('INSERT INTO port_systems (name) VALUES (%s) ON CONFLICT DO NOTHING', [s])
+    conn.commit()
+    conn.close()
+    print(f"[OK] Populated {len(systems)} port systems")
+
+
+def populate_port_shift_incharge():
+    """Port Shift Incharge Master (used by LUEU01 shift incharge dropdown)"""
+    names = [
+        'Rajesh Kumar', 'Suresh Patil', 'Anil Sharma', 'Mahesh Desai',
+        'Vinod Yadav', 'Prakash Nair'
+    ]
+    conn = get_db()
+    cur = conn.cursor()
+    for n in names:
+        cur.execute('INSERT INTO port_shift_incharge (name) VALUES (%s) ON CONFLICT DO NOTHING', [n])
+    conn.commit()
+    conn.close()
+    print(f"[OK] Populated {len(names)} shift incharge names")
+
+
+def populate_port_shift_operators():
+    """Port Shift Operators Master (used by LUEU01 operator dropdown)"""
+    names = [
+        'Operator A - Ramesh', 'Operator B - Sunil', 'Operator C - Vijay',
+        'Operator D - Ganesh', 'Operator E - Santosh', 'Operator F - Deepak',
+        'Operator G - Rajan', 'Operator H - Mohan'
+    ]
+    conn = get_db()
+    cur = conn.cursor()
+    for n in names:
+        cur.execute('INSERT INTO port_shift_operators (name) VALUES (%s) ON CONFLICT DO NOTHING', [n])
+    conn.commit()
+    conn.close()
+    print(f"[OK] Populated {len(names)} shift operators")
+
+
+def main():
+    print("\n" + "="*60)
+    print("PORTMAN Mock Data Population Script (PostgreSQL)")
+    print("Modules: VC01, VCN01, MBC01, LDUD01, LUEU01 + Masters")
+    print("="*60 + "\n")
+
+    print("Step 1: Clearing existing data...")
     clear_mock_data()
 
-    print("\nPopulating Master Modules...")
+    print("\nStep 2: Populating required master tables...")
+    # VC01 masters
     populate_vessel_types()
     populate_vessel_categories()
     populate_gears()
+    # VCN01 masters
     populate_vessel_agents()
     populate_importer_exporters()
-    populate_customers()
     populate_operation_types()
-    populate_doc_series()
-    populate_discharge_types()
     populate_run_types()
     populate_delay_types()
     populate_cargo_master()
+    # MBC01 masters
     populate_mbc_master()
+    # LUEU01 masters
     populate_port_berths()
     populate_conveyor_routes()
+    populate_port_delay_types()
+    populate_port_systems()
+    populate_port_shift_incharge()
+    populate_port_shift_operators()
 
-    print("\nPopulating Transaction Modules...")
-    populate_vessels()
-    populate_vcn_records()
-    populate_ldud_records()
-    populate_mbc_records()
-    populate_eu_records()
+    print("\nStep 3: Populating transaction modules...")
+    populate_vessels()        # VC01
+    populate_vcn_records()    # VCN01
+    populate_ldud_records()   # LDUD01
+    populate_mbc_records()    # MBC01
+    populate_eu_records()     # LUEU01
 
-    print("\nPopulating Finance Modules...")
-    populate_finance_currencies()
-    populate_customer_agreements()
-    link_service_types_to_gst()
-    populate_fin01_config()
-
-    print("\nPopulating Service Recording Modules...")
-    populate_srv01_permissions()
-    populate_service_field_definitions()
-    populate_service_records()
-
-    print("\n" + "="*50)
-    print("Mock data population complete!")
-    print("="*50)
-    print("\n** Note: Seed data (UOMs, hatches, holds, GST rates, service types) is auto-populated by Alembic migrations **")
-    print("** All transactional modules populated with relational data **")
-    print("** Service records with EAV custom fields populated for SRV01/billing integration **\n")
+    print("\n" + "="*60)
+    print("Done! Populated: VC01, VCN01, MBC01, LDUD01, LUEU01")
+    print("="*60)
+    print("\n** Seed data (UOMs, equipment, GST rates, holds) auto-populated by Alembic migrations **\n")
 
 if __name__ == '__main__':
     main()

@@ -277,7 +277,7 @@
         const [dsRes, mbcRes, otRes, ctRes, cnRes, uomRes, berthRes, pplRes, custRes, equipRes] = await Promise.all([
             fetch('/api/module/MBCDS01/all'),
             fetch('/api/module/MBCM01/all'),
-            fetch('/api/module/EU01/operation-types'),
+            fetch('/api/module/LUEU01/operation-types'),
             fetch('/api/module/VCG01/types'),
             fetch('/api/module/VCG01/names'),
             fetch('/api/module/VQM01/all'),

@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 
-{% block title %}Equipment Utilization - PORTMAN{% endblock %}
+{% block title %}Load Unload Equipment Utilization - PORTMAN{% endblock %}
 
 {% block content %}
 <style>
@@ -86,8 +86,8 @@
     #buttonView { display: block; }
 </style>
 <div class="module-header">
-    <h2>Equipment Utilization</h2>
-    <span class="module-code">EU01</span>
+    <h2>Load Unload Equipment Utilization</h2>
+    <span class="module-code">LUEU01</span>
     <span id="saveStatus" class="save-status"></span>
 </div>
 
@@ -114,7 +114,7 @@
 
 {% block scripts %}
 <script>
-    addToRecent('EU01', 'Equipment Utilization');
+    addToRecent('LUEU01', 'Load Unload Equipment Utilization');
 
     let table;
     let currentEquipment = null;
@@ -156,19 +156,19 @@
 
     async function loadMasterData() {
         const [vcn, mbc, mbcNamesRes, equip, delays, cargo, ops, uom, routes, systems, berths, incharge, operators] = await Promise.all([
-            fetch('/api/module/EU01/vcn-options').then(r => r.json()),
-            fetch('/api/module/EU01/mbc-options').then(r => r.json()),
-            fetch('/api/module/EU01/mbc-names').then(r => r.json()),
-            fetch('/api/module/EU01/equipment').then(r => r.json()),
-            fetch('/api/module/EU01/delays').then(r => r.json()),
-            fetch('/api/module/EU01/cargo').then(r => r.json()),
-            fetch('/api/module/EU01/operation-types').then(r => r.json()),
-            fetch('/api/module/EU01/uom').then(r => r.json()),
-            fetch('/api/module/EU01/routes').then(r => r.json()),
-            fetch('/api/module/EU01/systems').then(r => r.json()),
-            fetch('/api/module/EU01/berths').then(r => r.json()),
-            fetch('/api/module/EU01/shift-incharge').then(r => r.json()),
-            fetch('/api/module/EU01/shift-operators').then(r => r.json())
+            fetch('/api/module/LUEU01/vcn-options').then(r => r.json()),
+            fetch('/api/module/LUEU01/mbc-options').then(r => r.json()),
+            fetch('/api/module/LUEU01/mbc-names').then(r => r.json()),
+            fetch('/api/module/LUEU01/equipment').then(r => r.json()),
+            fetch('/api/module/LUEU01/delays').then(r => r.json()),
+            fetch('/api/module/LUEU01/cargo').then(r => r.json()),
+            fetch('/api/module/LUEU01/operation-types').then(r => r.json()),
+            fetch('/api/module/LUEU01/uom').then(r => r.json()),
+            fetch('/api/module/LUEU01/routes').then(r => r.json()),
+            fetch('/api/module/LUEU01/systems').then(r => r.json()),
+            fetch('/api/module/LUEU01/berths').then(r => r.json()),
+            fetch('/api/module/LUEU01/shift-incharge').then(r => r.json()),
+            fetch('/api/module/LUEU01/shift-operators').then(r => r.json())
         ]);
 
         vcnOptions = vcn;
@@ -246,7 +246,7 @@
         let options = [];
         const vcnMatch = vcnOptions.find(v => v.label === sourceDisplay);
         if (vcnMatch) {
-            fetch(`/api/module/EU01/barges/${vcnMatch.id}`)
+            fetch(`/api/module/LUEU01/barges/${vcnMatch.id}`)
                 .then(r => r.json())
                 .then(barges => { options = barges; renderSelect(options); });
         } else {
@@ -308,7 +308,7 @@
         // Try to get cargo from barge
         const vcnMatch = vcnOptions.find(v => v.label === sourceDisplay);
         if (vcnMatch && bargeName) {
-            fetch(`/api/module/EU01/barge-cargos/${vcnMatch.id}?barge=${encodeURIComponent(bargeName)}`)
+            fetch(`/api/module/LUEU01/barge-cargos/${vcnMatch.id}?barge=${encodeURIComponent(bargeName)}`)
                 .then(r => r.json())
                 .then(cargos => {
                     if (cargos.length === 1) {
@@ -398,7 +398,7 @@
             pagination: true,
             paginationMode: "remote",
             paginationSize: 20,
-            ajaxURL: "/api/module/EU01/data",
+            ajaxURL: "/api/module/LUEU01/data",
             ajaxParams: {equipment: equipName},
             ajaxResponse: function(url, params, response) {
                 document.getElementById('rowCount').textContent = response.data.length;
@@ -429,7 +429,7 @@
                 const bargeName = cell.getValue() || '';
                 const vcnMatch = vcnOptions.find(v => v.label === sourceDisplay);
                 if (vcnMatch && bargeName) {
-                    fetch(`/api/module/EU01/barge-cargos/${vcnMatch.id}?barge=${encodeURIComponent(bargeName)}`)
+                    fetch(`/api/module/LUEU01/barge-cargos/${vcnMatch.id}?barge=${encodeURIComponent(bargeName)}`)
                         .then(r => r.json())
                         .then(cargos => {
                             if (cargos.length === 1) {
@@ -461,7 +461,7 @@
 
         const ids = selected.map(row => row.getData().id).filter(id => id);
         if (ids.length > 0) {
-            fetch("/api/module/EU01/delete", {
+            fetch("/api/module/LUEU01/delete", {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
                 body: JSON.stringify({ids: ids})
@@ -488,7 +488,7 @@
             if (vcnMatch) { data.source_type = 'VCN'; data.source_id = vcnMatch.id; }
             else if (mbcMatch) { data.source_type = 'MBC'; data.source_id = mbcMatch.id; }
 
-            const res = await fetch("/api/module/EU01/save", {
+            const res = await fetch("/api/module/LUEU01/save", {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
                 body: JSON.stringify(data)

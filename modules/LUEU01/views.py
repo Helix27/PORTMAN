@@ -3,9 +3,9 @@ from functools import wraps
 from . import model
 from database import get_user_permissions, get_db, get_cursor
 
-bp = Blueprint('EU01', __name__, template_folder='.')
-MODULE_CODE = 'EU01'
-MODULE_INFO = {'code': 'EU01', 'name': 'Equipment Utilization'}
+bp = Blueprint('LUEU01', __name__, template_folder='.')
+MODULE_CODE = 'LUEU01'
+MODULE_INFO = {'code': 'LUEU01', 'name': 'Load Unload Equipment Utilization'}
 
 def login_required(f):
     @wraps(f)
@@ -20,16 +20,16 @@ def get_perms():
         return {'can_read': 1, 'can_add': 1, 'can_edit': 1, 'can_delete': 1}
     return get_user_permissions(session.get('user_id'), MODULE_CODE)
 
-@bp.route('/module/EU01/')
+@bp.route('/module/LUEU01/')
 @login_required
 def view():
     perms = get_perms()
     if not perms.get('can_read'):
         return render_template('no_access.html'), 403
-    return render_template('eu01.html', permissions=perms)
+    return render_template('lueu01.html', permissions=perms)
 
 # Data endpoints
-@bp.route('/api/module/EU01/data')
+@bp.route('/api/module/LUEU01/data')
 @login_required
 def get_data():
     page = request.args.get('page', 1, type=int)
@@ -37,7 +37,7 @@ def get_data():
     equipment_name = request.args.get('equipment', None)
     return jsonify(model.get_all_lines(page, size, equipment_name))
 
-@bp.route('/api/module/EU01/save', methods=['POST'])
+@bp.route('/api/module/LUEU01/save', methods=['POST'])
 @login_required
 def save_data():
     perms = get_perms()
@@ -49,7 +49,7 @@ def save_data():
     line_id = model.save_line(data)
     return jsonify({'id': line_id})
 
-@bp.route('/api/module/EU01/delete', methods=['POST'])
+@bp.route('/api/module/LUEU01/delete', methods=['POST'])
 @login_required
 def delete_data():
     perms = get_perms()
@@ -62,7 +62,7 @@ def delete_data():
     return jsonify({'success': True})
 
 # Dropdown data endpoints
-@bp.route('/api/module/EU01/vcn-options')
+@bp.route('/api/module/LUEU01/vcn-options')
 @login_required
 def get_vcn_options():
     options = model.get_vcn_options()
@@ -80,7 +80,7 @@ def get_vcn_options():
         })
     return jsonify(result)
 
-@bp.route('/api/module/EU01/mbc-options')
+@bp.route('/api/module/LUEU01/mbc-options')
 @login_required
 def get_mbc_options():
     options = model.get_mbc_options()
@@ -96,7 +96,7 @@ def get_mbc_options():
         })
     return jsonify(result)
 
-@bp.route('/api/module/EU01/equipment')
+@bp.route('/api/module/LUEU01/equipment')
 @login_required
 def get_equipment():
     conn = get_db()
@@ -106,7 +106,7 @@ def get_equipment():
     conn.close()
     return jsonify([r['name'] for r in rows])
 
-@bp.route('/api/module/EU01/delays')
+@bp.route('/api/module/LUEU01/delays')
 @login_required
 def get_delays():
     conn = get_db()
@@ -116,7 +116,7 @@ def get_delays():
     conn.close()
     return jsonify([r['name'] for r in rows])
 
-@bp.route('/api/module/EU01/cargo')
+@bp.route('/api/module/LUEU01/cargo')
 @login_required
 def get_cargo():
     conn = get_db()
@@ -126,7 +126,7 @@ def get_cargo():
     conn.close()
     return jsonify([r['cargo_name'] for r in rows])
 
-@bp.route('/api/module/EU01/operation-types')
+@bp.route('/api/module/LUEU01/operation-types')
 @login_required
 def get_operation_types():
     conn = get_db()
@@ -136,7 +136,7 @@ def get_operation_types():
     conn.close()
     return jsonify([r['name'] for r in rows])
 
-@bp.route('/api/module/EU01/uom')
+@bp.route('/api/module/LUEU01/uom')
 @login_required
 def get_uom():
     conn = get_db()
@@ -148,19 +148,19 @@ def get_uom():
     default_uom = next((r['name'] for r in rows if r['is_default']), '')
     return jsonify({'names': names, 'default': default_uom})
 
-@bp.route('/api/module/EU01/barges/<int:vcn_id>')
+@bp.route('/api/module/LUEU01/barges/<int:vcn_id>')
 @login_required
 def get_barges_for_vcn(vcn_id):
     barges = model.get_vcn_barges(vcn_id)
     return jsonify(barges)
 
-@bp.route('/api/module/EU01/mbc-names')
+@bp.route('/api/module/LUEU01/mbc-names')
 @login_required
 def get_mbc_names():
     names = model.get_mbc_names()
     return jsonify(names)
 
-@bp.route('/api/module/EU01/routes')
+@bp.route('/api/module/LUEU01/routes')
 @login_required
 def get_routes():
     conn = get_db()
@@ -170,7 +170,7 @@ def get_routes():
     conn.close()
     return jsonify([r['route_name'] for r in rows])
 
-@bp.route('/api/module/EU01/systems')
+@bp.route('/api/module/LUEU01/systems')
 @login_required
 def get_systems():
     conn = get_db()
@@ -180,7 +180,7 @@ def get_systems():
     conn.close()
     return jsonify([r['name'] for r in rows])
 
-@bp.route('/api/module/EU01/berths')
+@bp.route('/api/module/LUEU01/berths')
 @login_required
 def get_berths():
     conn = get_db()
@@ -190,7 +190,7 @@ def get_berths():
     conn.close()
     return jsonify([r['berth_name'] for r in rows])
 
-@bp.route('/api/module/EU01/shift-incharge')
+@bp.route('/api/module/LUEU01/shift-incharge')
 @login_required
 def get_shift_incharge():
     conn = get_db()
@@ -200,7 +200,7 @@ def get_shift_incharge():
     conn.close()
     return jsonify([r['name'] for r in rows])
 
-@bp.route('/api/module/EU01/shift-operators')
+@bp.route('/api/module/LUEU01/shift-operators')
 @login_required
 def get_shift_operators():
     conn = get_db()
@@ -210,7 +210,7 @@ def get_shift_operators():
     conn.close()
     return jsonify([r['name'] for r in rows])
 
-@bp.route('/api/module/EU01/barge-cargos/<int:vcn_id>')
+@bp.route('/api/module/LUEU01/barge-cargos/<int:vcn_id>')
 @login_required
 def get_barge_cargos(vcn_id):
     barge_name = request.args.get('barge', '')
