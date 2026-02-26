@@ -49,6 +49,23 @@ def save_data():
     line_id = model.save_line(data)
     return jsonify({'id': line_id})
 
+@bp.route('/api/module/LUEU01/split', methods=['POST'])
+@login_required
+def split_line():
+    perms = get_perms()
+    if not perms.get('can_edit'):
+        return jsonify({'error': 'No permission'}), 403
+    data = request.json
+    line_id = data.get('line_id')
+    split_qty = data.get('split_quantity')
+    split_remark = data.get('split_remark', '')
+    if not line_id or not split_qty:
+        return jsonify({'error': 'Missing line_id or split_quantity'}), 400
+    result = model.split_line(line_id, split_qty, split_remark, session.get('username'))
+    if result:
+        return jsonify({'success': True, **result})
+    return jsonify({'error': 'Line not found'}), 404
+
 @bp.route('/api/module/LUEU01/delete', methods=['POST'])
 @login_required
 def delete_data():

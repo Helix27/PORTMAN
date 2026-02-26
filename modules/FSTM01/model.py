@@ -59,7 +59,8 @@ def save_service_type(data):
         cur.execute('''
             UPDATE finance_service_types
             SET service_name=%s, service_category=%s, gl_code=%s, sac_code=%s,
-                gst_rate_id=%s, uom=%s, is_billable=%s, is_active=%s
+                gst_rate_id=%s, uom=%s, is_billable=%s, is_active=%s,
+                sap_gl_account=%s, sap_tax_code=%s, sap_profit_center=%s, sap_cost_center=%s
             WHERE id=%s
         ''', [
             data.get('service_name'),
@@ -70,6 +71,10 @@ def save_service_type(data):
             data.get('uom'),
             data.get('is_billable', 1),
             data.get('is_active', 1),
+            data.get('sap_gl_account'),
+            data.get('sap_tax_code'),
+            data.get('sap_profit_center'),
+            data.get('sap_cost_center'),
             data['id']
         ])
         row_id = data['id']
@@ -77,8 +82,10 @@ def save_service_type(data):
         cur.execute('''
             INSERT INTO finance_service_types
             (service_code, service_name, service_category, gl_code, sac_code,
-             gst_rate_id, uom, is_billable, is_active, created_by, created_date)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+             gst_rate_id, uom, is_billable, is_active,
+             sap_gl_account, sap_tax_code, sap_profit_center, sap_cost_center,
+             created_by, created_date)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
             RETURNING id
         ''', [
             data.get('service_code'),
@@ -90,6 +97,10 @@ def save_service_type(data):
             data.get('uom'),
             data.get('is_billable', 1),
             data.get('is_active', 1),
+            data.get('sap_gl_account'),
+            data.get('sap_tax_code'),
+            data.get('sap_profit_center'),
+            data.get('sap_cost_center'),
             data.get('created_by'),
             datetime.now().strftime('%Y-%m-%d')
         ])

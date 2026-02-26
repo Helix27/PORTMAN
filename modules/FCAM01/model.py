@@ -87,15 +87,24 @@ def save_agreement_line(data):
     """Save agreement line"""
     conn = get_db()
     cur = get_cursor(conn)
+    to_none = lambda v: None if isinstance(v, str) and v.strip() == '' else v
+
+    service_type_id = to_none(data.get('service_type_id'))
+    service_name = to_none(data.get('service_name'))
+    rate = to_none(data.get('rate'))
+    uom = to_none(data.get('uom'))
+    currency_code = to_none(data.get('currency_code'))
+    min_charge = to_none(data.get('min_charge'))
+    max_charge = to_none(data.get('max_charge'))
+    remarks = to_none(data.get('remarks'))
 
     if data.get('id'):
         cur.execute('''UPDATE customer_agreement_lines
             SET service_type_id=%s, service_name=%s, rate=%s, uom=%s,
                 currency_code=%s, min_charge=%s, max_charge=%s, remarks=%s
             WHERE id=%s''',
-            [data.get('service_type_id'), data.get('service_name'), data.get('rate'),
-             data.get('uom'), data.get('currency_code'), data.get('min_charge'),
-             data.get('max_charge'), data.get('remarks'), data['id']])
+            [service_type_id, service_name, rate, uom, currency_code,
+             min_charge, max_charge, remarks, data['id']])
         row_id = data['id']
     else:
         cur.execute('''INSERT INTO customer_agreement_lines
@@ -103,9 +112,8 @@ def save_agreement_line(data):
              currency_code, min_charge, max_charge, remarks)
             VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
             RETURNING id''',
-            [data['agreement_id'], data.get('service_type_id'), data.get('service_name'),
-             data.get('rate'), data.get('uom'), data.get('currency_code'),
-             data.get('min_charge'), data.get('max_charge'), data.get('remarks')])
+            [data['agreement_id'], service_type_id, service_name, rate, uom,
+             currency_code, min_charge, max_charge, remarks])
         row_id = cur.fetchone()['id']
 
     conn.commit()

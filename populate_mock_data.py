@@ -1206,10 +1206,365 @@ def populate_port_shift_operators():
     print(f"[OK] Populated {len(names)} shift operators")
 
 
+def populate_accounts_data():
+    """Populate accounts/finance mock data: SAP fields, virtual accounts, bills, invoices, credit notes, configs"""
+    conn = get_db()
+    cur = get_cursor(conn)
+    today = datetime.now().strftime('%Y-%m-%d')
+    now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+
+    print("\n--- Accounts & Finance Mock Data ---")
+
+    # ── Update agents with SAP billing fields ─────────────────────────────
+    print("[ACCT 1/8] Updating agents with SAP/billing fields...")
+    agent_sap_data = [
+        ('Maersk Agency Services', 'CUST001234', '', '1100001', '27AABCM1234A1ZP', '27', 'Maharashtra',
+         'AABCM1234A', 'Plot 45, JNPT Road, Nhava Sheva', 'Navi Mumbai', '400707',
+         'Rajesh Mehta', 'rajesh@maersk-agency.com', '9876543210'),
+        ('Mediterranean Shipping Agency', 'CUST005678', '5172', '1100002', '29BBBCM5678B2ZQ', '29', 'Karnataka',
+         'BBBCM5678B', '12 Port Trust Road', 'Mangalore', '575001',
+         'Suresh Pai', 'suresh@msc-agency.in', '9988776655'),
+        ('CMA CGM Agencies', 'CUST009012', '', '1100003', '27CCCCC9012C3ZR', '27', 'Maharashtra',
+         'CCCCC9012C', '88 Dock Road, Raigad', 'Raigad', '402201',
+         'Anita Sharma', 'anita@cmacgm-agency.com', '9112233445'),
+    ]
+    for (name, sap_code, co_code, gl, gstin, gst_sc, gst_sn, pan, addr, city, pin, cp, ce, cph) in agent_sap_data:
+        cur.execute("""UPDATE vessel_agents SET
+            sap_customer_code=%s, company_code=%s, gl_code=%s, gstin=%s,
+            gst_state_code=%s, gst_state_name=%s, pan=%s,
+            billing_address=%s, city=%s, pincode=%s,
+            contact_person=%s, contact_email=%s, contact_phone=%s,
+            is_active=1
+            WHERE name=%s""",
+            [sap_code, co_code, gl, gstin, gst_sc, gst_sn, pan, addr, city, pin, cp, ce, cph, name])
+    conn.commit()
+
+    # ── Update customers with SAP fields ──────────────────────────────────
+    print("[ACCT 2/8] Updating customers with SAP fields...")
+    cust_sap = [
+        ('Amba River Coke Limited', 'CUST100001', ''),
+        ('JSW Steel Dolvi Limited', 'CUST100002', '5171'),
+    ]
+    for (name, sap_code, co_code) in cust_sap:
+        cur.execute("UPDATE vessel_customers SET sap_customer_code=%s, company_code=%s WHERE name=%s",
+                    [sap_code, co_code, name])
+    conn.commit()
+
+    # ── Update importer/exporters with SAP fields ─────────────────────────
+    print("[ACCT 3/8] Updating importer/exporters with SAP fields...")
+    ie_sap = [
+        ('Amba River Coke Limited', 'CUST200001', ''),
+        ('JSW Steel Dolvi Limited', 'CUST200002', ''),
+    ]
+    for (name, sap_code, co_code) in ie_sap:
+        cur.execute("UPDATE vessel_importer_exporters SET sap_customer_code=%s, company_code=%s WHERE name=%s",
+                    [sap_code, co_code, name])
+    conn.commit()
+
+    # ── Virtual Accounts ──────────────────────────────────────────────────
+    print("[ACCT 4/8] Virtual Accounts...")
+    cur.execute("SELECT id, name FROM vessel_agents ORDER BY id LIMIT 3")
+    agents = cur.fetchall()
+    cur.execute("SELECT id, name FROM vessel_customers ORDER BY id LIMIT 2")
+    customers = cur.fetchall()
+
+    if agents:
+        for i, ag in enumerate(agents[:2]):
+            cur.execute("SELECT id FROM customer_virtual_accounts WHERE party_type='Agent' AND party_id=%s", [ag['id']])
+            if not cur.fetchone():
+                cur.execute("""INSERT INTO customer_virtual_accounts
+                    (party_type, party_id, party_name, account_number, ifsc_code,
+                     bank_name, branch_name, account_holder_name, account_type,
+                     purpose, gl_account_code, is_active, effective_from, created_by, created_date)
+                    VALUES ('Agent',%s,%s,%s,%s,%s,%s,%s,'Current','Billing',%s,1,%s,'system',%s)""",
+                    [ag['id'], ag['name'], f'9012345678901{i}', f'SBIN000123{i}',
+                     'State Bank of India', f'Branch {i+1}', ag['name'],
+                     f'410107603{i}', today, now])
+    if customers:
+        for i, cu in enumerate(customers[:1]):
+            cur.execute("SELECT id FROM customer_virtual_accounts WHERE party_type='Customer' AND party_id=%s", [cu['id']])
+            if not cur.fetchone():
+                cur.execute("""INSERT INTO customer_virtual_accounts
+                    (party_type, party_id, party_name, account_number, ifsc_code,
+                     bank_name, branch_name, account_holder_name, account_type,
+                     purpose, gl_account_code, is_active, effective_from, created_by, created_date)
+                    VALUES ('Customer',%s,%s,%s,%s,%s,%s,%s,'Current','Receipts',%s,1,%s,'system',%s)""",
+                    [cu['id'], cu['name'], f'3045678901234{i}', f'ICIC000345{i}',
+                     'ICICI Bank', f'Branch {i+1}', cu['name'],
+                     f'410107603{i+3}', today, now])
+    conn.commit()
+
+    # ── Update finance_service_types with SAP codes ───────────────────────
+    print("[ACCT 5/8] Updating service types with SAP GL/tax codes...")
+    sap_svc_map = {
+        'CHGL01': ('4101076030', '50', 'PC5171001', 'CC5171001'),
+        'CHGU01': ('4101076031', '50', 'PC5171001', 'CC5171002'),
+        'EQP001': ('4101076032', '50', 'PC5171002', 'CC5171003'),
+        'STO001': ('4101076033', '51', 'PC5171002', 'CC5171004'),
+        'CON001': ('4101076034', '50', 'PC5171003', 'CC5171005'),
+    }
+    for svc_code, (gl, tax, pc, cc) in sap_svc_map.items():
+        cur.execute("""UPDATE finance_service_types SET
+            sap_gl_account=%s, sap_tax_code=%s, sap_profit_center=%s, sap_cost_center=%s
+            WHERE service_code=%s""", [gl, tax, pc, cc, svc_code])
+    conn.commit()
+
+    # ── Bills (Approved, ready for invoicing) ─────────────────────────────
+    print("[ACCT 6/8] Creating test bills...")
+    # Get GST rate IDs
+    cur.execute("SELECT id, rate_name, cgst_rate, sgst_rate, igst_rate FROM gst_rates WHERE is_active=1")
+    gst_rows = cur.fetchall()
+    gst_map = {r['rate_name']: r for r in gst_rows}
+    gst_18 = gst_map.get('GST 18%', {})
+    gst_5 = gst_map.get('GST 5%', {})
+
+    if not agents:
+        print("[SKIP] No agents found for bills")
+        conn.close()
+        return
+
+    agent1 = agents[0]
+    agent2 = agents[1] if len(agents) > 1 else agents[0]
+
+    # Check if bills already exist
+    cur.execute("SELECT id FROM bill_header WHERE bill_number='BILL-TEST-001'")
+    if not cur.fetchone():
+        # Bill 1: Agent 1 (intra-state, CGST+SGST)
+        cur.execute("""INSERT INTO bill_header
+            (bill_number, bill_date, customer_type, customer_id, customer_name,
+             customer_gstin, customer_gst_state_code, customer_gl_code,
+             currency_code, exchange_rate,
+             subtotal, cgst_amount, sgst_amount, igst_amount, total_amount,
+             bill_status, created_by, created_date, approved_by, approved_date)
+            VALUES (%s,%s,'Agent',%s,%s,%s,%s,%s,'INR',1.0,
+             190000, 17100, 17100, 0, 224200,
+             'Approved','admin',%s,'admin',%s) RETURNING id""",
+            ['BILL-TEST-001', '2026-02-15', agent1['id'], agent1['name'],
+             '27AABCM1234A1ZP', '27', '1100001', today, today])
+        b1_id = cur.fetchone()['id']
+
+        # Bill 1 lines
+        for ln in [
+            ('Cargo Handling Loading', 'Loading at Berth B3, MV Ocean Star',
+             2000, 'MT', 45, 90000, gst_18.get('id'), 9, 9, 0, 8100, 8100, 0, 106200, '4101076030', '996719', '50'),
+            ('Equipment Rental', 'Shore crane C2, 24 hrs operation',
+             24, 'HRS', 850, 20400, gst_18.get('id'), 9, 9, 0, 1836, 1836, 0, 24072, '4101076032', '996719', '50'),
+            ('Cargo Handling Unloading', 'Unloading at Berth B3',
+             1880, 'MT', 42.5, 79900, gst_18.get('id'), 9, 9, 0, 7191, 7191, 0, 94282, '4101076031', '996719', '50'),
+        ]:
+            cur.execute("""INSERT INTO bill_lines
+                (bill_id, service_name, service_description, quantity, uom, rate, line_amount,
+                 gst_rate_id, cgst_rate, sgst_rate, igst_rate, cgst_amount, sgst_amount, igst_amount,
+                 line_total, gl_code, sac_code, sap_tax_code)
+                VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)""",
+                [b1_id, *ln])
+
+        # Bill 2: Same Agent 1 (can consolidate into same invoice)
+        cur.execute("""INSERT INTO bill_header
+            (bill_number, bill_date, customer_type, customer_id, customer_name,
+             customer_gstin, customer_gst_state_code, customer_gl_code,
+             currency_code, exchange_rate,
+             subtotal, cgst_amount, sgst_amount, igst_amount, total_amount,
+             bill_status, created_by, created_date, approved_by, approved_date)
+            VALUES (%s,%s,'Agent',%s,%s,%s,%s,%s,'INR',1.0,
+             75000, 6750, 6750, 0, 88500,
+             'Approved','admin',%s,'admin',%s) RETURNING id""",
+            ['BILL-TEST-002', '2026-02-18', agent1['id'], agent1['name'],
+             '27AABCM1234A1ZP', '27', '1100001', today, today])
+        b2_id = cur.fetchone()['id']
+
+        cur.execute("""INSERT INTO bill_lines
+            (bill_id, service_name, service_description, quantity, uom, rate, line_amount,
+             gst_rate_id, cgst_rate, sgst_rate, igst_rate, cgst_amount, sgst_amount, igst_amount,
+             line_total, gl_code, sac_code, sap_tax_code)
+            VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)""",
+            [b2_id, 'Storage Charges', '5 days at yard Y2', 5, 'DAYS', 15000, 75000,
+             gst_18.get('id'), 9, 9, 0, 6750, 6750, 0, 88500, '4101076033', '996719', '50'])
+
+        # Bill 3: Agent 2 (inter-state, IGST only)
+        cur.execute("""INSERT INTO bill_header
+            (bill_number, bill_date, customer_type, customer_id, customer_name,
+             customer_gstin, customer_gst_state_code, customer_gl_code,
+             currency_code, exchange_rate,
+             subtotal, cgst_amount, sgst_amount, igst_amount, total_amount,
+             bill_status, created_by, created_date, approved_by, approved_date)
+            VALUES (%s,%s,'Agent',%s,%s,%s,%s,%s,'INR',1.0,
+             192750, 0, 0, 33037.5, 225787.5,
+             'Approved','admin',%s,'admin',%s) RETURNING id""",
+            ['BILL-TEST-003', '2026-02-20', agent2['id'], agent2['name'],
+             '29BBBCM5678B2ZQ', '29', '1100002', today, today])
+        b3_id = cur.fetchone()['id']
+
+        for ln in [
+            ('Cargo Handling Loading', 'Berth B1, MV Pacific Trader, 3200 MT',
+             3200, 'MT', 45, 144000, gst_18.get('id'), 0, 0, 18, 0, 0, 25920, 169920, '4101076030', '996719', '50'),
+            ('Conveyor Charges', '1250 MT via conveyor route CR-02',
+             1250, 'MT', 38, 47500, gst_18.get('id'), 0, 0, 18, 0, 0, 8550, 56050, '4101076034', '996719', '50'),
+            ('Water Supply', '50 KL fresh water supply',
+             50, 'KG', 25, 1250, gst_5.get('id'), 0, 0, 5, 0, 0, 62.5, 1312.5, '4101076033', '996719', '51'),
+        ]:
+            cur.execute("""INSERT INTO bill_lines
+                (bill_id, service_name, service_description, quantity, uom, rate, line_amount,
+                 gst_rate_id, cgst_rate, sgst_rate, igst_rate, cgst_amount, sgst_amount, igst_amount,
+                 line_total, gl_code, sac_code, sap_tax_code)
+                VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)""",
+                [b3_id, *ln])
+
+        print(f"  Created 3 bills: BILL-TEST-001, BILL-TEST-002, BILL-TEST-003")
+    else:
+        print("  [SKIP] Test bills already exist")
+        cur.execute("SELECT id FROM bill_header WHERE bill_number IN ('BILL-TEST-001','BILL-TEST-002','BILL-TEST-003') ORDER BY bill_number")
+        b_rows = cur.fetchall()
+        b1_id = b_rows[0]['id'] if len(b_rows) > 0 else None
+        b2_id = b_rows[1]['id'] if len(b_rows) > 1 else None
+        b3_id = b_rows[2]['id'] if len(b_rows) > 2 else None
+    conn.commit()
+
+    # ── Invoice (from BILL-TEST-001 + BILL-TEST-002) ─────────────────────
+    print("[ACCT 7/8] Creating test invoice...")
+    cur.execute("SELECT id FROM invoice_header WHERE invoice_number='INV-TEST-0001'")
+    if not cur.fetchone() and b1_id and b2_id:
+        subtotal = 190000 + 75000
+        cgst = 17100 + 6750
+        sgst = 17100 + 6750
+        total = subtotal + cgst + sgst
+
+        cur.execute("""INSERT INTO invoice_header
+            (invoice_number, invoice_date, financial_year, invoice_series,
+             customer_type, customer_id, customer_name, customer_gstin,
+             customer_gst_state_code, customer_gl_code,
+             currency_code, exchange_rate,
+             subtotal, cgst_amount, sgst_amount, igst_amount, total_amount,
+             invoice_status, payment_terms, due_date,
+             created_by, created_date)
+            VALUES (%s,%s,%s,%s,'Agent',%s,%s,%s,%s,%s,'INR',1.0,%s,%s,%s,0,%s,%s,%s,%s,%s,%s)
+            RETURNING id""",
+            ['INV-TEST-0001', '2026-02-22', '2025-26', 'INV',
+             agent1['id'], agent1['name'], '27AABCM1234A1ZP', '27', '1100001',
+             subtotal, cgst, sgst, total,
+             'Generated', '30 Days', '2026-03-24', 'admin', '2026-02-22'])
+        inv_id = cur.fetchone()['id']
+
+        # Copy lines from both bills
+        line_no = 1
+        for b_id in [b1_id, b2_id]:
+            cur.execute("SELECT bill_number FROM bill_header WHERE id=%s", [b_id])
+            b_num = cur.fetchone()['bill_number']
+            cur.execute("SELECT * FROM bill_lines WHERE bill_id=%s ORDER BY id", [b_id])
+            for bl in cur.fetchall():
+                bl = dict(bl)
+                cur.execute("""INSERT INTO invoice_lines
+                    (invoice_id, bill_id, bill_number, line_number, service_name, service_description,
+                     quantity, uom, rate, line_amount, cgst_rate, sgst_rate, igst_rate,
+                     cgst_amount, sgst_amount, igst_amount, line_total,
+                     gl_code, sac_code, sap_tax_code)
+                    VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)""",
+                    [inv_id, b_id, b_num, line_no,
+                     bl['service_name'], bl.get('service_description'),
+                     bl['quantity'], bl['uom'], bl['rate'], bl['line_amount'],
+                     bl['cgst_rate'], bl['sgst_rate'], bl['igst_rate'],
+                     bl['cgst_amount'], bl['sgst_amount'], bl['igst_amount'],
+                     bl['line_total'], bl['gl_code'], bl['sac_code'],
+                     bl.get('sap_tax_code')])
+                line_no += 1
+
+            # Mapping + mark invoiced
+            cur.execute("SELECT total_amount FROM bill_header WHERE id=%s", [b_id])
+            b_total = cur.fetchone()['total_amount']
+            cur.execute("""INSERT INTO invoice_bill_mapping (invoice_id, bill_id, bill_number, bill_amount)
+                VALUES (%s,%s,%s,%s)""", [inv_id, b_id, b_num, b_total])
+            cur.execute("UPDATE bill_header SET bill_status='Invoiced' WHERE id=%s", [b_id])
+
+        print(f"  Created INV-TEST-0001 (from BILL-TEST-001 + BILL-TEST-002)")
+    else:
+        print("  [SKIP] Test invoice already exists or bills missing")
+    conn.commit()
+
+    # ── Credit Note (Draft) ───────────────────────────────────────────────
+    print("[ACCT 8/8] Creating test credit note...")
+    cur.execute("SELECT id FROM credit_note_header WHERE credit_note_number='CN-TEST-0001'")
+    if not cur.fetchone():
+        cur.execute("SELECT id FROM invoice_header WHERE invoice_number='INV-TEST-0001'")
+        inv_row = cur.fetchone()
+        inv_id = inv_row['id'] if inv_row else None
+
+        cur.execute("""INSERT INTO credit_note_header
+            (credit_note_number, credit_note_date, financial_year,
+             original_invoice_id, original_invoice_number,
+             party_type, party_id, party_name, party_gstin, party_gst_state_code,
+             subtotal, cgst_amount, sgst_amount, igst_amount, total_amount,
+             reason, credit_note_status,
+             created_by, created_date)
+            VALUES (%s,%s,%s,%s,%s,'Agent',%s,%s,%s,%s,%s,%s,%s,0,%s,%s,%s,%s,%s)
+            RETURNING id""",
+            ['CN-TEST-0001', '2026-02-25', '2025-26',
+             inv_id, 'INV-TEST-0001',
+             agent1['id'], agent1['name'], '27AABCM1234A1ZP', '27',
+             22500, 2025, 2025, 26550,
+             'Equipment rental overcharged by 12 hrs', 'Draft',
+             'admin', '2026-02-25'])
+        cn_id = cur.fetchone()['id']
+
+        cur.execute("""INSERT INTO credit_note_lines
+            (credit_note_id, line_number, service_name, service_description,
+             quantity, uom, rate, line_amount,
+             cgst_rate, sgst_rate, igst_rate,
+             cgst_amount, sgst_amount, igst_amount, line_total,
+             gl_code, sac_code)
+            VALUES (%s,1,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)""",
+            [cn_id, 'Equipment Rental', 'Correction: 12 hrs overcharged on crane C2',
+             12, 'HRS', 850, 10200,
+             9, 9, 0,
+             918, 918, 0, 12036,
+             '4101076032', '996719'])
+        cur.execute("""INSERT INTO credit_note_lines
+            (credit_note_id, line_number, service_name, service_description,
+             quantity, uom, rate, line_amount,
+             cgst_rate, sgst_rate, igst_rate,
+             cgst_amount, sgst_amount, igst_amount, line_total,
+             gl_code, sac_code)
+            VALUES (%s,2,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)""",
+            [cn_id, 'Storage Charges', 'Correction: 2 days excess storage charged',
+             2, 'DAYS', 6150, 12300,
+             9, 9, 0,
+             1107, 1107, 0, 14514,
+             '4101076033', '996719'])
+        print(f"  Created CN-TEST-0001 (Draft, ref INV-TEST-0001)")
+    else:
+        print("  [SKIP] Test credit note already exists")
+    conn.commit()
+
+    # ── Activate configs ──────────────────────────────────────────────────
+    # SAP dev active
+    cur.execute("UPDATE sap_api_config SET is_active=0")
+    cur.execute("UPDATE sap_api_config SET is_active=1 WHERE environment='development'")
+    # GST sandbox active
+    cur.execute("SELECT id FROM gst_api_config WHERE environment='sandbox'")
+    if not cur.fetchone():
+        cur.execute("""INSERT INTO gst_api_config
+            (environment, api_base_url, asp_id, asp_secret, gstin, public_key_path, is_active, created_date)
+            VALUES ('sandbox','https://einv-apisandbox.nic.in','','','','keys/irp_public_key.pem',1,%s)""", [now])
+    else:
+        cur.execute("UPDATE gst_api_config SET is_active=0")
+        cur.execute("UPDATE gst_api_config SET is_active=1 WHERE environment='sandbox'")
+    conn.commit()
+
+    # Summary
+    print("\n  --- Accounts Test Data Summary ---")
+    for tbl in ['customer_virtual_accounts', 'bill_header', 'invoice_header', 'credit_note_header']:
+        cur.execute(f"SELECT COUNT(*) as cnt FROM {tbl}")
+        print(f"  {tbl}: {cur.fetchone()['cnt']} rows")
+    print("  BILL-TEST-003 (Agent 2, inter-state) is Approved & NOT invoiced → test invoice creation")
+    print("  INV-TEST-0001 → test SAP posting & IRN generation")
+    print("  CN-TEST-0001 → test credit note SAP posting")
+
+    conn.close()
+
+
 def main():
     print("\n" + "="*60)
     print("PORTMAN Mock Data Population Script (PostgreSQL)")
-    print("Modules: VC01, VCN01, MBC01, LDUD01, LUEU01 + Masters")
+    print("Modules: VC01, VCN01, MBC01, LDUD01, LUEU01 + Accounts")
     print("="*60 + "\n")
 
     print("Step 1: Clearing existing data...")
@@ -1244,8 +1599,11 @@ def main():
     populate_mbc_records()    # MBC01
     populate_eu_records()     # LUEU01
 
+    print("\nStep 4: Populating accounts & finance data...")
+    populate_accounts_data()
+
     print("\n" + "="*60)
-    print("Done! Populated: VC01, VCN01, MBC01, LDUD01, LUEU01")
+    print("Done! Populated: VC01, VCN01, MBC01, LDUD01, LUEU01 + Accounts")
     print("="*60)
     print("\n** Seed data (UOMs, equipment, GST rates, holds) auto-populated by Alembic migrations **\n")
 

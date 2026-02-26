@@ -2,6 +2,7 @@ from flask import Blueprint, render_template, request, jsonify, session, redirec
 from functools import wraps
 from . import model
 from database import get_user_permissions
+import va_utils
 
 bp = Blueprint('VAM01', __name__, template_folder='.')
 MODULE_CODE = 'VAM01'
@@ -60,4 +61,31 @@ def delete():
     if not perms.get('can_delete'):
         return jsonify({'error': 'No permission to delete'}), 403
     model.delete_data(request.json.get('id'))
+    return jsonify({'success': True})
+
+PARTY_TYPE = 'Agent'
+
+@bp.route('/api/module/VAM01/virtual-accounts/<int:party_id>')
+@login_required
+def get_va(party_id):
+    return jsonify(va_utils.get_va_list(PARTY_TYPE, party_id))
+
+@bp.route('/api/module/VAM01/virtual-accounts/save', methods=['POST'])
+@login_required
+def save_va():
+    perms = get_perms()
+    if not perms.get('can_edit') and not perms.get('can_add'):
+        return jsonify({'error': 'No permission'}), 403
+    data = request.json
+    data['party_type'] = PARTY_TYPE
+    row_id = va_utils.save_va(data, session.get('user_id'))
+    return jsonify({'success': True, 'id': row_id})
+
+@bp.route('/api/module/VAM01/virtual-accounts/delete', methods=['POST'])
+@login_required
+def delete_va():
+    perms = get_perms()
+    if not perms.get('can_delete'):
+        return jsonify({'error': 'No permission'}), 403
+    va_utils.delete_va(request.json.get('id'))
     return jsonify({'success': True})

@@ -1,0 +1,71 @@
+from database import get_db, get_cursor
+from datetime import datetime
+
+
+def get_all_configs():
+    conn = get_db()
+    cur = get_cursor(conn)
+    cur.execute('SELECT * FROM sap_api_config ORDER BY id')
+    rows = cur.fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
+
+
+def get_config_by_env(environment):
+    conn = get_db()
+    cur = get_cursor(conn)
+    cur.execute('SELECT * FROM sap_api_config WHERE environment=%s', [environment])
+    row = cur.fetchone()
+    conn.close()
+    return dict(row) if row else None
+
+
+def save_config(data, updated_by=None):
+    conn = get_db()
+    cur = get_cursor(conn)
+    row_id = data.get('id')
+    now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+    if row_id:
+        cur.execute('''UPDATE sap_api_config SET
+            base_url=%s, token_url=%s, client_id=%s, client_secret=%s,
+            company_code=%s, payment_term=%s, is_active=%s,
+            updated_by=%s, updated_date=%s
+            WHERE id=%s''', [
+            data.get('base_url'), data.get('token_url'),
+            data.get('client_id'), data.get('client_secret'),
+            data.get('company_code'), data.get('payment_term'),
+            data.get('is_active', 0), updated_by, now, row_id
+        ])
+    else:
+        cur.execute('''INSERT INTO sap_api_config
+            (environment, base_url, token_url, client_id, client_secret,
+             company_code, payment_term, is_active, created_by, created_date)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+            RETURNING id''', [
+            data.get('environment'), data.get('base_url'), data.get('token_url'),
+            data.get('client_id'), data.get('client_secret'),
+            data.get('company_code'), data.get('payment_term'),
+            data.get('is_active', 0), updated_by, now
+        ])
+        row_id = cur.fetchone()['id']
+    conn.commit()
+    conn.close()
+    return row_id
+
+
+def set_active_env(environment):
+    conn = get_db()
+    cur = get_cursor(conn)
+    cur.execute('UPDATE sap_api_config SET is_active=0')
+    cur.execute('UPDATE sap_api_config SET is_active=1 WHERE environment=%s', [environment])
+    conn.commit()
+    conn.close()
+
+
+def get_active_config():
+    conn = get_db()
+    cur = get_cursor(conn)
+    cur.execute('SELECT * FROM sap_api_config WHERE is_active=1 LIMIT 1')
+    row = cur.fetchone()
+    conn.close()
+    return dict(row) if row else None

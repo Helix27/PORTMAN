@@ -2,6 +2,10 @@ from flask import render_template, request, redirect, url_for, session, jsonify
 from . import bp
 from . import model
 from database import get_user_permissions, get_db, get_cursor, get_module_config
+import sap_builder
+import sap_client
+import einvoice_builder
+import gsp_client
 
 @bp.route('/module/FIN01/')
 def index():
@@ -578,6 +582,15 @@ def export_einvoice():
     return jsonify({'einvoices': einvoices})
 
 
+@bp.route('/api/module/FIN01/bill-lines/<int:bill_id>')
+def get_bill_lines_api(bill_id):
+    """Get bill lines for a specific bill (used in invoice generation page)"""
+    if 'user_id' not in session:
+        return jsonify({'error': 'Not logged in'}), 401
+    lines = model.get_bill_lines(bill_id)
+    return jsonify({'lines': lines})
+
+
 @bp.route('/api/module/FIN01/eu-lines/<source_type>/<int:source_id>')
 def get_lueu_lines(source_type, source_id):
     """Get all EU lines for a specific source (both billed and unbilled)"""
@@ -772,3 +785,137 @@ def get_customers_for_billing(customer_type):
     conn.close()
 
     return jsonify({'data': [dict(r) for r in rows]})
+
+
+# ===== SAP Integration =====
+
+@bp.route('/api/module/FIN01/invoice/post-sap', methods=['POST'])
+def post_invoice_sap():
+    """Post an invoice to SAP via DynaportInvoice REST API"""
+    if 'user_id' not in session:
+        return jsonify({'success': False, 'error': 'Not logged in'}), 401
+
+    perms = get_user_permissions(session['user_id'], 'FIN01')
+    if not perms['can_edit']:
+        return jsonify({'success': False, 'error': 'No permission'}), 403
+
+    invoice_id = request.json.get('invoice_id')
+    invoice = model.get_invoice_by_id(invoice_id)
+    if not invoice:
+        return jsonify({'success': False, 'error': 'Invoice not found'}), 404
+
+    if invoice.get('sap_document_number'):
+        return jsonify({'success': False, 'error': 'Invoice already posted to SAP'})
+
+    invoice_lines = model.get_invoice_lines(invoice_id)
+    payload = sap_builder.build_invoice_payload(invoice, invoice_lines)
+    result = sap_client.post_invoice_to_sap(
+        payload, 'Invoice', invoice_id,
+        invoice['invoice_number'], session.get('username')
+    )
+
+    if result['ok']:
+        # Update invoice with SAP document number
+        conn = get_db()
+        cur = get_cursor(conn)
+        cur.execute('''UPDATE invoice_header
+            SET sap_document_number=%s, invoice_status='Posted'
+            WHERE id=%s''',
+            [result['sap_document_number'], invoice_id])
+        conn.commit()
+        conn.close()
+
+    return jsonify({
+        'success': result['ok'],
+        'sap_document_number': result.get('sap_document_number'),
+        'message': result['message'],
+        'log_id': result['log_id']
+    })
+
+
+# ===== GST IRN Integration =====
+
+@bp.route('/api/module/FIN01/invoice/generate-irn', methods=['POST'])
+def generate_irn():
+    """Generate IRN for an invoice via IRP e-invoice API"""
+    if 'user_id' not in session:
+        return jsonify({'success': False, 'error': 'Not logged in'}), 401
+
+    perms = get_user_permissions(session['user_id'], 'FIN01')
+    if not perms['can_edit']:
+        return jsonify({'success': False, 'error': 'No permission'}), 403
+
+    invoice_id = request.json.get('invoice_id')
+    invoice = model.get_invoice_by_id(invoice_id)
+    if not invoice:
+        return jsonify({'success': False, 'error': 'Invoice not found'}), 404
+
+    if invoice.get('gst_irn'):
+        return jsonify({'success': False, 'error': 'IRN already generated for this invoice'})
+
+    invoice_lines = model.get_invoice_lines(invoice_id)
+    einvoice_json = einvoice_builder.build_einvoice_from_invoice(invoice, invoice_lines)
+    result = gsp_client.generate_irn(
+        einvoice_json, 'Invoice', invoice_id,
+        invoice['invoice_number'], session.get('username')
+    )
+
+    if result['ok']:
+        conn = get_db()
+        cur = get_cursor(conn)
+        cur.execute('''UPDATE invoice_header
+            SET gst_irn=%s, gst_ack_number=%s
+            WHERE id=%s''',
+            [result['irn'], result['ack_number'], invoice_id])
+        conn.commit()
+        conn.close()
+
+    return jsonify({
+        'success': result['ok'],
+        'irn': result.get('irn'),
+        'ack_number': result.get('ack_number'),
+        'message': result['message'],
+        'log_id': result['log_id']
+    })
+
+
+@bp.route('/api/module/FIN01/invoice/cancel-irn', methods=['POST'])
+def cancel_irn():
+    """Cancel an IRN for an invoice"""
+    if 'user_id' not in session:
+        return jsonify({'success': False, 'error': 'Not logged in'}), 401
+
+    perms = get_user_permissions(session['user_id'], 'FIN01')
+    if not perms['can_edit']:
+        return jsonify({'success': False, 'error': 'No permission'}), 403
+
+    data = request.json
+    invoice_id = data.get('invoice_id')
+    invoice = model.get_invoice_by_id(invoice_id)
+    if not invoice:
+        return jsonify({'success': False, 'error': 'Invoice not found'}), 404
+
+    if not invoice.get('gst_irn'):
+        return jsonify({'success': False, 'error': 'No IRN to cancel'})
+
+    result = gsp_client.cancel_irn(
+        invoice['gst_irn'], data.get('reason_code', 1),
+        data.get('remark', 'Cancelled'),
+        'Invoice', invoice_id, invoice['invoice_number'],
+        session.get('username')
+    )
+
+    if result['ok']:
+        conn = get_db()
+        cur = get_cursor(conn)
+        cur.execute('''UPDATE invoice_header
+            SET gst_irn=NULL, gst_ack_number=NULL, gst_ack_date=NULL, gst_qr_code=NULL
+            WHERE id=%s''', [invoice_id])
+        conn.commit()
+        conn.close()
+
+    return jsonify({
+        'success': result['ok'],
+        'message': result['message'],
+        'log_id': result['log_id']
+    })

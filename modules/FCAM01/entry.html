@@ -252,6 +252,10 @@ async function saveAllLines() {
         alert('Please save header first');
         return;
     }
+    const toNullable = (value) => {
+        const trimmed = String(value || '').trim();
+        return trimmed === '' ? null : trimmed;
+    };
 
     const rows = document.querySelectorAll('#linesBody tr');
     let saved = 0;
@@ -261,16 +265,16 @@ async function saveAllLines() {
         const data = {
             id: id,
             agreement_id: currentAgreementId,
-            service_type_id: row.querySelector('[name="service_type_id[]"]').value,
-            rate: row.querySelector('[name="rate[]"]').value,
-            uom: row.querySelector('[name="uom[]"]').value,
-            currency_code: row.querySelector('[name="currency[]"]').value,
-            min_charge: row.querySelector('[name="min_charge[]"]').value,
-            max_charge: row.querySelector('[name="max_charge[]"]').value,
-            remarks: row.querySelector('[name="remarks[]"]').value
+            service_type_id: toNullable(row.querySelector('[name="service_type_id[]"]').value),
+            rate: toNullable(row.querySelector('[name="rate[]"]').value),
+            uom: toNullable(row.querySelector('[name="uom[]"]').value),
+            currency_code: toNullable(row.querySelector('[name="currency[]"]').value),
+            min_charge: toNullable(row.querySelector('[name="min_charge[]"]').value),
+            max_charge: toNullable(row.querySelector('[name="max_charge[]"]').value),
+            remarks: toNullable(row.querySelector('[name="remarks[]"]').value)
         };
 
-        if (!data.rate) continue;
+        if (data.rate === null) continue;
 
         const res = await fetch('/api/module/FCAM01/save-line', {
             method: 'POST',

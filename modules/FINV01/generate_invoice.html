@@ -34,8 +34,8 @@
 </style>
 
 <div class="module-header">
-    <h2>Billing and Invoicing - Generate Invoice</h2>
-    <span class="module-code">FIN01</span>
+    <h2>Invoicing - Generate Invoice</h2>
+    <span class="module-code">FINV01</span>
 </div>
 
 <div class="info-box">
@@ -213,7 +213,7 @@
 </form>
 
 <script>
-addToRecent('FIN01', 'Billing & Invoicing');
+addToRecent('FINV01', 'Invoicing');
 
 // Bill lines cache
 const billLinesCache = {};
@@ -231,7 +231,7 @@ async function toggleBillLines(billId, btn) {
     // Load lines if not cached
     if (!billLinesCache[billId]) {
         try {
-            const res = await fetch('/api/module/FIN01/bill-lines/' + billId);
+            const res = await fetch('/api/module/FINV01/bill-lines/' + billId);
             const data = await res.json();
             billLinesCache[billId] = data.lines || [];
         } catch(e) {
@@ -415,7 +415,7 @@ async function generateInvoice() {
         remarks: remarks
     };
 
-    const res = await fetch('/api/module/FIN01/invoice/create', {
+    const res = await fetch('/api/module/FINV01/invoice/create', {
         method: 'POST',
         headers: {'Content-Type': 'application/json'},
         body: JSON.stringify(invoiceData)
@@ -424,7 +424,7 @@ async function generateInvoice() {
     const result = await res.json();
     if (result.success) {
         alert(`Invoice ${result.invoice_number} generated successfully!`);
-        location.href = '/module/FIN01/invoices';
+        location.href = '/module/FINV01/invoices';
     } else {
         alert('Error: ' + (result.error || 'Failed to generate invoice'));
     }

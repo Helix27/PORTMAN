@@ -59,6 +59,14 @@ from modules.PSM01 import bp as psm01_bp, MODULE_INFO as psm01_info
 from modules.PSMM01 import bp as psmm01_bp, MODULE_INFO as psmm01_info
 from modules.PSOM01 import bp as psom01_bp, MODULE_INFO as psom01_info
 
+# Import accounts redesign modules
+from modules.FINV01 import bp as finv01_bp, MODULE_INFO as finv01_info
+from modules.SAPCFG import bp as sapcfg_bp, MODULE_INFO as sapcfg_info
+from modules.GSTCFG import bp as gstcfg_bp, MODULE_INFO as gstcfg_info
+from modules.FCN01 import bp as fcn01_bp, MODULE_INFO as fcn01_info
+from modules.FSAP01 import bp as fsap01_bp, MODULE_INFO as fsap01_info
+from modules.FLOG01 import bp as flog01_bp, MODULE_INFO as flog01_info
+
 # Register existing modules
 register_module(vc01_info['code'], vc01_info['name'], vc01_bp)
 register_module(vtm01_info['code'], vtm01_info['name'], vtm01_bp)
@@ -104,6 +112,14 @@ register_module(tm01_info['code'], tm01_info['name'], tm01_bp)
 register_module(psm01_info['code'], psm01_info['name'], psm01_bp)
 register_module(psmm01_info['code'], psmm01_info['name'], psmm01_bp)
 register_module(psom01_info['code'], psom01_info['name'], psom01_bp)
+
+# Register accounts redesign modules
+register_module(finv01_info['code'], finv01_info['name'], finv01_bp)
+register_module(sapcfg_info['code'], sapcfg_info['name'], sapcfg_bp)
+register_module(gstcfg_info['code'], gstcfg_info['name'], gstcfg_bp)
+register_module(fcn01_info['code'], fcn01_info['name'], fcn01_bp)
+register_module(fsap01_info['code'], fsap01_info['name'], fsap01_bp)
+register_module(flog01_info['code'], flog01_info['name'], flog01_bp)
 
 def login_required(f):
     @wraps(f)

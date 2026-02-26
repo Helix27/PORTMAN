@@ -230,9 +230,13 @@
                     <span class="arrow">&#9654;</span>
                 </div>
                 <div class="accordion-content">
-                    <div class="module-item" onclick="goToModule('FIN01', 'Billing & Invoicing')">
+                    <div class="module-item" onclick="goToModule('FIN01', 'Billing')">
                         <span class="code">FIN01</span>
-                        <span class="name">Billing & Invoicing</span>
+                        <span class="name">Billing</span>
+                    </div>
+                    <div class="module-item" onclick="goToModule('FINV01', 'Invoicing')">
+                        <span class="code">FINV01</span>
+                        <span class="name">Invoicing</span>
                     </div>
                     <div class="module-item" onclick="goToModule('FCAM01', 'Customer Agreements')">
                         <span class="code">FCAM01</span>
@@ -250,6 +254,28 @@
                         <span class="code">FCRM01</span>
                         <span class="name">Currency Master</span>
                     </div>
+                    <div class="module-item" onclick="goToModule('FCN01', 'Credit Note Management')" style="border-top:1px solid rgba(255,255,255,0.1)">
+                        <span class="code">FCN01</span>
+                        <span class="name">Credit Notes</span>
+                    </div>
+                    <div class="module-item" onclick="goToModule('FSAP01', 'SAP Financial Integration')">
+                        <span class="code">FSAP01</span>
+                        <span class="name">SAP Financial Integration</span>
+                    </div>
+                    <div class="module-item" onclick="goToModule('FLOG01', 'Integration Logs')">
+                        <span class="code">FLOG01</span>
+                        <span class="name">Integration Logs</span>
+                    </div>
+                    {% if session.is_admin %}
+                    <div class="module-item" onclick="goToModule('SAPCFG', 'SAP API Configuration')" style="border-top:1px solid rgba(255,255,255,0.1)">
+                        <span class="code">SAPCFG</span>
+                        <span class="name">SAP API Config</span>
+                    </div>
+                    <div class="module-item" onclick="goToModule('GSTCFG', 'GST API Configuration')">
+                        <span class="code">GSTCFG</span>
+                        <span class="name">GST API Config</span>
+                    </div>
+                    {% endif %}
                 </div>
             </div>
 

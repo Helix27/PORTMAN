@@ -2,6 +2,14 @@ from database import get_db, get_cursor
 
 TABLE = 'vessel_agents'
 
+FIELDS = [
+    'name', 'sap_customer_code', 'company_code', 'gl_code',
+    'gstin', 'gst_state_code', 'gst_state_name', 'pan',
+    'billing_address', 'city', 'pincode',
+    'contact_person', 'contact_email', 'contact_phone',
+    'default_currency', 'is_active'
+]
+
 def get_data(page=1, size=20):
     conn = get_db()
     cur = get_cursor(conn)
@@ -24,12 +32,15 @@ def save_data(data):
     conn = get_db()
     cur = get_cursor(conn)
     row_id = data.get('id')
-    name = data.get('name', '')
+    vals = [data.get(f) for f in FIELDS]
 
     if row_id:
-        cur.execute(f"UPDATE {TABLE} SET name=%s WHERE id=%s", [name, row_id])
+        sets = ', '.join(f'{f}=%s' for f in FIELDS)
+        cur.execute(f'UPDATE {TABLE} SET {sets} WHERE id=%s', vals + [row_id])
     else:
-        cur.execute(f"INSERT INTO {TABLE} (name) VALUES (%s) RETURNING id", [name])
+        cols = ', '.join(FIELDS)
+        phs = ', '.join('%s' for _ in FIELDS)
+        cur.execute(f'INSERT INTO {TABLE} ({cols}) VALUES ({phs}) RETURNING id', vals)
         row_id = cur.fetchone()['id']
 
     conn.commit()
@@ -38,7 +49,7 @@ def save_data(data):
 
 def delete_data(row_id):
     conn = get_db()
-    cur = conn.cursor()
+    cur = get_cursor(conn)
     cur.execute(f'DELETE FROM {TABLE} WHERE id=%s', (row_id,))
     conn.commit()
     conn.close()

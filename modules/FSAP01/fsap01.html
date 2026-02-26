@@ -1,0 +1,254 @@
+{% extends "base.html" %}
+
+{% block title %}SAP Financial Integration - PORTMAN{% endblock %}
+
+{% block content %}
+<style>
+    .sap-tabs { display: flex; gap: 0; margin-bottom: 0; }
+    .sap-tab { padding: 8px 20px; font-size: 12px; font-weight: 600; border: 2px solid #bdc3c7; border-bottom: none; background: #ecf0f1; cursor: pointer; border-radius: 4px 4px 0 0; color: #7f8c8d; }
+    .sap-tab.active { background: white; color: #2c3e50; border-color: #8e44ad; }
+    .sap-panel { border: 2px solid #8e44ad; border-radius: 0 4px 4px 4px; padding: 15px; background: white; display: none; }
+    .sap-panel.active { display: block; }
+    .status-badge { padding: 2px 8px; border-radius: 3px; font-size: 10px; font-weight: 600; }
+    .status-Pending { background: #fef9e7; color: #7d6608; }
+    .status-Synced { background: #d5f5e3; color: #1e8449; }
+    .status-Draft { background: #eaf2f8; color: #2471a3; }
+    .status-Failed { background: #fadbd8; color: #c0392b; }
+</style>
+
+<div class="module-header">
+    <h2>SAP Financial Integration</h2>
+    <span class="module-code">FSAP01</span>
+</div>
+
+<div class="sap-tabs">
+    <div class="sap-tab active" onclick="switchTab('ar')">Advance Receipts</div>
+    <div class="sap-tab" onclick="switchTab('ip')">Incoming Payments</div>
+    <div class="sap-tab" onclick="switchTab('jv')">GL Journal Vouchers</div>
+</div>
+
+<!-- Advance Receipts -->
+<div class="sap-panel active" id="panel-ar">
+    <div class="toolbar">
+        {% if permissions.can_add %}<button class="btn btn-add" onclick="addARRow()">+ Add Receipt</button>{% endif %}
+        {% if permissions.can_delete %}<button class="btn btn-delete" onclick="deleteARSelected()">Delete Selected</button>{% endif %}
+        {% if permissions.can_add or permissions.can_edit %}<button class="btn btn-save" onclick="saveAR()">Save All</button>{% endif %}
+        <div class="row-info" style="display:inline">Rows: <span id="arRowCount">0</span></div>
+    </div>
+    <div id="arTable"></div>
+</div>
+
+<!-- Incoming Payments -->
+<div class="sap-panel" id="panel-ip">
+    <div class="toolbar">
+        {% if permissions.can_add %}<button class="btn btn-add" onclick="addIPRow()">+ Add Payment</button>{% endif %}
+        {% if permissions.can_delete %}<button class="btn btn-delete" onclick="deleteIPSelected()">Delete Selected</button>{% endif %}
+        {% if permissions.can_add or permissions.can_edit %}<button class="btn btn-save" onclick="saveIP()">Save All</button>{% endif %}
+        <div class="row-info" style="display:inline">Rows: <span id="ipRowCount">0</span></div>
+    </div>
+    <div id="ipTable"></div>
+</div>
+
+<!-- GL Journal Vouchers -->
+<div class="sap-panel" id="panel-jv">
+    <div class="toolbar">
+        {% if permissions.can_add %}<button class="btn btn-add" onclick="addJVRow()">+ Add JV</button>{% endif %}
+        {% if permissions.can_delete %}<button class="btn btn-delete" onclick="deleteJVSelected()">Delete Selected</button>{% endif %}
+        {% if permissions.can_add or permissions.can_edit %}<button class="btn btn-save" onclick="saveJV()">Save All</button>{% endif %}
+        <div class="row-info" style="display:inline">Rows: <span id="jvRowCount">0</span></div>
+    </div>
+    <div id="jvTable"></div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    addToRecent('FSAP01', 'SAP Financial Integration');
+    const canEdit = {{ permissions.can_edit|default(0) }} || {{ permissions.can_add|default(0) }};
+    let arTable, ipTable, jvTable;
+
+    function switchTab(tab) {
+        document.querySelectorAll('.sap-tab').forEach(t => t.classList.remove('active'));
+        document.querySelectorAll('.sap-panel').forEach(p => p.classList.remove('active'));
+        event.target.classList.add('active');
+        document.getElementById(`panel-${tab}`).classList.add('active');
+    }
+
+    function statusFmt(cell) {
+        const v = cell.getValue() || 'Pending';
+        return `<span class="status-badge status-${v}">${v}</span>`;
+    }
+
+    // ===== ADVANCE RECEIPTS =====
+    function initAR() {
+        arTable = new Tabulator("#arTable", {
+            height: "calc(100vh - 250px)", layout: "fitData",
+            columns: [
+                {formatter: "rowSelection", titleFormatter: "rowSelection", hozAlign: "center", headerSort: false, width: 40},
+                {title: "Receipt #", field: "receipt_number", editor: canEdit ? "input" : false, width: 130},
+                {title: "Date", field: "receipt_date", editor: canEdit ? "date" : false, width: 110},
+                {title: "Party Type", field: "party_type", editor: canEdit ? "select" : false,
+                    editorParams: {values: {'': '', Agent: 'Agent', Customer: 'Customer', ImporterExporter: 'ImporterExporter'}}, width: 120},
+                {title: "Party Name", field: "party_name", editor: canEdit ? "input" : false, width: 180},
+                {title: "Amount", field: "amount", editor: canEdit ? "number" : false, hozAlign: "right", width: 110,
+                    formatter: "money", formatterParams: {precision: 2}},
+                {title: "Currency", field: "currency", editor: canEdit ? "input" : false, width: 70},
+                {title: "Payment Method", field: "payment_method", editor: canEdit ? "input" : false, width: 120},
+                {title: "Bank Ref", field: "bank_reference", editor: canEdit ? "input" : false, width: 140},
+                {title: "SAP Doc #", field: "sap_document_number", width: 120},
+                {title: "SAP FY", field: "sap_fiscal_year", width: 70},
+                {title: "Status", field: "status", width: 90, formatter: statusFmt},
+                {title: "Remarks", field: "remarks", editor: canEdit ? "input" : false, width: 200}
+            ],
+            pagination: true, paginationMode: "remote", paginationSize: 20,
+            ajaxURL: "/api/module/FSAP01/advance-receipts",
+            ajaxResponse: function(url, params, response) {
+                document.getElementById('arRowCount').textContent = response.total;
+                return response;
+            },
+            selectable: true
+        });
+    }
+
+    function addARRow() { arTable.addRow({currency: 'INR', receipt_date: new Date().toISOString().split('T')[0]}, false); }
+
+    async function saveAR() {
+        for (const row of arTable.getRows()) {
+            const data = row.getData();
+            if (!data.party_name) continue;
+            const res = await fetch('/api/module/FSAP01/advance-receipts/save', {
+                method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(data)
+            });
+            const result = await res.json();
+            if (result.id) row.update({id: result.id});
+        }
+        arTable.setData("/api/module/FSAP01/advance-receipts");
+    }
+
+    function deleteARSelected() {
+        const sel = arTable.getSelectedRows();
+        if (!sel.length) { alert('Select rows'); return; }
+        if (!confirm(`Delete ${sel.length} row(s)?`)) return;
+        sel.forEach(async r => {
+            if (r.getData().id) await fetch('/api/module/FSAP01/advance-receipts/delete', {
+                method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({id: r.getData().id})
+            });
+            r.delete();
+        });
+    }
+
+    // ===== INCOMING PAYMENTS =====
+    function initIP() {
+        ipTable = new Tabulator("#ipTable", {
+            height: "calc(100vh - 250px)", layout: "fitData",
+            columns: [
+                {formatter: "rowSelection", titleFormatter: "rowSelection", hozAlign: "center", headerSort: false, width: 40},
+                {title: "Payment #", field: "payment_number", editor: canEdit ? "input" : false, width: 130},
+                {title: "Date", field: "payment_date", editor: canEdit ? "date" : false, width: 110},
+                {title: "Party Type", field: "party_type", editor: canEdit ? "select" : false,
+                    editorParams: {values: {'': '', Agent: 'Agent', Customer: 'Customer', ImporterExporter: 'ImporterExporter'}}, width: 120},
+                {title: "Party Name", field: "party_name", editor: canEdit ? "input" : false, width: 180},
+                {title: "Amount", field: "amount", editor: canEdit ? "number" : false, hozAlign: "right", width: 110,
+                    formatter: "money", formatterParams: {precision: 2}},
+                {title: "Currency", field: "currency", editor: canEdit ? "input" : false, width: 70},
+                {title: "Payment Method", field: "payment_method", editor: canEdit ? "input" : false, width: 120},
+                {title: "Bank Ref", field: "bank_reference", editor: canEdit ? "input" : false, width: 140},
+                {title: "SAP Doc #", field: "sap_document_number", width: 120},
+                {title: "SAP FY", field: "sap_fiscal_year", width: 70},
+                {title: "Status", field: "status", width: 90, formatter: statusFmt},
+                {title: "Remarks", field: "remarks", editor: canEdit ? "input" : false, width: 200}
+            ],
+            pagination: true, paginationMode: "remote", paginationSize: 20,
+            ajaxURL: "/api/module/FSAP01/incoming-payments",
+            ajaxResponse: function(url, params, response) {
+                document.getElementById('ipRowCount').textContent = response.total;
+                return response;
+            },
+            selectable: true
+        });
+    }
+
+    function addIPRow() { ipTable.addRow({currency: 'INR', payment_date: new Date().toISOString().split('T')[0]}, false); }
+
+    async function saveIP() {
+        for (const row of ipTable.getRows()) {
+            const data = row.getData();
+            if (!data.party_name) continue;
+            const res = await fetch('/api/module/FSAP01/incoming-payments/save', {
+                method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(data)
+            });
+            const result = await res.json();
+            if (result.id) row.update({id: result.id});
+        }
+        ipTable.setData("/api/module/FSAP01/incoming-payments");
+    }
+
+    function deleteIPSelected() {
+        const sel = ipTable.getSelectedRows();
+        if (!sel.length) { alert('Select rows'); return; }
+        if (!confirm(`Delete ${sel.length} row(s)?`)) return;
+        sel.forEach(async r => {
+            if (r.getData().id) await fetch('/api/module/FSAP01/incoming-payments/delete', {
+                method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({id: r.getData().id})
+            });
+            r.delete();
+        });
+    }
+
+    // ===== GL JOURNAL VOUCHERS =====
+    function initJV() {
+        jvTable = new Tabulator("#jvTable", {
+            height: "calc(100vh - 250px)", layout: "fitData",
+            columns: [
+                {formatter: "rowSelection", titleFormatter: "rowSelection", hozAlign: "center", headerSort: false, width: 40},
+                {title: "JV Number", field: "jv_number", editor: canEdit ? "input" : false, width: 130},
+                {title: "JV Date", field: "jv_date", editor: canEdit ? "date" : false, width: 110},
+                {title: "Description", field: "description", editor: canEdit ? "input" : false, width: 250},
+                {title: "Total Debit", field: "total_debit", editor: canEdit ? "number" : false, hozAlign: "right", width: 110,
+                    formatter: "money", formatterParams: {precision: 2}},
+                {title: "Total Credit", field: "total_credit", editor: canEdit ? "number" : false, hozAlign: "right", width: 110,
+                    formatter: "money", formatterParams: {precision: 2}},
+                {title: "SAP Doc #", field: "sap_document_number", width: 120},
+                {title: "SAP FY", field: "sap_fiscal_year", width: 70},
+                {title: "Status", field: "status", width: 90, formatter: statusFmt}
+            ],
+            pagination: true, paginationMode: "remote", paginationSize: 20,
+            ajaxURL: "/api/module/FSAP01/gl-jvs",
+            ajaxResponse: function(url, params, response) {
+                document.getElementById('jvRowCount').textContent = response.total;
+                return response;
+            },
+            selectable: true
+        });
+    }
+
+    function addJVRow() { jvTable.addRow({jv_date: new Date().toISOString().split('T')[0]}, false); }
+
+    async function saveJV() {
+        for (const row of jvTable.getRows()) {
+            const data = row.getData();
+            if (!data.jv_number && !data.description) continue;
+            const res = await fetch('/api/module/FSAP01/gl-jvs/save', {
+                method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(data)
+            });
+            const result = await res.json();
+            if (result.id) row.update({id: result.id});
+        }
+        jvTable.setData("/api/module/FSAP01/gl-jvs");
+    }
+
+    function deleteJVSelected() {
+        const sel = jvTable.getSelectedRows();
+        if (!sel.length) { alert('Select rows'); return; }
+        if (!confirm(`Delete ${sel.length} row(s)?`)) return;
+        sel.forEach(async r => {
+            if (r.getData().id) await fetch('/api/module/FSAP01/gl-jvs/delete', {
+                method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({id: r.getData().id})
+            });
+            r.delete();
+        });
+    }
+
+    initAR(); initIP(); initJV();
+</script>
+{% endblock %}

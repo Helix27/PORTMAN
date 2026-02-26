@@ -84,6 +84,17 @@
 
     #equipmentView { display: none; }
     #buttonView { display: block; }
+
+    /* Split modal */
+    .split-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 1000; display: none; justify-content: center; align-items: center; }
+    .split-modal { background: white; border-radius: 8px; padding: 20px; width: 400px; box-shadow: 0 4px 20px rgba(0,0,0,0.3); }
+    .split-modal h3 { margin: 0 0 15px 0; font-size: 14px; color: #2c3e50; border-bottom: 2px solid #e74c3c; padding-bottom: 8px; }
+    .split-modal .field { margin-bottom: 12px; }
+    .split-modal .field label { display: block; font-size: 11px; font-weight: 600; color: #34495e; margin-bottom: 4px; text-transform: uppercase; }
+    .split-modal .field input, .split-modal .field textarea { width: 100%; padding: 8px; font-size: 12px; border: 1px solid #ddd; border-radius: 3px; box-sizing: border-box; }
+    .split-modal .field .info { font-size: 11px; color: #7f8c8d; margin-top: 3px; }
+    .split-modal .actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 15px; }
+    .split-indicator { background: #fdebd0; color: #e67e22; padding: 1px 5px; border-radius: 3px; font-size: 9px; font-weight: 600; }
 </style>
 <div class="module-header">
     <h2>Load Unload Equipment Utilization</h2>
@@ -106,9 +117,34 @@
         {% if permissions.can_add %}<button class="btn btn-add" onclick="addRow()">+ Add Row</button>{% endif %}
         {% if permissions.can_delete %}<button class="btn btn-delete" onclick="deleteSelected()">Delete Selected</button>{% endif %}
         {% if permissions.can_add or permissions.can_edit %}<button class="btn btn-save" onclick="saveAll()">Save (Ctrl+S)</button>{% endif %}
+        {% if permissions.can_edit %}<button class="btn" onclick="openSplitModal()" style="background:#e67e22;color:white;">Split Line</button>{% endif %}
         <div class="row-info">Rows: <span id="rowCount">0</span> / <span id="totalCount">0</span></div>
     </div>
     <div id="table"></div>
+</div>
+
+<!-- Split Modal -->
+<div class="split-overlay" id="splitOverlay" onclick="if(event.target===this)closeSplitModal()">
+    <div class="split-modal">
+        <h3>Split EU Line for Billing</h3>
+        <div class="field">
+            <label>Original Quantity</label>
+            <input type="text" id="splitOrigQty" readonly style="background:#f5f5f5">
+        </div>
+        <div class="field">
+            <label>Split Quantity (for new line)</label>
+            <input type="number" id="splitNewQty" step="0.001" min="0.001" placeholder="Enter quantity for split line">
+            <div class="info">Remaining quantity stays on original line: <strong id="splitRemainQty">-</strong></div>
+        </div>
+        <div class="field">
+            <label>Split Remark</label>
+            <textarea id="splitRemark" rows="2" placeholder="Reason for split (optional)"></textarea>
+        </div>
+        <div class="actions">
+            <button class="btn" style="background:#95a5a6;color:white" onclick="closeSplitModal()">Cancel</button>
+            <button class="btn" style="background:#e67e22;color:white" onclick="doSplit()">Split</button>
+        </div>
+    </div>
 </div>
 {% endblock %}
 
@@ -388,7 +424,13 @@
                 editor: canEdit ? "number" : false, editorParams: {min: 0, step: 0.01}},
             {title: "Qty UOM", field: "quantity_uom", width: 110, editor: canEdit ? "list" : false,
                 editorParams: {values: toOptions(uomList), autocomplete: true, allowEmpty: true, listOnEmpty: true}},
-            {title: "Remarks", field: "remarks", width: 200, editor: canEdit ? "input" : false}
+            {title: "Remarks", field: "remarks", width: 200, editor: canEdit ? "input" : false},
+            {title: "Split", field: "is_split", width: 60, hozAlign: "center", headerSort: false,
+                formatter: function(cell) {
+                    if (cell.getValue()) return '<span class="split-indicator">SPLIT</span>';
+                    return '';
+                }},
+            {title: "Parent ID", field: "parent_line_id", width: 80, visible: false}
         ];
 
         table = new Tabulator("#table", {
@@ -502,6 +544,55 @@
     document.addEventListener('keydown', function(e) {
         if ((e.ctrlKey || e.metaKey) && e.key === 's') { e.preventDefault(); saveAll(); }
     });
+
+    // ===== SPLIT LINE =====
+    let splitLineId = null;
+    let splitOriginalQty = 0;
+
+    function openSplitModal() {
+        const selected = table.getSelectedRows();
+        if (selected.length !== 1) { alert('Select exactly one row to split'); return; }
+        const data = selected[0].getData();
+        if (!data.id) { alert('Save the row first before splitting'); return; }
+        splitLineId = data.id;
+        splitOriginalQty = parseFloat(data.quantity) || 0;
+        document.getElementById('splitOrigQty').value = splitOriginalQty + ' ' + (data.quantity_uom || '');
+        document.getElementById('splitNewQty').value = '';
+        document.getElementById('splitNewQty').max = splitOriginalQty - 0.001;
+        document.getElementById('splitRemainQty').textContent = splitOriginalQty;
+        document.getElementById('splitRemark').value = '';
+        document.getElementById('splitOverlay').style.display = 'flex';
+    }
+
+    document.getElementById('splitNewQty').addEventListener('input', function() {
+        const val = parseFloat(this.value) || 0;
+        const remain = (splitOriginalQty - val).toFixed(3);
+        document.getElementById('splitRemainQty').textContent = remain >= 0 ? remain : 'Invalid!';
+    });
+
+    function closeSplitModal() {
+        document.getElementById('splitOverlay').style.display = 'none';
+        splitLineId = null;
+    }
+
+    async function doSplit() {
+        const splitQty = parseFloat(document.getElementById('splitNewQty').value);
+        if (!splitQty || splitQty <= 0) { alert('Enter a valid split quantity'); return; }
+        if (splitQty >= splitOriginalQty) { alert('Split quantity must be less than original'); return; }
+        const remark = document.getElementById('splitRemark').value;
+        const res = await fetch('/api/module/LUEU01/split', {
+            method: 'POST', headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({line_id: splitLineId, split_quantity: splitQty, split_remark: remark})
+        });
+        const result = await res.json();
+        if (result.success) {
+            closeSplitModal();
+            table.setData(`/api/module/LUEU01/data`, {equipment: currentEquipment});
+            showStatus('Line split successfully', 'saved');
+        } else {
+            alert('Split failed: ' + (result.error || 'Unknown error'));
+        }
+    }
 
     loadMasterData();
 </script>

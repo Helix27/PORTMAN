@@ -87,6 +87,58 @@ def delete_lines(ids):
     conn.close()
 
 
+def split_line(line_id, split_qty, split_remark, created_by=None):
+    conn = get_db()
+    cur = get_cursor(conn)
+    cur.execute('SELECT * FROM lueu_lines WHERE id = %s', [line_id])
+    parent = cur.fetchone()
+    if not parent:
+        conn.close()
+        return None
+    parent = dict(parent)
+    original_qty = float(parent.get('quantity') or 0)
+    split_qty = float(split_qty)
+    remaining_qty = original_qty - split_qty
+
+    # Mark parent as split, update its quantity to the remaining
+    cur.execute('''UPDATE lueu_lines SET is_split = TRUE, quantity = %s WHERE id = %s''',
+                [remaining_qty, line_id])
+
+    # Create child line with split quantity
+    from datetime import datetime
+    cur.execute('''
+        INSERT INTO lueu_lines
+        (source_type, source_id, source_display, barge_name, equipment_name, operator_name,
+         delay_name, cargo_name, operation_type, quantity, quantity_uom, route_name,
+         start_time, end_time, entry_date, created_by, created_date,
+         shift, from_time, to_time, system_name, berth_name, shift_incharge, remarks,
+         is_split, parent_line_id, split_quantity, split_remark)
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
+                %s, %s, %s, %s, %s, %s, %s, TRUE, %s, %s, %s)
+        RETURNING id
+    ''', [
+        parent.get('source_type'), parent.get('source_id'), parent.get('source_display'),
+        parent.get('barge_name'), parent.get('equipment_name'), parent.get('operator_name'),
+        parent.get('delay_name'), parent.get('cargo_name'), parent.get('operation_type'),
+        split_qty, parent.get('quantity_uom'), parent.get('route_name'),
+        parent.get('start_time'), parent.get('end_time'), parent.get('entry_date'),
+        created_by, datetime.now().strftime('%Y-%m-%d'),
+        parent.get('shift'), parent.get('from_time'), parent.get('to_time'),
+        parent.get('system_name'), parent.get('berth_name'), parent.get('shift_incharge'),
+        split_remark or parent.get('remarks'),
+        line_id, split_qty, split_remark
+    ])
+    child_id = cur.fetchone()['id']
+
+    # Also update parent's split fields
+    cur.execute('''UPDATE lueu_lines SET split_quantity = %s, split_remark = %s WHERE id = %s''',
+                [remaining_qty, 'Parent line (split)', line_id])
+
+    conn.commit()
+    conn.close()
+    return {'child_id': child_id, 'parent_qty': remaining_qty, 'child_qty': split_qty}
+
+
 def get_vcn_options():
     """Get VCN entries with vessel name and anchored time for dropdown"""
     conn = get_db()
