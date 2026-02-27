@@ -9,7 +9,6 @@
     .btn-primary { background: #3498db; color: white; }
     .btn-success { background: #27ae60; color: white; }
     .btn-warning { background: #f39c12; color: white; }
-    .btn-danger { background: #c0392b; color: white; }
     .btn-export { background: #8e44ad; color: white; }
     .btn-gst { background: #e74c3c; color: white; }
     .data-table { width: 100%; border-collapse: collapse; font-size: 11px; background: white; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
@@ -20,7 +19,6 @@
     .status-generated { background: #3498db; }
     .status-posted-to-sap { background: #9b59b6; }
     .status-posted-to-gst { background: #27ae60; }
-    .status-cancelled { background: #7f8c8d; }
     .filters { margin-bottom: 15px; display: flex; gap: 10px; }
     .filters select { padding: 6px; font-size: 11px; border: 1px solid #ddd; border-radius: 3px; }
     .pagination { margin-top: 15px; display: flex; gap: 5px; justify-content: center; font-size: 11px; }
@@ -56,7 +54,6 @@
         <option value="Generated" {% if status_filter == 'Generated' %}selected{% endif %}>Generated</option>
         <option value="Posted to SAP" {% if status_filter == 'Posted to SAP' %}selected{% endif %}>Posted to SAP</option>
         <option value="Posted to GST" {% if status_filter == 'Posted to GST' %}selected{% endif %}>Posted to GST</option>
-        <option value="Cancelled" {% if status_filter == 'Cancelled' %}selected{% endif %}>Cancelled</option>
         <option value="Paid" {% if status_filter == 'Paid' %}selected{% endif %}>Paid</option>
     </select>
 </div>
@@ -103,9 +100,6 @@
                 {% if row.invoice_status == 'Generated' %}
                 <button class="btn btn-warning" onclick="postToGST({{ row.id }})" style="font-size:10px;padding:3px 8px;">Post GST</button>
                 <button class="btn btn-success" onclick="postToSAP({{ row.id }})" style="font-size:10px;padding:3px 8px;">Post SAP</button>
-                {% endif %}
-                {% if row.sap_document_number and row.invoice_status != 'Cancelled' %}
-                <button class="btn btn-danger" onclick="cancelInSAP({{ row.id }})" style="font-size:10px;padding:3px 8px;">Cancel SAP</button>
                 {% endif %}
             </td>
         </tr>
@@ -417,24 +411,6 @@ async function postToSAP(id) {
             location.reload();
         } else {
             alert('SAP Error: ' + result.message);
-        }
-    } catch(e) { alert('Error: ' + e.message); }
-}
-
-async function cancelInSAP(id) {
-    if (!confirm('Cancel this SAP invoice via FB08 reversal? Allowed only within 24 hours.')) return;
-    try {
-        const res = await fetch('/api/module/FINV01/invoice/cancel-sap', {
-            method: 'POST',
-            headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({invoice_id: id})
-        });
-        const result = await res.json();
-        if (result.success) {
-            alert('SAP reversal posted (FB08). Reversal Doc: ' + (result.sap_document_number || 'Success'));
-            location.reload();
-        } else {
-            alert('SAP Cancellation Error: ' + (result.error || result.message || 'Failed'));
         }
     } catch(e) { alert('Error: ' + e.message); }
 }
