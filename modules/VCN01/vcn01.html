@@ -610,6 +610,25 @@
                 {title: "End Time", field: "delay_end", widthGrow: 1, editor: canEdit ? datetimeEditor : false,
                     formatter: datetimeCellFormatter
                 },
+                {title: "Total Time", field: "total_time", widthGrow: 1, hozAlign: "center", headerSort: false, editable: false,
+                    formatter: function(cell) {
+                        const row = cell.getRow().getData();
+                        if (!row.delay_start || !row.delay_end) return '';
+                        const start = new Date(row.delay_start);
+                        const end = new Date(row.delay_end);
+                        const diffMs = end - start;
+                        if (isNaN(diffMs) || diffMs < 0) return '<span style="color:#e53e3e">Invalid</span>';
+                        const totalMins = Math.floor(diffMs / 60000);
+                        const days = Math.floor(totalMins / 1440);
+                        const hrs = Math.floor((totalMins % 1440) / 60);
+                        const mins = totalMins % 60;
+                        let parts = [];
+                        if (days) parts.push(`${days}d`);
+                        if (hrs) parts.push(`${hrs}h`);
+                        if (mins || parts.length === 0) parts.push(`${mins}m`);
+                        return `<span style="font-weight:500;color:#2d3748">${parts.join(' ')}</span>`;
+                    }
+                },
                 canEdit ? {title: "", field: "actions", formatter: deleteButtonFormatter, width: 60, widthGrow: 0, hozAlign: "center", headerSort: false,
                     cellClick: function(e, cell) { deleteSubRow('delays', cell.getRow().getData().id, vcnId); }
                 } : null
@@ -689,12 +708,19 @@
         }
 
         if (operationType !== 'Export') {
-            // Hold options
-            const holdOptions = {};
-            holds.forEach(h => { holdOptions[h] = h; });
+            // Fetch vessel holds count and cargo names for this VCN in parallel
+            const [holdsRes, vcnCargoRes] = await Promise.all([
+                fetch(`/api/module/VCN01/vessel_holds/${vcnId}`),
+                fetch(`/api/module/VCN01/cargo_names/${vcnId}`)
+            ]);
+            const holdsData = await holdsRes.json();
+            const noOfHolds = holdsData.no_of_holds || holds.length;
 
-            // Fetch cargo names for this specific VCN for stowage plan dropdown
-            const vcnCargoRes = await fetch(`/api/module/VCN01/cargo_names/${vcnId}`);
+            // Only show holds up to vessel's no_of_holds
+            const allowedHolds = holds.slice(0, noOfHolds);
+            const holdOptions = {};
+            allowedHolds.forEach(h => { holdOptions[h] = h; });
+
             const vcnCargoNames = await vcnCargoRes.json();
             const vcnCargoOptions = {};
             vcnCargoNames.forEach(c => { vcnCargoOptions[c] = c; });

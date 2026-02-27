@@ -177,6 +177,11 @@ def delete_export_cargo():
 def get_export_cargo_names(vcn_id):
     return jsonify(model.get_export_cargo_names_for_vcn(vcn_id))
 
+@bp.route('/api/module/VCN01/all_cargo_names/<int:vcn_id>')
+@login_required
+def get_all_cargo_names(vcn_id):
+    return jsonify(model.get_all_cargo_names_for_vcn(vcn_id))
+
 # Get cargo names for a specific VCN (for stowage plan dropdown)
 @bp.route('/api/module/VCN01/cargo_names/<int:vcn_id>')
 @login_required

@@ -260,6 +260,7 @@
     let vesselOpsHoldFields = {}; // Dynamic vessel ops hold columns per LDUD ID
     let currentOperationTypes = {}; // Track operation type per ldud ID
     let holdCargoConfig = {}; // Per-hold cargo config per LDUD ID
+    let vcnCargoCache = {}; // VCN-specific cargo names per LDUD ID (for Export)
     let currentLdudId = null;
 
     const currentUser = '{{ session.username }}';
@@ -584,7 +585,6 @@
                 }
             },
             {title: "Doc Num", field: "doc_num", width: 80},
-            {title: "Operation Type", field: "operation_type", editor: false, width: 110},
             {title: "Cargo Name", field: "cargo_names_display", width: 200,
                 formatter: function(cell) { return cargoColorBadges(cell.getValue()); }
             },
@@ -851,7 +851,17 @@
             emptyOpt.value = ''; emptyOpt.textContent = '-- Select --';
             sel.appendChild(emptyOpt);
 
-            cargoNames.forEach(c => {
+            const availableCargo = (operationType === 'Export' && vcnCargoCache[ldudId] && vcnCargoCache[ldudId].length)
+                ? vcnCargoCache[ldudId]
+                : cargoNames;
+
+            // Auto-select if only one cargo option and hold not yet assigned
+            if (availableCargo.length === 1 && !def.cargo_name) {
+                def.cargo_name = availableCargo[0];
+                saveHoldCargo(ldudId, def.hold_name, availableCargo[0]);
+            }
+
+            availableCargo.forEach(c => {
                 const opt = document.createElement('option');
                 opt.value = c; opt.textContent = c;
                 if (c === def.cargo_name) opt.selected = true;
@@ -958,6 +968,10 @@
                 });
             }
             vesselOpsHoldFields[ldudId] = exportHolds;
+
+            // Fetch cargo names specific to this VCN for the hold cargo panel (both import+export tables)
+            const vcnExportCargoRes = await fetch(`/api/module/VCN01/all_cargo_names/${vcnId}`);
+            vcnCargoCache[ldudId] = await vcnExportCargoRes.json();
         } else if (operationType !== 'Export') {
             // Import: override stowage cargo with saved holdCargoConfig
             vesselOpsHoldFields[ldudId].forEach(def => {

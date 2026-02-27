@@ -16,6 +16,7 @@ def register_module(code, name, blueprint):
 from modules.VC01 import bp as vc01_bp, MODULE_INFO as vc01_info
 from modules.VTM01 import bp as vtm01_bp, MODULE_INFO as vtm01_info
 from modules.VCM01 import bp as vcm01_bp, MODULE_INFO as vcm01_info
+from modules.VFM01 import bp as vfm01_bp, MODULE_INFO as vfm01_info
 from modules.GM01 import bp as gm01_bp, MODULE_INFO as gm01_info
 from modules.ADMIN import bp as admin_bp, MODULE_INFO as admin_info
 
@@ -71,6 +72,7 @@ from modules.FLOG01 import bp as flog01_bp, MODULE_INFO as flog01_info
 register_module(vc01_info['code'], vc01_info['name'], vc01_bp)
 register_module(vtm01_info['code'], vtm01_info['name'], vtm01_bp)
 register_module(vcm01_info['code'], vcm01_info['name'], vcm01_bp)
+register_module(vfm01_info['code'], vfm01_info['name'], vfm01_bp)
 register_module(gm01_info['code'], gm01_info['name'], gm01_bp)
 register_module(admin_info['code'], admin_info['name'], admin_bp)
 

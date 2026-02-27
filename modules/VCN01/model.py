@@ -149,6 +149,21 @@ def get_cargo_names_for_vcn(vcn_id):
     conn.close()
     return [r['cargo_name'] for r in rows if r['cargo_name']]
 
+def get_all_cargo_names_for_vcn(vcn_id):
+    """Get all cargo names for a VCN from both import and export declaration tables"""
+    conn = get_db()
+    cur = get_cursor(conn)
+    cur.execute('''
+        SELECT DISTINCT cargo_name FROM (
+            SELECT cargo_name FROM vcn_cargo_declaration WHERE vcn_id=%s AND cargo_name IS NOT NULL
+            UNION
+            SELECT cargo_name FROM vcn_export_cargo_declaration WHERE vcn_id=%s AND cargo_name IS NOT NULL
+        ) combined ORDER BY cargo_name
+    ''', (vcn_id, vcn_id))
+    rows = cur.fetchall()
+    conn.close()
+    return [r['cargo_name'] for r in rows if r['cargo_name']]
+
 def save_cargo_declaration(data):
     _clean_empty(data)
     conn = get_db()

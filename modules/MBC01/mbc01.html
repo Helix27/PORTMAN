@@ -244,6 +244,7 @@
     let operationTypes = [];
     let cargoTypes = [];
     let cargoNames = [];
+    let cargoByType = {};
     let uomList = [];
     let berthList = [];
     let payloaderList = [];
@@ -251,6 +252,7 @@
     let equipmentList = [];
     let subTables = {};
     let currentMbcId = null;
+    let currentBlQty = null;
 
     const currentUser = '{{ session.username }}';
     const permissions = {
@@ -279,7 +281,7 @@
             fetch('/api/module/MBCM01/all'),
             fetch('/api/module/LUEU01/operation-types'),
             fetch('/api/module/VCG01/types'),
-            fetch('/api/module/VCG01/names'),
+            fetch('/api/module/VCG01/all'),
             fetch('/api/module/VQM01/all'),
             fetch('/api/module/PBM01/all'),
             fetch('/api/module/PPL01/all'),
@@ -293,7 +295,16 @@
         mbcList = await mbcRes.json();
         operationTypes = await otRes.json();
         cargoTypes = await ctRes.json();
-        cargoNames = await cnRes.json();
+        const cnData = await cnRes.json();
+        cargoByType = {};
+        cnData.forEach(c => {
+            if (c.cargo_type) {
+                if (!cargoByType[c.cargo_type]) cargoByType[c.cargo_type] = [];
+                if (c.cargo_name && !cargoByType[c.cargo_type].includes(c.cargo_name))
+                    cargoByType[c.cargo_type].push(c.cargo_name);
+            }
+        });
+        cargoNames = [...new Set(cnData.map(c => c.cargo_name).filter(Boolean))].sort();
         uomList = await uomRes.json();
         berthList = await berthRes.json();
         payloaderList = await pplRes.json();
@@ -318,9 +329,6 @@
 
         const ctOptions = {};
         cargoTypes.forEach(c => { ctOptions[c] = c; });
-
-        const cnOptions = {};
-        cargoNames.forEach(c => { cnOptions[c] = c; });
 
         const uomOptions = {};
         uomList.forEach(u => { uomOptions[u] = u; });
@@ -355,7 +363,13 @@
             {title: "Cargo Type", field: "cargo_type", editor: canEdit ? "list" : false, width: 100,
                 editorParams: {values: ctOptions, autocomplete: true, allowEmpty: true}},
             {title: "Cargo Name", field: "cargo_name", editor: canEdit ? "list" : false, width: 120,
-                editorParams: {values: cnOptions, autocomplete: true, allowEmpty: true}},
+                editorParams: function(cell) {
+                    const type = cell.getRow().getData().cargo_type;
+                    const names = (type && cargoByType[type]) ? cargoByType[type] : cargoNames;
+                    const opts = {};
+                    names.forEach(n => { opts[n] = n; });
+                    return {values: opts, autocomplete: true, allowEmpty: true};
+                }},
             {title: "BL Qty", field: "bl_quantity", editor: canEdit ? "number" : false, width: 80, hozAlign: "right",
                 editorParams: {min: 0, step: 0.01}},
             {title: "UOM", field: "quantity_uom", editor: canEdit ? "list" : false, width: 70,
@@ -433,7 +447,7 @@
                 </div>
                 <div class="sub-section">
                     <div class="sub-section-header">
-                        <span>Customer Details</span>
+                        <span>Customer Details <span id="cust-total-${mbcId}" style="font-size:11px;font-weight:normal;color:#64748b;margin-left:6px;"></span></span>
                         <div class="sub-section-actions">
                             ${canAct ? `<button class="btn-sub-add" onclick="addSubRow('customer_details', ${mbcId})">+ Add</button>` : ''}
                             ${canAct ? `<button class="btn-sub-save" onclick="saveSubTable('customer_details', ${mbcId})">Save</button>` : ''}
@@ -476,7 +490,7 @@
                 </div>
                 <div class="sub-section">
                     <div class="sub-section-header">
-                        <span>Customer Details</span>
+                        <span>Customer Details <span id="cust-total-${mbcId}" style="font-size:11px;font-weight:normal;color:#64748b;margin-left:6px;"></span></span>
                         <div class="sub-section-actions">
                             ${canAct ? `<button class="btn-sub-add" onclick="addSubRow('customer_details', ${mbcId})">+ Add</button>` : ''}
                             ${canAct ? `<button class="btn-sub-save" onclick="saveSubTable('customer_details', ${mbcId})">Save</button>` : ''}
@@ -490,7 +504,8 @@
         document.getElementById('detailsModal').classList.add('active');
 
         subTables[mbcId] = {};
-        await initSubTables(mbcId, operationType);
+        currentBlQty = data.bl_quantity;
+        await initSubTables(mbcId, operationType, data.bl_quantity);
     }
 
     function closeDetailsModal() {
@@ -519,7 +534,7 @@
         });
     });
 
-    async function initSubTables(mbcId, operationType) {
+    async function initSubTables(mbcId, operationType, blQty) {
         const canEdit = permissions.can_edit || permissions.can_add;
         const isDark = localStorage.getItem('theme') === 'dark';
 
@@ -596,7 +611,8 @@
                     {title: "Unloading Completed", field: "unloading_completed", width: 140, editor: canEdit ? datetimeEditor : false, formatter: dtFmt},
                     {title: "MBC Cast Off", field: "vessel_cast_off", width: 140, editor: canEdit ? datetimeEditor : false, formatter: dtFmt},
                     {title: "Sailed Out From Load Port", field: "sailed_out_load_port", width: 170, editor: canEdit ? datetimeEditor : false, formatter: dtFmt},
-                    {title: "Unloaded By", field: "vessel_unloaded_by", width: 100, editor: canEdit ? "input" : false},
+                    {title: "Unloaded By", field: "vessel_unloaded_by", width: 130, editor: canEdit ? "list" : false,
+                        editorParams: {values: equipOptions, autocomplete: true, allowEmpty: true}},
                     {title: "Unloading Berth", field: "vessel_unloading_berth", width: 110, editor: canEdit ? "list" : false,
                         editorParams: {values: berthOptions, autocomplete: true, allowEmpty: true}},
                     {title: "Discharge Stop", field: "discharge_stop_shifting", width: 140, editor: canEdit ? datetimeEditor : false, formatter: dtFmt},
@@ -632,6 +648,22 @@
         if (isDark) document.querySelector(`#cleaning-table-${mbcId}`).classList.add('tabulator-dark');
 
         // Customer Details table (common for both Import and Export)
+        const bl = (blQty != null && blQty !== '') ? parseFloat(blQty) : null;
+
+        function updateCustTotal() {
+            const tbl = subTables[mbcId].customer_details;
+            if (!tbl) return;
+            const rows = tbl.getRows();
+            const total = rows.reduce((sum, r) => sum + (parseFloat(r.getData().quantity) || 0), 0);
+            const span = document.getElementById(`cust-total-${mbcId}`);
+            if (!span) return;
+            const over = bl != null && total > bl;
+            span.textContent = bl != null
+                ? `Total: ${total.toFixed(2)} / BL: ${bl.toFixed(2)}`
+                : `Total: ${total.toFixed(2)}`;
+            span.style.color = over ? '#e53e3e' : '#38a169';
+        }
+
         subTables[mbcId].customer_details = new Tabulator(`#customer_details-table-${mbcId}`, {
             layout: "fitDataFill",
             height: 150,
@@ -646,6 +678,25 @@
                 delBtn('customer_details')
             ].filter(Boolean)
         });
+
+        subTables[mbcId].customer_details.on("dataLoaded", function() {
+            updateCustTotal();
+        });
+
+        subTables[mbcId].customer_details.on("cellEdited", function(cell) {
+            if (cell.getField() !== 'quantity') return;
+            const tbl = subTables[mbcId].customer_details;
+            const rows = tbl.getRows();
+            const total = rows.reduce((sum, r) => sum + (parseFloat(r.getData().quantity) || 0), 0);
+            if (bl != null && total > bl) {
+                cell.restoreOldValue();
+                updateCustTotal();
+                alert(`Total quantity would exceed BL quantity (${bl.toFixed(2)}). Value reverted.`);
+            } else {
+                updateCustTotal();
+            }
+        });
+
         if (isDark) document.querySelector(`#customer_details-table-${mbcId}`).classList.add('tabulator-dark');
     }
 
@@ -668,6 +719,15 @@
 
     async function saveSubTable(type, mbcId) {
         if (!subTables[mbcId] || !subTables[mbcId][type]) return;
+
+        if (type === 'customer_details' && currentBlQty != null && currentBlQty !== '') {
+            const rows = subTables[mbcId][type].getRows();
+            const total = rows.reduce((sum, r) => sum + (parseFloat(r.getData().quantity) || 0), 0);
+            if (total > parseFloat(currentBlQty)) {
+                alert(`Cannot save: Total quantity (${total.toFixed(2)}) exceeds BL quantity (${parseFloat(currentBlQty).toFixed(2)}).`);
+                return;
+            }
+        }
 
         const rows = subTables[mbcId][type].getRows();
         let savedCount = 0;
