@@ -88,7 +88,7 @@ def get_vcn_options():
         anchored = opt.get('anchorage_arrival', '')
         if anchored:
             anchored = anchored[:16].replace('T', ' ')
-        display = f"{opt['vcn_doc_num']} / {opt['vessel_name']} / {anchored}"
+        display = f"{opt['vcn_doc_num']} / {opt['vessel_name']}"
         result.append({
             'value': display,
             'label': display,
@@ -104,7 +104,7 @@ def get_mbc_options():
     result = []
     for opt in options:
         doc_date = opt.get('doc_date', '')
-        display = f"{opt['doc_num']} / {opt['mbc_name']} / {doc_date}"
+        display = f"{opt['doc_num']} / {opt['mbc_name']}"
         result.append({
             'value': display,
             'label': display,

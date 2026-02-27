@@ -85,16 +85,6 @@
     #equipmentView { display: none; }
     #buttonView { display: block; }
 
-    /* Split modal */
-    .split-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 1000; display: none; justify-content: center; align-items: center; }
-    .split-modal { background: white; border-radius: 8px; padding: 20px; width: 400px; box-shadow: 0 4px 20px rgba(0,0,0,0.3); }
-    .split-modal h3 { margin: 0 0 15px 0; font-size: 14px; color: #2c3e50; border-bottom: 2px solid #e74c3c; padding-bottom: 8px; }
-    .split-modal .field { margin-bottom: 12px; }
-    .split-modal .field label { display: block; font-size: 11px; font-weight: 600; color: #34495e; margin-bottom: 4px; text-transform: uppercase; }
-    .split-modal .field input, .split-modal .field textarea { width: 100%; padding: 8px; font-size: 12px; border: 1px solid #ddd; border-radius: 3px; box-sizing: border-box; }
-    .split-modal .field .info { font-size: 11px; color: #7f8c8d; margin-top: 3px; }
-    .split-modal .actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 15px; }
-    .split-indicator { background: #fdebd0; color: #e67e22; padding: 1px 5px; border-radius: 3px; font-size: 9px; font-weight: 600; }
 </style>
 <div class="module-header">
     <h2>Load Unload Equipment Utilization</h2>
@@ -117,35 +107,11 @@
         {% if permissions.can_add %}<button class="btn btn-add" onclick="addRow()">+ Add Row</button>{% endif %}
         {% if permissions.can_delete %}<button class="btn btn-delete" onclick="deleteSelected()">Delete Selected</button>{% endif %}
         {% if permissions.can_add or permissions.can_edit %}<button class="btn btn-save" onclick="saveAll()">Save (Ctrl+S)</button>{% endif %}
-        {% if permissions.can_edit %}<button class="btn" onclick="openSplitModal()" style="background:#e67e22;color:white;">Split Line</button>{% endif %}
         <div class="row-info">Rows: <span id="rowCount">0</span> / <span id="totalCount">0</span></div>
     </div>
     <div id="table"></div>
 </div>
 
-<!-- Split Modal -->
-<div class="split-overlay" id="splitOverlay" onclick="if(event.target===this)closeSplitModal()">
-    <div class="split-modal">
-        <h3>Split EU Line for Billing</h3>
-        <div class="field">
-            <label>Original Quantity</label>
-            <input type="text" id="splitOrigQty" readonly style="background:#f5f5f5">
-        </div>
-        <div class="field">
-            <label>Split Quantity (for new line)</label>
-            <input type="number" id="splitNewQty" step="0.001" min="0.001" placeholder="Enter quantity for split line">
-            <div class="info">Remaining quantity stays on original line: <strong id="splitRemainQty">-</strong></div>
-        </div>
-        <div class="field">
-            <label>Split Remark</label>
-            <textarea id="splitRemark" rows="2" placeholder="Reason for split (optional)"></textarea>
-        </div>
-        <div class="actions">
-            <button class="btn" style="background:#95a5a6;color:white" onclick="closeSplitModal()">Cancel</button>
-            <button class="btn" style="background:#e67e22;color:white" onclick="doSplit()">Split</button>
-        </div>
-    </div>
-</div>
 {% endblock %}
 
 {% block scripts %}
@@ -373,24 +339,64 @@
         return select;
     };
 
-    // HH:MM time editor
+    // HH:MM text editor (same style as global datetimeEditor — avoids browser spin-button issues)
     var timeEditor = function(cell, onRendered, success, cancel) {
         var input = document.createElement("input");
-        input.type = "time";
-        input.value = cell.getValue() || '';
+        input.type = "text";
+        input.placeholder = "HH:MM";
+        input.maxLength = 5;
+        input.value = cell.getValue() ? String(cell.getValue()).slice(0, 5) : '';
         input.style.width = "100%";
         input.style.boxSizing = "border-box";
         input.style.padding = "4px";
+        input.style.fontFamily = "monospace";
+        input.style.fontSize = "12px";
+        var resolved = false;
 
-        onRendered(function() { input.focus(); });
-        input.addEventListener("change", function() { success(input.value); });
-        input.addEventListener("blur", function() { success(input.value); });
+        // Auto-insert colon after 2 digits
+        input.addEventListener('input', function() {
+            var raw = input.value.replace(/[^\d]/g, '');
+            var out = '';
+            for (var i = 0; i < raw.length && i < 4; i++) {
+                if (i === 2) out += ':';
+                out += raw[i];
+            }
+            input.value = out;
+        });
+
+        function complete() {
+            if (resolved) return;
+            resolved = true;
+            var val = input.value.trim();
+            if (/^\d{1,2}:\d{2}$/.test(val)) {
+                var parts = val.split(':');
+                val = parts[0].padStart(2, '0') + ':' + parts[1];
+            } else {
+                val = '';
+            }
+            success(val);
+        }
+
+        onRendered(function() { input.focus(); input.select(); input.style.height = "100%"; });
+        input.addEventListener("blur", function() { complete(); });
         input.addEventListener("keydown", function(e) {
-            if (e.key === "Enter") success(input.value);
-            if (e.key === "Escape") cancel();
+            if (e.key === "Enter") complete();
+            if (e.key === "Escape") { resolved = true; cancel(); }
         });
         return input;
     };
+
+    function calcDiffHrs(from, to) {
+        if (!from || !to) return '';
+        var fp = String(from).split(':'), tp = String(to).split(':');
+        if (fp.length < 2 || tp.length < 2) return '';
+        var fromMins = parseInt(fp[0]) * 60 + parseInt(fp[1]);
+        var toMins   = parseInt(tp[0]) * 60 + parseInt(tp[1]);
+        if (isNaN(fromMins) || isNaN(toMins)) return '';
+        // If to <= from, assume to is next day
+        var diffMins = toMins > fromMins ? toMins - fromMins : 1440 - fromMins + toMins;
+        return (diffMins / 60).toFixed(2);
+    }
 
     function initTable(equipName) {
         if (table) { table.destroy(); table = null; }
@@ -404,6 +410,13 @@
                 editorParams: {values: {'': '', 'A': 'A', 'B': 'B', 'C': 'C'}}},
             {title: "From", field: "from_time", width: 90, editor: canEdit ? timeEditor : false},
             {title: "To", field: "to_time", width: 90, editor: canEdit ? timeEditor : false},
+            {title: "Diff (Hrs)", field: "diff_hrs", width: 80, hozAlign: "right", headerSort: false,
+                mutatorData: function(value, data) { return calcDiffHrs(data.from_time, data.to_time); },
+                formatter: function(cell) {
+                    var val = cell.getValue();
+                    if (!val && val !== 0) return '';
+                    return '<span style="font-weight:500">' + val + '</span>';
+                }},
             {title: "VCN / MBC", field: "source_display", width: 280, editor: canEdit ? "list" : false,
                 editorParams: {values: getVcnMbcOptions(), autocomplete: true, allowEmpty: true, listOnEmpty: true}},
             {title: "Barge / MBC Name", field: "barge_name", width: 150, editor: canEdit ? bargeEditor : false},
@@ -412,7 +425,7 @@
                 editorParams: {values: toOptions(delayList), autocomplete: true, allowEmpty: true, listOnEmpty: true}},
             {title: "System", field: "system_name", width: 130, editor: canEdit ? "list" : false,
                 editorParams: {values: toOptions(systemList), autocomplete: true, allowEmpty: true, listOnEmpty: true}},
-            {title: "Route", field: "route_name", width: 140, editor: canEdit ? "list" : false,
+            {title: "Receiving Route", field: "route_name", width: 160, editor: canEdit ? "list" : false,
                 editorParams: {values: toOptions(routeList), autocomplete: true, allowEmpty: true, listOnEmpty: true}},
             {title: "Berth", field: "berth_name", width: 130, editor: canEdit ? "list" : false,
                 editorParams: {values: toOptions(berthList), autocomplete: true, allowEmpty: true, listOnEmpty: true}},
@@ -424,13 +437,7 @@
                 editor: canEdit ? "number" : false, editorParams: {min: 0, step: 0.01}},
             {title: "Qty UOM", field: "quantity_uom", width: 110, editor: canEdit ? "list" : false,
                 editorParams: {values: toOptions(uomList), autocomplete: true, allowEmpty: true, listOnEmpty: true}},
-            {title: "Remarks", field: "remarks", width: 200, editor: canEdit ? "input" : false},
-            {title: "Split", field: "is_split", width: 60, hozAlign: "center", headerSort: false,
-                formatter: function(cell) {
-                    if (cell.getValue()) return '<span class="split-indicator">SPLIT</span>';
-                    return '';
-                }},
-            {title: "Parent ID", field: "parent_line_id", width: 80, visible: false}
+            {title: "Remarks", field: "remarks", width: 200, editor: canEdit ? "input" : false}
         ];
 
         table = new Tabulator("#table", {
@@ -450,6 +457,14 @@
             selectable: true
         });
 
+        // Recompute Diff (Hrs) when from_time or to_time is edited
+        table.on("cellEdited", function(cell) {
+            if (cell.getField() === "from_time" || cell.getField() === "to_time") {
+                var d = cell.getRow().getData();
+                cell.getRow().update({diff_hrs: calcDiffHrs(d.from_time, d.to_time)});
+            }
+        });
+
         // Auto-fill barge_name when VCN/MBC changes
         table.on("cellEdited", function(cell) {
             if (cell.getField() === "source_display") {
@@ -458,10 +473,10 @@
                 if (mbcMatch) {
                     const parts = sourceDisplay.split(' / ');
                     if (parts.length >= 2) {
-                        cell.getRow().update({barge_name: parts[1]});
+                        cell.getRow().update({barge_name: parts[1], cargo_name: ''});
                     }
                 } else {
-                    cell.getRow().update({barge_name: ''});
+                    cell.getRow().update({barge_name: '', cargo_name: ''});
                 }
             }
             // Auto-pick cargo when barge is selected and only one cargo
@@ -488,12 +503,28 @@
     }
 
     function addRow() {
-        table.addRow({
+        var rows = table.getRows();
+        var newData = {
             created_by: currentUser,
             entry_date: getTodayDate(),
             equipment_name: currentEquipment,
             quantity_uom: defaultUom || undefined
-        }, false);
+        };
+        if (rows.length > 0) {
+            var lastData = rows[rows.length - 1].getData();
+            var copyFields = [
+                'source_type', 'source_id', 'source_display', 'barge_name', 'cargo_name',
+                'delay_name', 'operation_type', 'quantity_uom', 'route_name',
+                'entry_date', 'shift', 'system_name', 'berth_name', 'shift_incharge', 'operator_name', 'remarks'
+            ];
+            copyFields.forEach(function(f) {
+                if (lastData[f] != null && lastData[f] !== '') newData[f] = lastData[f];
+            });
+            // from_time of new row = to_time of previous row
+            if (lastData.to_time) newData.from_time = lastData.to_time;
+            // to_time left blank so user fills it in
+        }
+        table.addRow(newData, false);
     }
 
     function deleteSelected() {
@@ -519,7 +550,7 @@
 
         for (const row of rows) {
             const data = row.getData();
-            if (!data.source_display && !data.barge_name && !data.id) continue;
+            if (!data.id && !data.entry_date) continue;
 
             // Set equipment name
             data.equipment_name = currentEquipment;
@@ -544,55 +575,6 @@
     document.addEventListener('keydown', function(e) {
         if ((e.ctrlKey || e.metaKey) && e.key === 's') { e.preventDefault(); saveAll(); }
     });
-
-    // ===== SPLIT LINE =====
-    let splitLineId = null;
-    let splitOriginalQty = 0;
-
-    function openSplitModal() {
-        const selected = table.getSelectedRows();
-        if (selected.length !== 1) { alert('Select exactly one row to split'); return; }
-        const data = selected[0].getData();
-        if (!data.id) { alert('Save the row first before splitting'); return; }
-        splitLineId = data.id;
-        splitOriginalQty = parseFloat(data.quantity) || 0;
-        document.getElementById('splitOrigQty').value = splitOriginalQty + ' ' + (data.quantity_uom || '');
-        document.getElementById('splitNewQty').value = '';
-        document.getElementById('splitNewQty').max = splitOriginalQty - 0.001;
-        document.getElementById('splitRemainQty').textContent = splitOriginalQty;
-        document.getElementById('splitRemark').value = '';
-        document.getElementById('splitOverlay').style.display = 'flex';
-    }
-
-    document.getElementById('splitNewQty').addEventListener('input', function() {
-        const val = parseFloat(this.value) || 0;
-        const remain = (splitOriginalQty - val).toFixed(3);
-        document.getElementById('splitRemainQty').textContent = remain >= 0 ? remain : 'Invalid!';
-    });
-
-    function closeSplitModal() {
-        document.getElementById('splitOverlay').style.display = 'none';
-        splitLineId = null;
-    }
-
-    async function doSplit() {
-        const splitQty = parseFloat(document.getElementById('splitNewQty').value);
-        if (!splitQty || splitQty <= 0) { alert('Enter a valid split quantity'); return; }
-        if (splitQty >= splitOriginalQty) { alert('Split quantity must be less than original'); return; }
-        const remark = document.getElementById('splitRemark').value;
-        const res = await fetch('/api/module/LUEU01/split', {
-            method: 'POST', headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({line_id: splitLineId, split_quantity: splitQty, split_remark: remark})
-        });
-        const result = await res.json();
-        if (result.success) {
-            closeSplitModal();
-            table.setData(`/api/module/LUEU01/data`, {equipment: currentEquipment});
-            showStatus('Line split successfully', 'saved');
-        } else {
-            alert('Split failed: ' + (result.error || 'Unknown error'));
-        }
-    }
 
     loadMasterData();
 </script>

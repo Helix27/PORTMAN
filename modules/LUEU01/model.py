@@ -165,18 +165,28 @@ def get_mbc_options():
 
 
 def get_vcn_barges(vcn_id):
-    """Get barges from a specific VCN's LDUD barge lines"""
+    """Get barges from a specific VCN's LDUD barge lines as 'barge_name / trip_number'"""
     conn = get_db()
     cur = get_cursor(conn)
     cur.execute('SELECT id FROM ldud_header WHERE vcn_id = %s', [vcn_id])
     ldud = cur.fetchone()
     if ldud:
         cur.execute('''
-            SELECT DISTINCT barge_name FROM ldud_barge_lines WHERE ldud_id = %s AND barge_name IS NOT NULL AND barge_name != ''
+            SELECT barge_name, trip_number FROM ldud_barge_lines
+            WHERE ldud_id = %s AND barge_name IS NOT NULL AND barge_name != ''
+            ORDER BY trip_number, barge_name
         ''', [ldud['id']])
         rows = cur.fetchall()
         conn.close()
-        return [r['barge_name'] for r in rows]
+        seen = set()
+        result = []
+        for r in rows:
+            trip = r['trip_number'] or ''
+            display = f"{r['barge_name']} / {trip}" if trip else r['barge_name']
+            if display not in seen:
+                seen.add(display)
+                result.append(display)
+        return result
     conn.close()
     return []
 
@@ -193,6 +203,9 @@ def get_mbc_names():
 
 def get_barge_cargos(vcn_id, barge_name):
     """Get cargo names for a specific barge from a VCN's LDUD"""
+    # Strip trip number if barge_name is in "barge / trip" format
+    if ' / ' in barge_name:
+        barge_name = barge_name.split(' / ')[0].strip()
     conn = get_db()
     cur = get_cursor(conn)
     cur.execute('SELECT id FROM ldud_header WHERE vcn_id = %s', [vcn_id])
