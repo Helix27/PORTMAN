@@ -9,6 +9,24 @@ def index():
     return redirect(url_for('FIN01.bills'))
 
 
+@bp.route('/module/FIN01/invoices')
+def legacy_invoices():
+    """Legacy invoice list route; moved to FINV01"""
+    return redirect(url_for('FINV01.invoices'))
+
+
+@bp.route('/module/FIN01/invoice/generate')
+def legacy_generate_invoice():
+    """Legacy invoice generation route; moved to FINV01"""
+    return redirect(url_for('FINV01.generate_invoice'))
+
+
+@bp.route('/module/FIN01/invoice/print/<int:invoice_id>')
+def legacy_print_invoice(invoice_id):
+    """Legacy invoice print route; moved to FINV01"""
+    return redirect(url_for('FINV01.print_invoice', invoice_id=invoice_id))
+
+
 @bp.route('/module/FIN01/bills')
 def bills():
     """List all bills"""

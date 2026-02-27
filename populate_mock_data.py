@@ -1318,6 +1318,12 @@ def populate_accounts_data():
     gst_18 = gst_map.get('GST 18%', {})
     gst_5 = gst_map.get('GST 5%', {})
 
+    # Get service type IDs by service_code
+    cur.execute("SELECT id, service_code, service_name FROM finance_service_types WHERE is_active=1")
+    svc_rows = cur.fetchall()
+    svc_by_code = {r['service_code']: r for r in svc_rows}
+    svc_by_name = {r['service_name']: r for r in svc_rows}
+
     if not agents:
         print("[SKIP] No agents found for bills")
         conn.close()
@@ -1343,20 +1349,20 @@ def populate_accounts_data():
              '27AABCM1234A1ZP', '27', '1100001', today, today])
         b1_id = cur.fetchone()['id']
 
-        # Bill 1 lines
+        # Bill 1 lines (service_type_id, service_name, ...)
         for ln in [
-            ('Cargo Handling Loading', 'Loading at Berth B3, MV Ocean Star',
+            (svc_by_code.get('CHGL01', {}).get('id'), 'Cargo Handling Loading', 'Loading at Berth B3, MV Ocean Star',
              2000, 'MT', 45, 90000, gst_18.get('id'), 9, 9, 0, 8100, 8100, 0, 106200, '4101076030', '996719', '50'),
-            ('Equipment Rental', 'Shore crane C2, 24 hrs operation',
+            (svc_by_code.get('EQP001', {}).get('id'), 'Equipment Rental', 'Shore crane C2, 24 hrs operation',
              24, 'HRS', 850, 20400, gst_18.get('id'), 9, 9, 0, 1836, 1836, 0, 24072, '4101076032', '996719', '50'),
-            ('Cargo Handling Unloading', 'Unloading at Berth B3',
+            (svc_by_code.get('CHGU01', {}).get('id'), 'Cargo Handling Unloading', 'Unloading at Berth B3',
              1880, 'MT', 42.5, 79900, gst_18.get('id'), 9, 9, 0, 7191, 7191, 0, 94282, '4101076031', '996719', '50'),
         ]:
             cur.execute("""INSERT INTO bill_lines
-                (bill_id, service_name, service_description, quantity, uom, rate, line_amount,
+                (bill_id, service_type_id, service_name, service_description, quantity, uom, rate, line_amount,
                  gst_rate_id, cgst_rate, sgst_rate, igst_rate, cgst_amount, sgst_amount, igst_amount,
                  line_total, gl_code, sac_code, sap_tax_code)
-                VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)""",
+                VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)""",
                 [b1_id, *ln])
 
         # Bill 2: Same Agent 1 (can consolidate into same invoice)
@@ -1374,11 +1380,12 @@ def populate_accounts_data():
         b2_id = cur.fetchone()['id']
 
         cur.execute("""INSERT INTO bill_lines
-            (bill_id, service_name, service_description, quantity, uom, rate, line_amount,
+            (bill_id, service_type_id, service_name, service_description, quantity, uom, rate, line_amount,
              gst_rate_id, cgst_rate, sgst_rate, igst_rate, cgst_amount, sgst_amount, igst_amount,
              line_total, gl_code, sac_code, sap_tax_code)
-            VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)""",
-            [b2_id, 'Storage Charges', '5 days at yard Y2', 5, 'DAYS', 15000, 75000,
+            VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)""",
+            [b2_id, svc_by_code.get('STO001', {}).get('id'),
+             'Storage Charges', '5 days at yard Y2', 5, 'DAYS', 15000, 75000,
              gst_18.get('id'), 9, 9, 0, 6750, 6750, 0, 88500, '4101076033', '996719', '50'])
 
         # Bill 3: Agent 2 (inter-state, IGST only)
@@ -1396,18 +1403,18 @@ def populate_accounts_data():
         b3_id = cur.fetchone()['id']
 
         for ln in [
-            ('Cargo Handling Loading', 'Berth B1, MV Pacific Trader, 3200 MT',
+            (svc_by_code.get('CHGL01', {}).get('id'), 'Cargo Handling Loading', 'Berth B1, MV Pacific Trader, 3200 MT',
              3200, 'MT', 45, 144000, gst_18.get('id'), 0, 0, 18, 0, 0, 25920, 169920, '4101076030', '996719', '50'),
-            ('Conveyor Charges', '1250 MT via conveyor route CR-02',
+            (svc_by_code.get('CON001', {}).get('id'), 'Conveyor Charges', '1250 MT via conveyor route CR-02',
              1250, 'MT', 38, 47500, gst_18.get('id'), 0, 0, 18, 0, 0, 8550, 56050, '4101076034', '996719', '50'),
-            ('Water Supply', '50 KL fresh water supply',
+            (svc_by_code.get('STO001', {}).get('id'), 'Water Supply', '50 KL fresh water supply',
              50, 'KG', 25, 1250, gst_5.get('id'), 0, 0, 5, 0, 0, 62.5, 1312.5, '4101076033', '996719', '51'),
         ]:
             cur.execute("""INSERT INTO bill_lines
-                (bill_id, service_name, service_description, quantity, uom, rate, line_amount,
+                (bill_id, service_type_id, service_name, service_description, quantity, uom, rate, line_amount,
                  gst_rate_id, cgst_rate, sgst_rate, igst_rate, cgst_amount, sgst_amount, igst_amount,
                  line_total, gl_code, sac_code, sap_tax_code)
-                VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)""",
+                VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)""",
                 [b3_id, *ln])
 
         print(f"  Created 3 bills: BILL-TEST-001, BILL-TEST-002, BILL-TEST-003")
@@ -1542,8 +1549,8 @@ def populate_accounts_data():
     cur.execute("SELECT id FROM gst_api_config WHERE environment='sandbox'")
     if not cur.fetchone():
         cur.execute("""INSERT INTO gst_api_config
-            (environment, api_base_url, asp_id, asp_secret, gstin, public_key_path, is_active, created_date)
-            VALUES ('sandbox','https://einv-apisandbox.nic.in','','','','keys/irp_public_key.pem',1,%s)""", [now])
+            (environment, api_base_url, api_username, api_password, gstin, client_id, client_secret, is_active, created_date)
+            VALUES ('sandbox','https://einv-apisandbox.nic.in','','','','','',1,%s)""", [now])
     else:
         cur.execute("UPDATE gst_api_config SET is_active=0")
         cur.execute("UPDATE gst_api_config SET is_active=1 WHERE environment='sandbox'")

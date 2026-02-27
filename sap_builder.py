@@ -264,3 +264,25 @@ def build_credit_note_payload(cn_header, cn_lines):
     }
 
     return {'Record_Header': [header]}
+
+
+def build_invoice_reversal_payload(invoice_header, invoice_lines):
+    """
+    Build reversal payload for invoice cancellation.
+
+    SAP interface uses reverse posting payload format:
+    Invoice_Credit='C', Document_type='CRN', with original SAP doc in reference.
+    """
+    reversal_header = {
+        'credit_note_date': invoice_header.get('invoice_date'),
+        'credit_note_number': f"RV-{invoice_header.get('invoice_number') or ''}",
+        'customer_type': invoice_header.get('customer_type'),
+        'customer_id': invoice_header.get('customer_id'),
+        'customer_gl_code': invoice_header.get('customer_gl_code'),
+    }
+    payload = build_credit_note_payload(reversal_header, invoice_lines)
+    hdr = payload['Record_Header'][0]
+    original_ref = invoice_header.get('sap_document_number') or invoice_header.get('invoice_number') or ''
+    hdr['Header_text'] = f"REV {original_ref}"[:25]
+    hdr['Reference_no'] = original_ref[:16]
+    return payload

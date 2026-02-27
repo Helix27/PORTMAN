@@ -139,7 +139,7 @@ def _authenticate(config, force=False):
     app_key = os.urandom(32)
 
     # Load IRP public key and encrypt app_key
-    pub_key_path = config.get('public_key_path', 'keys/irp_public_key.pem')
+    pub_key_path = os.path.join(os.path.dirname(__file__), 'keys', 'irp_public_key.pem')
     public_key = _load_public_key(pub_key_path)
     encrypted_app_key = _rsa_encrypt(app_key, public_key)
 
@@ -150,9 +150,10 @@ def _authenticate(config, force=False):
     }
     headers = {
         'Content-Type': 'application/json',
-        'asp-id': config['asp_id'],
-        'asp-secret': config['asp_secret'],
-        'Gstin': config['gstin'],
+        'client_id': config.get('client_id', ''),
+        'client_secret': config.get('client_secret', ''),
+        'user_name': config.get('api_username', ''),
+        'Gstin': config.get('gstin', ''),
     }
 
     resp = requests.post(url, json=payload, headers=headers, timeout=30)
@@ -225,7 +226,7 @@ def generate_irn(einvoice_json, reference_type, reference_id, reference_number, 
     headers = {
         'Content-Type': 'application/json',
         'auth-token': _session['auth_token'],
-        'asp-id': config['asp_id'],
+        'client_id': config.get('client_id', ''),
         'Gstin': config['gstin'],
     }
     request_body = {'Data': encrypted_payload}
@@ -302,7 +303,7 @@ def cancel_irn(irn, reason_code, remark, reference_type, reference_id,
     headers = {
         'Content-Type': 'application/json',
         'auth-token': _session['auth_token'],
-        'asp-id': config['asp_id'],
+        'client_id': config.get('client_id', ''),
         'Gstin': config['gstin'],
     }
 

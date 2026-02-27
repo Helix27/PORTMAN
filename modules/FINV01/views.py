@@ -1,4 +1,5 @@
 from flask import render_template, request, redirect, url_for, session, jsonify
+from datetime import datetime, timedelta
 from . import bp
 from modules.FIN01 import model  # reuse FIN01 model for invoice functions
 from database import get_user_permissions, get_db, get_cursor, get_module_config
@@ -8,6 +9,23 @@ import einvoice_builder
 import gsp_client
 
 MODULE_CODE = 'FINV01'
+
+
+def _parse_datetime(value):
+    if not value:
+        return None
+    txt = str(value).strip()
+    formats = (
+        ('%Y-%m-%d %H:%M:%S', 19),
+        ('%Y-%m-%dT%H:%M:%S', 19),
+        ('%Y-%m-%d', 10),
+    )
+    for fmt, width in formats:
+        try:
+            return datetime.strptime(txt[:width], fmt)
+        except Exception:
+            continue
+    return None
 
 
 def get_perms():
@@ -38,7 +56,7 @@ def invoices():
     status_filter = request.args.get('status')
     data, total = model.get_invoice_data(page, status_filter=status_filter)
 
-    return render_template('invoices.html',
+    return render_template('finv01_invoices.html',
                          data=data,
                          page=page,
                          last_page=(total + 19) // 20,
@@ -64,7 +82,7 @@ def generate_invoice():
     from datetime import datetime
     current_date = datetime.now().strftime('%Y-%m-%d')
 
-    return render_template('generate_invoice.html',
+    return render_template('finv01_generate_invoice.html',
                          approved_bills=approved_bills,
                          current_date=current_date,
                          perms=perms,
@@ -154,7 +172,7 @@ def print_invoice(invoice_id):
     from datetime import datetime
     current_datetime = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
 
-    return render_template('invoice_print.html',
+    return render_template('finv01_invoice_print.html',
                          invoice=invoice,
                          invoice_lines=invoice_lines,
                          sac_summary=sac_summary,
@@ -285,12 +303,84 @@ def post_invoice_sap():
     )
 
     if result['ok']:
+        now_ts = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
         conn = get_db()
         cur = get_cursor(conn)
         cur.execute('''UPDATE invoice_header
-            SET sap_document_number=%s, invoice_status='Posted'
+            SET sap_document_number=%s,
+                sap_posting_date=%s,
+                posted_by=%s,
+                posted_date=%s,
+                invoice_status='Posted to SAP'
             WHERE id=%s''',
-            [result['sap_document_number'], invoice_id])
+            [result['sap_document_number'], now_ts, session.get('username'), now_ts, invoice_id])
+        conn.commit()
+        conn.close()
+
+    return jsonify({
+        'success': result['ok'],
+        'sap_document_number': result.get('sap_document_number'),
+        'message': result['message'],
+        'log_id': result['log_id']
+    })
+
+
+@bp.route('/api/module/FINV01/invoice/cancel-sap', methods=['POST'])
+def cancel_invoice_sap():
+    """Cancel/reverse an SAP-posted invoice (FB08 rule: within 24 hours only)"""
+    if 'user_id' not in session:
+        return jsonify({'success': False, 'error': 'Not logged in'}), 401
+
+    perms = get_perms()
+    if not perms.get('can_edit'):
+        return jsonify({'success': False, 'error': 'No permission'}), 403
+
+    invoice_id = request.json.get('invoice_id')
+    invoice = model.get_invoice_by_id(invoice_id)
+    if not invoice:
+        return jsonify({'success': False, 'error': 'Invoice not found'}), 404
+
+    if not invoice.get('sap_document_number'):
+        return jsonify({'success': False, 'error': 'Invoice is not posted to SAP'})
+
+    if invoice.get('invoice_status') == 'Cancelled':
+        return jsonify({'success': False, 'error': 'Invoice is already cancelled'})
+
+    posted_dt = (
+        _parse_datetime(invoice.get('sap_posting_date')) or
+        _parse_datetime(invoice.get('posted_date')) or
+        _parse_datetime(invoice.get('created_date'))
+    )
+    if posted_dt and datetime.now() - posted_dt > timedelta(hours=24):
+        return jsonify({
+            'success': False,
+            'error': 'Cancellation beyond 24 hours is not allowed. Create a new Debit/Credit Note instead.'
+        }), 400
+
+    invoice_lines = model.get_invoice_lines(invoice_id)
+    payload = sap_builder.build_invoice_reversal_payload(invoice, invoice_lines)
+    result = sap_client.post_invoice_to_sap(
+        payload, 'InvoiceReversal', invoice_id,
+        invoice['invoice_number'], session.get('username')
+    )
+
+    if result['ok']:
+        now_ts = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        reversal_doc = result.get('sap_document_number') or ''
+        original_doc = invoice.get('sap_document_number') or ''
+        reversal_note = f"SAP FB08 reversal posted. Original: {original_doc}; Reversal: {reversal_doc}"
+        conn = get_db()
+        cur = get_cursor(conn)
+        cur.execute('''UPDATE invoice_header
+            SET invoice_status='Cancelled',
+                posted_by=%s,
+                posted_date=%s,
+                remarks = CASE
+                    WHEN COALESCE(remarks, '') = '' THEN %s
+                    ELSE remarks || ' | ' || %s
+                END
+            WHERE id=%s''',
+            [session.get('username'), now_ts, reversal_note, reversal_note, invoice_id])
         conn.commit()
         conn.close()
 
