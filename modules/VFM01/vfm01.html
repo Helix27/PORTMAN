@@ -91,6 +91,8 @@
     const columns = [
         {formatter: "rowSelection", titleFormatter: "rowSelection", hozAlign: "center", headerSort: false, width: 40},
         {title: "Flag Name", field: "name", editor: "input", width: 300},
+        {title: "Flag Type", field: "flag_type", editor: "list", width: 140,
+            editorParams: {values: {"IF": "IF", "FF": "FF"}, allowEmpty: true, listOnEmpty: true}},
     ];
 
     table = new Tabulator("#table", {
@@ -109,11 +111,12 @@
         },
         selectable: true,
         selectableRangeMode: "click",
-        cellEdited: function(cell) {
-            const rowIndex = cell.getRow().getPosition();
-            dirtyRows.add(rowIndex);
-            scheduleAutosave();
-        }
+    });
+
+    table.on("cellEdited", function(cell) {
+        const rowIndex = cell.getRow().getPosition();
+        dirtyRows.add(rowIndex);
+        scheduleAutosave();
     });
 
     function addRow() {

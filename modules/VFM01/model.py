@@ -25,11 +25,12 @@ def save_data(data):
     cur = get_cursor(conn)
     row_id = data.get('id')
     name = data.get('name', '')
+    flag_type = data.get('flag_type') or None
 
     if row_id:
-        cur.execute(f"UPDATE {TABLE} SET name=%s WHERE id=%s", [name, row_id])
+        cur.execute(f"UPDATE {TABLE} SET name=%s, flag_type=%s WHERE id=%s", [name, flag_type, row_id])
     else:
-        cur.execute(f"INSERT INTO {TABLE} (name) VALUES (%s) RETURNING id", [name])
+        cur.execute(f"INSERT INTO {TABLE} (name, flag_type) VALUES (%s, %s) RETURNING id", [name, flag_type])
         row_id = cur.fetchone()['id']
 
     conn.commit()
