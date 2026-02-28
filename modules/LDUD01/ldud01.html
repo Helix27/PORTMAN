@@ -189,6 +189,19 @@
     .btn-sub-delete:hover {
         background: #f56565;
     }
+    .btn-sub-clone {
+        background: #68d391;
+        color: white;
+        border: none;
+        padding: 3px 8px;
+        border-radius: 3px;
+        font-size: 11px;
+        cursor: pointer;
+        font-weight: bold;
+    }
+    .btn-sub-clone:hover {
+        background: #48bb78;
+    }
     .btn-sub-save {
         background: #3182ce;
         color: white;
@@ -1231,6 +1244,10 @@
             cellClick: function(e, cell) { deleteSubRow('barge_lines', cell.getRow().getData().id, ldudId); }
         } : null;
 
+        const cloneBtn = canEdit ? {title: "", field: "clone_action", formatter: cloneCargoButtonFormatter, width: 40, hozAlign: "center", headerSort: false,
+            cellClick: function(e, cell) { const d = cell.getRow().getData(); if (d.id) cloneBargeLineForCargo(d, ldudId); }
+        } : null;
+
         let bargeLinesColumns;
         if (operationType === 'Export') {
             bargeLinesColumns = [
@@ -1265,7 +1282,7 @@
                     formatter: multiBadgeFormatter('#3182ce')},
                 {title: "Anch Gull Island (Empty)", field: "anchored_gull_island_empty", width: 160, editor: canEdit ? datetimeEditor : false, formatter: dtFmt},
                 {title: "Aweigh Gull Island (Empty)", field: "aweigh_gull_island_empty", width: 165, editor: canEdit ? datetimeEditor : false, formatter: dtFmt},
-                delBtn
+                cloneBtn, delBtn
             ].filter(Boolean);
         } else {
             bargeLinesColumns = [
@@ -1302,7 +1319,7 @@
                 {title: "Cast Off Port", field: "cast_off_port", width: 130, editor: canEdit ? datetimeEditor : false, formatter: dtFmt},
                 {title: "Port Crane", field: "port_crane", width: 130, editor: portCraneEditor,
                     formatter: multiBadgeFormatter('#805ad5')},
-                delBtn
+                cloneBtn, delBtn
             ].filter(Boolean);
         }
 
@@ -1584,6 +1601,37 @@
 
     function deleteButtonFormatter(cell) {
         return '<button class="btn-sub-delete">X</button>';
+    }
+
+    function cloneCargoButtonFormatter(cell) {
+        const data = cell.getRow().getData();
+        if (!data.id) return '';
+        return '<button class="btn-sub-clone" title="Add another cargo for this same trip">+C</button>';
+    }
+
+    async function cloneBargeLineForCargo(rowData, ldudId) {
+        // Copy all fields except id, cargo_name and discharge_quantity
+        const cloned = {...rowData};
+        delete cloned.id;
+        cloned.ldud_id = ldudId;
+        cloned.cargo_name = null;
+        cloned.discharge_quantity = null;
+        // trip_number and barge_name are kept — backend will use the explicit trip_number
+
+        const res = await fetch('/api/module/LDUD01/barge_lines/save', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify(cloned)
+        });
+        const result = await res.json();
+        if (result.success) {
+            // Reload the barge lines table so the cloned row appears
+            if (subTables[ldudId] && subTables[ldudId].barge_lines) {
+                subTables[ldudId].barge_lines.setData(`/api/module/LDUD01/barge_lines/${ldudId}`);
+            }
+        } else {
+            alert('Failed to clone row: ' + (result.error || 'Unknown error'));
+        }
     }
 
     async function saveExportVesselOpsTable(ldudId) {

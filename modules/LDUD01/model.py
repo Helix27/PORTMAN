@@ -315,9 +315,12 @@ def save_barge_line(data):
                     data.get('aweigh_gull_island_empty'), data['id']])
         row_id = data['id']
     else:
-        trip_number = 1
-        if data.get('barge_name'):
-            trip_number = get_next_trip_number(data['ldud_id'], data.get('barge_name'))
+        # Use explicit trip_number if provided (e.g. cloning a row for multiple cargo on same trip)
+        trip_number = data.get('trip_number')
+        if not trip_number:
+            trip_number = 1
+            if data.get('barge_name'):
+                trip_number = get_next_trip_number(data['ldud_id'], data.get('barge_name'))
 
         cur.execute('''INSERT INTO ldud_barge_lines (ldud_id, trip_number, hold_name, barge_name, contractor_name, cargo_name,
                       bpt_bfl, along_side_vessel, commenced_loading, completed_loading, cast_off_mv,
