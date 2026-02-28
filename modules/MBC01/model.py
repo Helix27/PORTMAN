@@ -268,16 +268,18 @@ def save_customer_detail(data):
 
     if data.get('id'):
         cur.execute('''UPDATE mbc_customer_details SET
-                      customer_name=%s, bill_of_coastal_goods_no=%s, quantity=%s, material_po=%s
+                      customer_name=%s, cargo_name=%s, bill_of_coastal_goods_no=%s, quantity=%s, material_po=%s
                       WHERE id=%s''',
-                   [data.get('customer_name'), data.get('bill_of_coastal_goods_no'),
+                   [data.get('customer_name'), data.get('cargo_name'),
+                    data.get('bill_of_coastal_goods_no'),
                     data.get('quantity'), data.get('material_po'), data['id']])
         row_id = data['id']
     else:
         cur.execute('''INSERT INTO mbc_customer_details
-                      (mbc_id, customer_name, bill_of_coastal_goods_no, quantity, material_po)
-                      VALUES (%s, %s, %s, %s, %s) RETURNING id''',
-                   [data['mbc_id'], data.get('customer_name'), data.get('bill_of_coastal_goods_no'),
+                      (mbc_id, customer_name, cargo_name, bill_of_coastal_goods_no, quantity, material_po)
+                      VALUES (%s, %s, %s, %s, %s, %s) RETURNING id''',
+                   [data['mbc_id'], data.get('customer_name'), data.get('cargo_name'),
+                    data.get('bill_of_coastal_goods_no'),
                     data.get('quantity'), data.get('material_po')])
         row_id = cur.fetchone()['id']
     conn.commit()
@@ -291,3 +293,45 @@ def delete_customer_detail(row_id):
     cur.execute('DELETE FROM mbc_customer_details WHERE id=%s', (row_id,))
     conn.commit()
     conn.close()
+
+
+# Approval functions
+def get_doc_status(record_id):
+    conn = get_db()
+    cur = get_cursor(conn)
+    cur.execute('SELECT doc_status FROM mbc_header WHERE id=%s', (record_id,))
+    row = cur.fetchone()
+    conn.close()
+    return row['doc_status'] if row else None
+
+
+def approve_record(record_id, username):
+    conn = get_db()
+    cur = get_cursor(conn)
+    cur.execute("UPDATE mbc_header SET doc_status='Approved' WHERE id=%s", (record_id,))
+    cur.execute("""INSERT INTO approval_log (module_code, record_id, action, comment, actioned_by)
+                   VALUES ('MBC01', %s, 'Approved', NULL, %s)""", (record_id, username))
+    conn.commit()
+    conn.close()
+
+
+def reject_record(record_id, comment, username):
+    conn = get_db()
+    cur = get_cursor(conn)
+    cur.execute("UPDATE mbc_header SET doc_status='Rejected' WHERE id=%s", (record_id,))
+    cur.execute("""INSERT INTO approval_log (module_code, record_id, action, comment, actioned_by)
+                   VALUES ('MBC01', %s, 'Rejected', %s, %s)""", (record_id, comment, username))
+    conn.commit()
+    conn.close()
+
+
+def get_approval_log(record_id):
+    conn = get_db()
+    cur = get_cursor(conn)
+    cur.execute("""SELECT action, comment, actioned_by,
+                          to_char(actioned_at, 'DD-MM-YYYY HH24:MI') AS actioned_at
+                   FROM approval_log WHERE module_code='MBC01' AND record_id=%s
+                   ORDER BY actioned_at DESC""", (record_id,))
+    rows = cur.fetchall()
+    conn.close()
+    return [dict(r) for r in rows]

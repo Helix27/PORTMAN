@@ -369,3 +369,45 @@ def get_vessel_holds(vcn_id):
     row = cur.fetchone()
     conn.close()
     return row['no_of_holds'] if row else 0
+
+
+# Approval functions
+def get_doc_status(record_id):
+    conn = get_db()
+    cur = get_cursor(conn)
+    cur.execute('SELECT doc_status FROM vcn_header WHERE id=%s', (record_id,))
+    row = cur.fetchone()
+    conn.close()
+    return row['doc_status'] if row else None
+
+
+def approve_record(record_id, username):
+    conn = get_db()
+    cur = get_cursor(conn)
+    cur.execute("UPDATE vcn_header SET doc_status='Approved' WHERE id=%s", (record_id,))
+    cur.execute("""INSERT INTO approval_log (module_code, record_id, action, comment, actioned_by)
+                   VALUES ('VCN01', %s, 'Approved', NULL, %s)""", (record_id, username))
+    conn.commit()
+    conn.close()
+
+
+def reject_record(record_id, comment, username):
+    conn = get_db()
+    cur = get_cursor(conn)
+    cur.execute("UPDATE vcn_header SET doc_status='Rejected' WHERE id=%s", (record_id,))
+    cur.execute("""INSERT INTO approval_log (module_code, record_id, action, comment, actioned_by)
+                   VALUES ('VCN01', %s, 'Rejected', %s, %s)""", (record_id, comment, username))
+    conn.commit()
+    conn.close()
+
+
+def get_approval_log(record_id):
+    conn = get_db()
+    cur = get_cursor(conn)
+    cur.execute("""SELECT action, comment, actioned_by,
+                          to_char(actioned_at, 'DD-MM-YYYY HH24:MI') AS actioned_at
+                   FROM approval_log WHERE module_code='VCN01' AND record_id=%s
+                   ORDER BY actioned_at DESC""", (record_id,))
+    rows = cur.fetchall()
+    conn.close()
+    return [dict(r) for r in rows]

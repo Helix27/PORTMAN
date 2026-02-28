@@ -4,6 +4,23 @@
 
 {% block head %}
 <style>
+    .btn-approve {
+        background: #38a169; color: white; border: none;
+        padding: 2px 7px; border-radius: 4px; cursor: pointer;
+        font-size: 12px; font-weight: 700; line-height: 1.6;
+    }
+    .btn-approve:hover { background: #276749; }
+    .btn-reject {
+        background: #e53e3e; color: white; border: none;
+        padding: 2px 7px; border-radius: 4px; cursor: pointer;
+        font-size: 12px; font-weight: 700; line-height: 1.6;
+    }
+    .btn-reject:hover { background: #9b2c2c; }
+    .approval-badge {
+        padding: 2px 8px; border-radius: 12px;
+        font-size: 11px; font-weight: 600; cursor: pointer;
+        display: inline-block;
+    }
     .detail-modal {
         display: none;
         position: fixed;
@@ -231,6 +248,19 @@
         </div>
     </div>
 </div>
+
+<!-- Reject Modal -->
+<div id="rejectModal" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.5);z-index:99999;align-items:center;justify-content:center;">
+    <div style="background:white;border-radius:8px;padding:24px;max-width:420px;width:90%;box-shadow:0 4px 24px rgba(0,0,0,0.3);">
+        <h3 style="margin:0 0 14px;font-size:16px;font-weight:600;">Reject Record</h3>
+        <label style="display:block;margin-bottom:6px;font-size:13px;font-weight:500;">Reason <span style="color:#e53e3e">*</span></label>
+        <textarea id="rejectComment" rows="4" placeholder="Enter rejection reason..." style="width:100%;box-sizing:border-box;padding:8px;border:1px solid #cbd5e0;border-radius:4px;font-size:13px;resize:vertical;"></textarea>
+        <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:14px;">
+            <button onclick="closeRejectModal()" style="padding:6px 18px;border:1px solid #cbd5e0;background:white;border-radius:4px;cursor:pointer;font-size:13px;">Cancel</button>
+            <button onclick="confirmReject()" style="padding:6px 18px;background:#e53e3e;color:white;border:none;border-radius:4px;cursor:pointer;font-size:13px;font-weight:600;">Reject</button>
+        </div>
+    </div>
+</div>
 {% endblock %}
 
 {% block scripts %}
@@ -253,6 +283,7 @@
     let subTables = {};
     let currentMbcId = null;
     let currentBlQty = null;
+    let moduleConfig = {};
 
     const currentUser = '{{ session.username }}';
     const permissions = {
@@ -276,7 +307,7 @@
     }
 
     async function loadMasterData() {
-        const [dsRes, mbcRes, otRes, ctRes, cnRes, uomRes, berthRes, pplRes, custRes, equipRes] = await Promise.all([
+        const [dsRes, mbcRes, otRes, ctRes, cnRes, uomRes, berthRes, pplRes, custRes, equipRes, configRes] = await Promise.all([
             fetch('/api/module/MBCDS01/all'),
             fetch('/api/module/MBCM01/all'),
             fetch('/api/module/LUEU01/operation-types'),
@@ -286,7 +317,8 @@
             fetch('/api/module/PBM01/all'),
             fetch('/api/module/PPL01/all'),
             fetch('/api/module/VCUM01/all'),
-            fetch('/api/module/VEM01/all')
+            fetch('/api/module/VEM01/all'),
+            fetch('/admin/api/config/MBC01')
         ]);
         const dsData = await dsRes.json();
         docSeriesList = dsData.map(d => d.name);
@@ -310,12 +342,15 @@
         payloaderList = await pplRes.json();
         customerList = await custRes.json();
         equipmentList = await equipRes.json();
+        moduleConfig = await configRes.json();
         initTable();
     }
 
     // datetimeEditor and dateEditor are now global (defined in base.html)
 
     function initTable() {
+        const isApprover = moduleConfig.approver_id == '{{ session.user_id }}';
+        const isAdmin = {{ 'true' if session.get('is_admin') else 'false' }};
         const canEdit = permissions.can_edit || permissions.can_add;
 
         const dsOptions = {};
@@ -374,18 +409,28 @@
                 editorParams: {min: 0, step: 0.01}},
             {title: "UOM", field: "quantity_uom", editor: canEdit ? "list" : false, width: 70,
                 editorParams: {values: uomOptions, autocomplete: true, allowEmpty: true}},
-            {title: "Status", field: "doc_status", width: 80,
+            {title: "Status", field: "doc_status", width: 105, headerSort: false,
                 formatter: function(cell) {
-                    const val = cell.getValue();
-                    let color = '#718096';
-                    if (val === 'Approved') color = '#38a169';
-                    else if (val === 'Rejected') color = '#e53e3e';
-                    else if (val === 'Pending') color = '#d69e2e';
-                    return `<span style="color:${color};font-weight:500">${val || ''}</span>`;
+                    const val = cell.getValue() || 'Draft';
+                    const id = cell.getRow().getData().id;
+                    let color, bg;
+                    if (val === 'Approved') { color = '#276749'; bg = '#c6f6d5'; }
+                    else if (val === 'Rejected') { color = '#9b2c2c'; bg = '#fed7d7'; }
+                    else { color = '#744210'; bg = '#fefcbf'; }
+                    const click = id ? `onclick="showApprovalLog(${id}, event)"` : '';
+                    return `<span class="approval-badge" style="background:${bg};color:${color};" ${click} title="Click for history">${val}</span>`;
                 }
             },
-            {title: "Created By", field: "created_by", width: 90}
-        ];
+            {title: "Created By", field: "created_by", width: 90},
+            (isApprover || isAdmin) ? {
+                title: "Approval", field: "_approval_actions", width: 90, headerSort: false,
+                formatter: function(cell) {
+                    const data = cell.getRow().getData();
+                    if (!data.id || data.doc_status === 'Approved') return '';
+                    return `<button class="btn-approve" onclick="approveRow(${data.id})">✓</button> <button class="btn-reject" onclick="rejectRow(${data.id})">✗</button>`;
+                }
+            } : null
+        ].filter(Boolean);
 
         table = new Tabulator("#table", {
             height: "calc(100vh - 160px)",
@@ -400,7 +445,14 @@
                 document.getElementById('totalCount').textContent = response.total;
                 return response;
             },
-            selectable: true
+            selectable: true,
+            rowFormatter: function(row) {
+                const status = row.getData().doc_status;
+                const el = row.getElement();
+                if (status === 'Approved') el.style.backgroundColor = '#f0fff4';
+                else if (status === 'Rejected') el.style.backgroundColor = '#fff5f5';
+                else el.style.backgroundColor = '#fffff0';
+            }
         });
 
         if (localStorage.getItem('theme') === 'dark') {
@@ -672,6 +724,8 @@
                 {title: "Customer", field: "customer_name", width: 200, editor: canEdit ? "list" : false,
                     editorParams: {values: customerOptions, autocomplete: true, allowEmpty: true}},
                 {title: "Bill of Coastal Goods No.", field: "bill_of_coastal_goods_no", width: 180, editor: canEdit ? "input" : false},
+                {title: "Cargo", field: "cargo_name", width: 150, editor: canEdit ? "list" : false,
+                    editorParams: {values: cargoNames.reduce((o, n) => { o[n] = n; return o; }, {}), autocomplete: true, allowEmpty: true, listOnEmpty: true}},
                 {title: "Quantity", field: "quantity", width: 100, hozAlign: "right", editor: canEdit ? "number" : false,
                     editorParams: {min: 0, step: 0.01}},
                 {title: "Material PO", field: "material_po", width: 150, editor: canEdit ? "input" : false},
@@ -767,7 +821,7 @@
             created_by: currentUser,
             created_date: getTodayDate(),
             doc_date: getTodayDate(),
-            doc_status: 'Pending',
+            doc_status: 'Draft',
             doc_series: defaultDocSeries
         }, true);
     }
@@ -796,6 +850,7 @@
         let savedCount = 0;
         for (const row of rows) {
             const data = row.getData();
+            if (data.doc_status === 'Approved') continue;
             const res = await fetch("/api/module/MBC01/save", {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
@@ -805,10 +860,62 @@
             if (result.id) {
                 row.update({id: result.id, doc_num: result.doc_num, doc_status: result.doc_status});
                 savedCount++;
+            } else if (result.error) {
+                showStatus(result.error, 'unsaved');
+                return;
             }
         }
         showStatus(`Saved ${savedCount} row(s)`, 'saved');
         table.setData("/api/module/MBC01/data");
+    }
+
+    // Approval functions
+    let rejectTargetId = null;
+
+    async function approveRow(id) {
+        if (!confirm('Approve this record?')) return;
+        const res = await fetch('/api/module/MBC01/approve', {
+            method: 'POST', headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({id: id})
+        });
+        const data = await res.json();
+        if (data.error) { alert(data.error); return; }
+        const row = table.getRows().find(r => r.getData().id === id);
+        if (row) { row.update({doc_status: 'Approved'}); row.reformat(); }
+    }
+
+    function rejectRow(id) {
+        rejectTargetId = id;
+        document.getElementById('rejectComment').value = '';
+        document.getElementById('rejectModal').style.display = 'flex';
+    }
+
+    function closeRejectModal() {
+        document.getElementById('rejectModal').style.display = 'none';
+        rejectTargetId = null;
+    }
+
+    async function confirmReject() {
+        const comment = document.getElementById('rejectComment').value.trim();
+        if (!comment) { alert('Please enter a rejection reason.'); return; }
+        const res = await fetch('/api/module/MBC01/reject', {
+            method: 'POST', headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({id: rejectTargetId, comment: comment})
+        });
+        const data = await res.json();
+        if (data.error) { alert(data.error); return; }
+        const row = table.getRows().find(r => r.getData().id === rejectTargetId);
+        if (row) { row.update({doc_status: 'Rejected'}); row.reformat(); }
+        closeRejectModal();
+    }
+
+    async function showApprovalLog(id, event) {
+        event.stopPropagation();
+        const res = await fetch(`/api/module/MBC01/approval-log/${id}`);
+        const log = await res.json();
+        if (!log.length) { alert('No approval history yet.'); return; }
+        const lines = log.map(e => `${e.actioned_at}  ${e.action} by ${e.actioned_by}${e.comment ? '\n  Reason: ' + e.comment : ''}`);
+        alert('Approval History:\n\n' + lines.join('\n\n'));
     }
 
     document.addEventListener('keydown', function(e) {

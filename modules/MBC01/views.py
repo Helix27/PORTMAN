@@ -1,7 +1,7 @@
 from flask import Blueprint, render_template, request, jsonify, session, redirect, url_for
 from functools import wraps
 from . import model
-from database import get_user_permissions
+from database import get_user_permissions, get_module_config
 
 bp = Blueprint('MBC01', __name__, template_folder='.')
 MODULE_CODE = 'MBC01'
@@ -46,8 +46,58 @@ def save():
         return jsonify({'error': 'No permission to add'}), 403
     if not is_new and not perms.get('can_edit'):
         return jsonify({'error': 'No permission to edit'}), 403
+
+    config = get_module_config('MBC01')
+    is_approver = str(config.get('approver_id', '')) == str(session.get('user_id')) or session.get('is_admin')
+
+    if not is_new:
+        current_status = model.get_doc_status(data['id'])
+        if current_status == 'Approved':
+            return jsonify({'error': 'Cannot edit an approved record'}), 403
+
+    data['doc_status'] = 'Draft'
+
     row_id, doc_num = model.save_header(data)
-    return jsonify({'id': row_id, 'doc_num': doc_num, 'doc_status': data.get('doc_status', 'Pending')})
+    return jsonify({'id': row_id, 'doc_num': doc_num, 'doc_status': data.get('doc_status', 'Draft')})
+
+
+@bp.route('/api/module/MBC01/approve', methods=['POST'])
+@login_required
+def approve():
+    config = get_module_config('MBC01')
+    is_approver = str(config.get('approver_id', '')) == str(session.get('user_id')) or session.get('is_admin')
+    if not is_approver:
+        return jsonify({'error': 'No permission to approve'}), 403
+    record_id = request.json.get('id')
+    if not record_id:
+        return jsonify({'error': 'Missing id'}), 400
+    model.approve_record(record_id, session.get('username'))
+    return jsonify({'doc_status': 'Approved'})
+
+
+@bp.route('/api/module/MBC01/reject', methods=['POST'])
+@login_required
+def reject():
+    config = get_module_config('MBC01')
+    is_approver = str(config.get('approver_id', '')) == str(session.get('user_id')) or session.get('is_admin')
+    if not is_approver:
+        return jsonify({'error': 'No permission to reject'}), 403
+    data = request.json
+    record_id = data.get('id')
+    comment = (data.get('comment') or '').strip()
+    if not record_id:
+        return jsonify({'error': 'Missing id'}), 400
+    if not comment:
+        return jsonify({'error': 'Rejection comment is required'}), 400
+    model.reject_record(record_id, comment, session.get('username'))
+    return jsonify({'doc_status': 'Rejected'})
+
+
+@bp.route('/api/module/MBC01/approval-log/<int:record_id>')
+@login_required
+def approval_log(record_id):
+    return jsonify(model.get_approval_log(record_id))
+
 
 @bp.route('/api/module/MBC01/delete', methods=['POST'])
 @login_required
