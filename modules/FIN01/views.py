@@ -459,7 +459,7 @@ def get_customers_for_billing(customer_type):
     if customer_type == 'Customer':
         table = 'vessel_customers'
     elif customer_type == 'Agent':
-        table = 'vessel_importer_exporters'
+        table = 'vessel_agents'
     else:
         return jsonify({'error': 'Invalid customer type'}), 400
 

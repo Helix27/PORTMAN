@@ -31,94 +31,28 @@ def view():
     return render_template('fsap01.html', permissions=perms)
 
 
-# ===== ADVANCE RECEIPTS =====
-
-@bp.route('/api/module/FSAP01/advance-receipts')
+@bp.route('/api/module/FSAP01/sap-invoice-logs')
 @login_required
-def get_advance_receipts():
+def sap_invoice_logs():
     page = int(request.args.get('page', 1))
-    size = int(request.args.get('size', 20))
-    data, total = model.get_advance_receipts(page, size)
+    size = int(request.args.get('size', 50))
+    data, total = model.get_sap_invoice_logs(page, size)
     return jsonify({'data': data, 'last_page': (total + size - 1) // size, 'total': total})
 
 
-@bp.route('/api/module/FSAP01/advance-receipts/save', methods=['POST'])
+@bp.route('/api/module/FSAP01/sap-cn-logs')
 @login_required
-def save_advance_receipt():
-    perms = get_perms()
-    if not perms.get('can_edit') and not perms.get('can_add'):
-        return jsonify({'error': 'No permission'}), 403
-    row_id = model.save_advance_receipt(request.json, session.get('username'))
-    return jsonify({'success': True, 'id': row_id})
-
-
-@bp.route('/api/module/FSAP01/advance-receipts/delete', methods=['POST'])
-@login_required
-def delete_advance_receipt():
-    perms = get_perms()
-    if not perms.get('can_delete'):
-        return jsonify({'error': 'No permission'}), 403
-    model.delete_advance_receipt(request.json.get('id'))
-    return jsonify({'success': True})
-
-
-# ===== INCOMING PAYMENTS =====
-
-@bp.route('/api/module/FSAP01/incoming-payments')
-@login_required
-def get_incoming_payments():
+def sap_cn_logs():
     page = int(request.args.get('page', 1))
-    size = int(request.args.get('size', 20))
-    data, total = model.get_incoming_payments(page, size)
+    size = int(request.args.get('size', 50))
+    data, total = model.get_sap_cn_logs(page, size)
     return jsonify({'data': data, 'last_page': (total + size - 1) // size, 'total': total})
 
 
-@bp.route('/api/module/FSAP01/incoming-payments/save', methods=['POST'])
+@bp.route('/api/module/FSAP01/gst-logs')
 @login_required
-def save_incoming_payment():
-    perms = get_perms()
-    if not perms.get('can_edit') and not perms.get('can_add'):
-        return jsonify({'error': 'No permission'}), 403
-    row_id = model.save_incoming_payment(request.json, session.get('username'))
-    return jsonify({'success': True, 'id': row_id})
-
-
-@bp.route('/api/module/FSAP01/incoming-payments/delete', methods=['POST'])
-@login_required
-def delete_incoming_payment():
-    perms = get_perms()
-    if not perms.get('can_delete'):
-        return jsonify({'error': 'No permission'}), 403
-    model.delete_incoming_payment(request.json.get('id'))
-    return jsonify({'success': True})
-
-
-# ===== GL JOURNAL VOUCHERS =====
-
-@bp.route('/api/module/FSAP01/gl-jvs')
-@login_required
-def get_gl_jvs():
+def gst_logs():
     page = int(request.args.get('page', 1))
-    size = int(request.args.get('size', 20))
-    data, total = model.get_gl_jvs(page, size)
+    size = int(request.args.get('size', 50))
+    data, total = model.get_gst_logs(page, size)
     return jsonify({'data': data, 'last_page': (total + size - 1) // size, 'total': total})
-
-
-@bp.route('/api/module/FSAP01/gl-jvs/save', methods=['POST'])
-@login_required
-def save_gl_jv():
-    perms = get_perms()
-    if not perms.get('can_edit') and not perms.get('can_add'):
-        return jsonify({'error': 'No permission'}), 403
-    row_id = model.save_gl_jv(request.json, session.get('username'))
-    return jsonify({'success': True, 'id': row_id})
-
-
-@bp.route('/api/module/FSAP01/gl-jvs/delete', methods=['POST'])
-@login_required
-def delete_gl_jv():
-    perms = get_perms()
-    if not perms.get('can_delete'):
-        return jsonify({'error': 'No permission'}), 403
-    model.delete_gl_jv(request.json.get('id'))
-    return jsonify({'success': True})

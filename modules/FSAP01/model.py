@@ -1,178 +1,62 @@
 from database import get_db, get_cursor
-from datetime import datetime
 
 
-# ===== ADVANCE RECEIPTS =====
-
-def get_advance_receipts(page=1, size=20):
+def get_sap_invoice_logs(page=1, size=50):
+    """Invoices with SAP posting data."""
     conn = get_db()
     cur = get_cursor(conn)
-    cur.execute('SELECT COUNT(*) as cnt FROM advance_receipts')
+    cur.execute('SELECT COUNT(*) as cnt FROM invoice_header')
     total = cur.fetchone()['cnt']
-    cur.execute('SELECT * FROM advance_receipts ORDER BY id DESC LIMIT %s OFFSET %s',
-                [size, (page - 1) * size])
+    cur.execute('''
+        SELECT id, invoice_number, invoice_date, financial_year,
+               customer_name, customer_type,
+               total_amount, invoice_status,
+               sap_document_number, sap_posting_date, sap_fiscal_year, sap_company_code,
+               created_by, created_date, posted_by, posted_date
+        FROM invoice_header
+        ORDER BY id DESC LIMIT %s OFFSET %s
+    ''', [size, (page - 1) * size])
     rows = cur.fetchall()
     conn.close()
     return [dict(r) for r in rows], total
 
 
-def save_advance_receipt(data, username=None):
+def get_sap_cn_logs(page=1, size=50):
+    """Credit notes with SAP posting data."""
     conn = get_db()
     cur = get_cursor(conn)
-    row_id = data.get('id')
-    now = datetime.now().strftime('%Y-%m-%d')
-    if row_id:
-        cur.execute('''UPDATE advance_receipts SET
-            party_type=%s, party_id=%s, party_name=%s,
-            receipt_number=%s, receipt_date=%s, amount=%s, currency=%s,
-            sap_document_number=%s, sap_fiscal_year=%s,
-            payment_method=%s, bank_reference=%s, remarks=%s, status=%s
-            WHERE id=%s''', [
-            data.get('party_type'), data.get('party_id'), data.get('party_name'),
-            data.get('receipt_number'), data.get('receipt_date'),
-            data.get('amount', 0), data.get('currency', 'INR'),
-            data.get('sap_document_number'), data.get('sap_fiscal_year'),
-            data.get('payment_method'), data.get('bank_reference'),
-            data.get('remarks'), data.get('status', 'Pending'), row_id
-        ])
-    else:
-        cur.execute('''INSERT INTO advance_receipts
-            (party_type, party_id, party_name, receipt_number, receipt_date,
-             amount, currency, payment_method, bank_reference, remarks,
-             status, created_by, created_date)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-            RETURNING id''', [
-            data.get('party_type'), data.get('party_id'), data.get('party_name'),
-            data.get('receipt_number'), data.get('receipt_date'),
-            data.get('amount', 0), data.get('currency', 'INR'),
-            data.get('payment_method'), data.get('bank_reference'),
-            data.get('remarks'), 'Pending', username, now
-        ])
-        row_id = cur.fetchone()['id']
-    conn.commit()
-    conn.close()
-    return row_id
-
-
-def delete_advance_receipt(row_id):
-    conn = get_db()
-    cur = get_cursor(conn)
-    cur.execute('DELETE FROM advance_receipts WHERE id=%s', (row_id,))
-    conn.commit()
-    conn.close()
-
-
-# ===== INCOMING PAYMENTS =====
-
-def get_incoming_payments(page=1, size=20):
-    conn = get_db()
-    cur = get_cursor(conn)
-    cur.execute('SELECT COUNT(*) as cnt FROM customer_incoming_payments')
+    cur.execute('SELECT COUNT(*) as cnt FROM credit_note_header')
     total = cur.fetchone()['cnt']
-    cur.execute('SELECT * FROM customer_incoming_payments ORDER BY id DESC LIMIT %s OFFSET %s',
-                [size, (page - 1) * size])
+    cur.execute('''
+        SELECT cn.id, cn.credit_note_number, cn.credit_note_date, cn.financial_year,
+               cn.party_name, cn.total_amount, cn.credit_note_status,
+               cn.sap_document_number, cn.sap_posting_date,
+               i.invoice_number AS original_invoice_number,
+               cn.created_by, cn.created_date
+        FROM credit_note_header cn
+        LEFT JOIN invoice_header i ON cn.original_invoice_id = i.id
+        ORDER BY cn.id DESC LIMIT %s OFFSET %s
+    ''', [size, (page - 1) * size])
     rows = cur.fetchall()
     conn.close()
     return [dict(r) for r in rows], total
 
 
-def save_incoming_payment(data, username=None):
+def get_gst_logs(page=1, size=50):
+    """Invoices with GST IRN / e-invoice data."""
     conn = get_db()
     cur = get_cursor(conn)
-    row_id = data.get('id')
-    now = datetime.now().strftime('%Y-%m-%d')
-    if row_id:
-        cur.execute('''UPDATE customer_incoming_payments SET
-            party_type=%s, party_id=%s, party_name=%s,
-            invoice_id=%s, payment_number=%s, payment_date=%s,
-            amount=%s, currency=%s, sap_document_number=%s, sap_fiscal_year=%s,
-            payment_method=%s, bank_reference=%s, remarks=%s, status=%s
-            WHERE id=%s''', [
-            data.get('party_type'), data.get('party_id'), data.get('party_name'),
-            data.get('invoice_id'), data.get('payment_number'), data.get('payment_date'),
-            data.get('amount', 0), data.get('currency', 'INR'),
-            data.get('sap_document_number'), data.get('sap_fiscal_year'),
-            data.get('payment_method'), data.get('bank_reference'),
-            data.get('remarks'), data.get('status', 'Pending'), row_id
-        ])
-    else:
-        cur.execute('''INSERT INTO customer_incoming_payments
-            (party_type, party_id, party_name, invoice_id,
-             payment_number, payment_date, amount, currency,
-             payment_method, bank_reference, remarks, status,
-             created_by, created_date)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-            RETURNING id''', [
-            data.get('party_type'), data.get('party_id'), data.get('party_name'),
-            data.get('invoice_id'), data.get('payment_number'), data.get('payment_date'),
-            data.get('amount', 0), data.get('currency', 'INR'),
-            data.get('payment_method'), data.get('bank_reference'),
-            data.get('remarks'), 'Pending', username, now
-        ])
-        row_id = cur.fetchone()['id']
-    conn.commit()
-    conn.close()
-    return row_id
-
-
-def delete_incoming_payment(row_id):
-    conn = get_db()
-    cur = get_cursor(conn)
-    cur.execute('DELETE FROM customer_incoming_payments WHERE id=%s', (row_id,))
-    conn.commit()
-    conn.close()
-
-
-# ===== GL JOURNAL VOUCHERS =====
-
-def get_gl_jvs(page=1, size=20):
-    conn = get_db()
-    cur = get_cursor(conn)
-    cur.execute('SELECT COUNT(*) as cnt FROM gl_journal_vouchers')
+    cur.execute('SELECT COUNT(*) as cnt FROM invoice_header')
     total = cur.fetchone()['cnt']
-    cur.execute('SELECT * FROM gl_journal_vouchers ORDER BY id DESC LIMIT %s OFFSET %s',
-                [size, (page - 1) * size])
+    cur.execute('''
+        SELECT id, invoice_number, invoice_date, financial_year,
+               customer_name, customer_type,
+               total_amount, invoice_status,
+               gst_irn, gst_ack_number, gst_ack_date,
+               created_by, created_date
+        FROM invoice_header
+        ORDER BY id DESC LIMIT %s OFFSET %s
+    ''', [size, (page - 1) * size])
     rows = cur.fetchall()
     conn.close()
     return [dict(r) for r in rows], total
-
-
-def save_gl_jv(data, username=None):
-    conn = get_db()
-    cur = get_cursor(conn)
-    row_id = data.get('id')
-    now = datetime.now().strftime('%Y-%m-%d')
-    if row_id:
-        cur.execute('''UPDATE gl_journal_vouchers SET
-            jv_number=%s, jv_date=%s, description=%s,
-            total_debit=%s, total_credit=%s,
-            sap_document_number=%s, sap_fiscal_year=%s, status=%s
-            WHERE id=%s''', [
-            data.get('jv_number'), data.get('jv_date'), data.get('description'),
-            data.get('total_debit', 0), data.get('total_credit', 0),
-            data.get('sap_document_number'), data.get('sap_fiscal_year'),
-            data.get('status', 'Draft'), row_id
-        ])
-    else:
-        cur.execute('''INSERT INTO gl_journal_vouchers
-            (jv_number, jv_date, description, total_debit, total_credit,
-             status, created_by, created_date)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
-            RETURNING id''', [
-            data.get('jv_number'), data.get('jv_date'), data.get('description'),
-            data.get('total_debit', 0), data.get('total_credit', 0),
-            'Draft', username, now
-        ])
-        row_id = cur.fetchone()['id']
-    conn.commit()
-    conn.close()
-    return row_id
-
-
-def delete_gl_jv(row_id):
-    conn = get_db()
-    cur = get_cursor(conn)
-    cur.execute('DELETE FROM gl_jv_lines WHERE jv_id=%s', (row_id,))
-    cur.execute('DELETE FROM gl_journal_vouchers WHERE id=%s', (row_id,))
-    conn.commit()
-    conn.close()

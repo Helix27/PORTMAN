@@ -1,9 +1,6 @@
-from flask import Blueprint
+from .views import bp
 
 MODULE_INFO = {
     'code': 'FCN01',
     'name': 'Credit Note Management'
 }
-
-bp = Blueprint('FCN01', __name__, template_folder='.')
-from . import views

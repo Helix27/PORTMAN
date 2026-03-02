@@ -79,7 +79,7 @@
 </div>
 
 <div id="ratesTab" style="display:none;">
-    <button class="btn btn-secondary" onclick="location.href='/fcrm01/exchange-rates'">Manage Exchange Rates</button>
+    <button class="btn btn-secondary" onclick="location.href='/module/FCRM01/exchange-rates'">Manage Exchange Rates</button>
 </div>
 
 <script>
@@ -142,7 +142,7 @@ async function saveAll() {
 
         if (!data.currency_code) continue;
 
-        const res = await fetch('/fcrm01/currency/save', {
+        const res = await fetch('/api/module/FCRM01/currency/save', {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
             body: JSON.stringify(data)
@@ -172,7 +172,7 @@ async function deleteRow() {
         const row = checkbox.closest('tr');
         const id = row.getAttribute('data-id');
         if (id) {
-            await fetch('/fcrm01/currency/delete', {
+            await fetch('/api/module/FCRM01/currency/delete', {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
                 body: JSON.stringify({id: id})

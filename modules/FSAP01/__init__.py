@@ -1,9 +1,6 @@
-from flask import Blueprint
+from .views import bp
 
 MODULE_INFO = {
     'code': 'FSAP01',
     'name': 'SAP Financial Integration'
 }
-
-bp = Blueprint('FSAP01', __name__, template_folder='.')
-from . import views

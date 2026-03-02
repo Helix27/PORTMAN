@@ -110,6 +110,37 @@
     {% endif %}
 </div>
 
+<!-- Formula Builder Modal -->
+<div id="formulaModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.55);z-index:2000;align-items:center;justify-content:center;">
+    <div style="background:white;border-radius:6px;padding:20px;width:580px;max-width:96vw;box-shadow:0 4px 24px rgba(0,0,0,0.25)">
+        <h3 style="margin:0 0 12px 0;font-size:13px;color:#8e44ad;border-bottom:2px solid #8e44ad;padding-bottom:6px">Formula Builder</h3>
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;font-size:11px">
+            <label style="font-weight:600;color:#555;white-space:nowrap">Result Type:</label>
+            <select id="fbResultType" style="padding:4px;font-size:11px;border:1px solid #ddd;border-radius:3px">
+                <option value="">number</option>
+                <option value="hours">hours (datetime diff)</option>
+                <option value="days">days (datetime diff)</option>
+                <option value="number">number</option>
+            </select>
+        </div>
+        <div style="background:#f5f0ff;border:1px solid #c39bd3;border-radius:4px;padding:10px;min-height:38px;font-family:monospace;font-size:13px;color:#6c3483;margin-bottom:14px;word-break:break-all;letter-spacing:.3px" id="fbPreview">—</div>
+        <div style="margin-bottom:12px">
+            <div style="font-size:10px;font-weight:700;color:#8e44ad;text-transform:uppercase;margin-bottom:6px;letter-spacing:.5px">Fields (click to insert)</div>
+            <div id="fbFieldBtns" style="display:flex;flex-wrap:wrap;gap:5px;min-height:28px">
+                <span style="font-size:11px;color:#aaa;font-style:italic">No other fields defined yet</span>
+            </div>
+        </div>
+        <div style="margin-bottom:16px">
+            <div style="font-size:10px;font-weight:700;color:#34495e;text-transform:uppercase;margin-bottom:6px;letter-spacing:.5px">Operators</div>
+            <div id="fbOpBtns" style="display:flex;flex-wrap:wrap;gap:5px"></div>
+        </div>
+        <div style="display:flex;justify-content:flex-end;gap:8px;border-top:1px solid #ecf0f1;padding-top:12px">
+            <button type="button" class="btn" style="background:#95a5a6;color:white" onclick="fbCancel()">Cancel</button>
+            <button type="button" class="btn btn-save" onclick="fbApply()">Apply Formula</button>
+        </div>
+    </div>
+</div>
+
 <!-- Field Configuration Panel -->
 <div id="fieldPanel" class="field-panel">
     <h3>Custom Fields for: <span id="fieldServiceName"></span>
@@ -139,6 +170,9 @@
     </table>
 </div>
 
+{% endblock %}
+
+{% block scripts %}
 <script>
 addToRecent('FSTM01', 'Service Type Master');
 
@@ -288,15 +322,32 @@ function addFieldRowWithData(f) {
 
     const typeOptions = ['text', 'number', 'datetime', 'date', 'dropdown', 'checkbox', 'calculated'];
     const resultTypeOptions = ['', 'hours', 'days', 'number'];
+    const esc = v => (v || '').toString().replace(/&/g, '&amp;').replace(/"/g, '&quot;');
+
+    const fType  = f.field_type || 'text';
+    const optVal = esc(f.field_options || '');
+    const fmlVal = esc(f.calculation_formula || '');
+    const isCalc = fType === 'calculated';
+    const isDrop = fType === 'dropdown';
 
     tr.innerHTML = `
         <td><input type="checkbox" class="field-select"></td>
-        <td><input type="text" class="f-label" value="${f.field_label || ''}" placeholder="e.g. Grab Hiring Start"></td>
-        <td><input type="text" class="f-name" value="${f.field_name || ''}" placeholder="e.g. grab_hire_start"></td>
-        <td><select class="f-type">
-            ${typeOptions.map(t => `<option value="${t}" ${f.field_type === t ? 'selected' : ''}>${t}</option>`).join('')}
+        <td><input type="text" class="f-label" value="${esc(f.field_label || '')}" placeholder="e.g. Grab Hiring Start"></td>
+        <td><input type="text" class="f-name" value="${esc(f.field_name || '')}" placeholder="e.g. grab_hire_start"></td>
+        <td><select class="f-type" onchange="handleTypeChange(this)">
+            ${typeOptions.map(t => `<option value="${t}" ${fType === t ? 'selected' : ''}>${t}</option>`).join('')}
         </select></td>
-        <td><input type="text" class="f-options" value="${(f.field_options || '').replace(/"/g, '&quot;')}" placeholder="JSON array or formula"></td>
+        <td class="f-options-cell">
+            <input type="text" class="f-options-vis" value="${optVal}" placeholder="opt1, opt2..."
+                style="${isDrop ? '' : 'display:none'}"
+                oninput="this.closest('tr').querySelector('.f-options').value=this.value">
+            <div class="f-formula-disp" style="${isCalc ? 'display:flex;align-items:center;gap:5px' : 'display:none'}">
+                <code class="f-formula-text" style="font-size:10px;color:#8e44ad;min-width:80px;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${fmlVal || '—'}</code>
+                <button type="button" class="btn" style="background:#8e44ad;color:white;padding:2px 8px;font-size:10px;white-space:nowrap"
+                    onclick="openFormulaBuilder(this)">Build ▶</button>
+            </div>
+            <input type="hidden" class="f-options" value="${isCalc ? fmlVal : optVal}">
+        </td>
         <td><select class="f-result-type">
             ${resultTypeOptions.map(t => `<option value="${t}" ${f.calculation_result_type === t ? 'selected' : ''}>${t || '--'}</option>`).join('')}
         </select></td>
@@ -307,7 +358,7 @@ function addFieldRowWithData(f) {
 
     // Auto-generate field_name from label
     const labelInput = tr.querySelector('.f-label');
-    const nameInput = tr.querySelector('.f-name');
+    const nameInput  = tr.querySelector('.f-name');
     labelInput.addEventListener('blur', function() {
         if (!nameInput.value && labelInput.value) {
             nameInput.value = labelInput.value.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/(^_|_$)/g, '');
@@ -396,6 +447,131 @@ async function deleteSelectedFields() {
         }
         row.remove();
     }
+}
+
+// ===== TYPE CHANGE HANDLER =====
+
+function handleTypeChange(sel) {
+    const tr   = sel.closest('tr');
+    const type = sel.value;
+    const vis  = tr.querySelector('.f-options-vis');
+    const fd   = tr.querySelector('.f-formula-disp');
+    if (type === 'dropdown') {
+        vis.style.display = '';
+        fd.style.display  = 'none';
+        tr.querySelector('.f-options').value = vis.value;
+    } else if (type === 'calculated') {
+        vis.style.display = 'none';
+        fd.style.display  = 'flex';
+        fd.style.alignItems = 'center';
+        fd.style.gap = '5px';
+    } else {
+        vis.style.display = 'none';
+        fd.style.display  = 'none';
+    }
+}
+
+// ===== FORMULA BUILDER =====
+
+var fbTokens    = [];
+var fbTargetRow = null;
+
+const FB_OPS = [
+    { label: '+',       val: '+' },
+    { label: '−',       val: '-' },
+    { label: '×',       val: '*' },
+    { label: '÷',       val: '/' },
+    { label: 'max( )',  val: 'max(' },
+    { label: 'min( )',  val: 'min(' },
+    { label: '(',       val: '(' },
+    { label: ')',       val: ')' },
+    { label: ',',       val: ',' },
+];
+
+function openFormulaBuilder(btn) {
+    fbTargetRow = btn.closest('tr');
+    const cur   = fbTargetRow.querySelector('.f-options').value || '';
+    fbTokens    = cur.trim() ? cur.trim().split(/\s+/) : [];
+
+    // Build field buttons from all OTHER rows in the field table
+    const fieldBtns = document.getElementById('fbFieldBtns');
+    fieldBtns.innerHTML = '';
+    let hasFields = false;
+    document.querySelectorAll('#fieldTableBody tr').forEach(row => {
+        if (row === fbTargetRow) return;
+        const fname  = (row.querySelector('.f-name')  || {}).value || '';
+        const flabel = (row.querySelector('.f-label') || {}).value || '';
+        if (!fname.trim()) return;
+        hasFields = true;
+        const b = document.createElement('button');
+        b.type      = 'button';
+        b.className = 'btn';
+        b.style.cssText = 'background:#ede0f7;color:#6c3483;padding:3px 10px;font-size:10px;font-family:monospace';
+        b.title     = flabel || fname;
+        b.textContent = fname;
+        b.onclick   = () => { fbTokens.push(fname.trim()); fbUpdateDisplay(); };
+        fieldBtns.appendChild(b);
+    });
+    if (!hasFields) fieldBtns.innerHTML = '<span style="font-size:11px;color:#aaa;font-style:italic">No other fields defined yet</span>';
+
+    // Build operator buttons
+    const opBtns = document.getElementById('fbOpBtns');
+    opBtns.innerHTML = '';
+    FB_OPS.forEach(op => {
+        const b = document.createElement('button');
+        b.type      = 'button';
+        b.className = 'btn';
+        b.style.cssText = 'background:#eaf2ff;color:#1a5276;padding:3px 11px;font-size:12px;font-family:monospace;font-weight:700';
+        b.textContent = op.label;
+        b.onclick   = () => { fbTokens.push(op.val); fbUpdateDisplay(); };
+        opBtns.appendChild(b);
+    });
+    const bkBtn = document.createElement('button');
+    bkBtn.type = 'button'; bkBtn.className = 'btn';
+    bkBtn.style.cssText = 'background:#fdecea;color:#c0392b;padding:3px 10px;font-size:11px';
+    bkBtn.textContent = '⌫ Back';
+    bkBtn.onclick = () => { fbTokens.pop(); fbUpdateDisplay(); };
+    opBtns.appendChild(bkBtn);
+
+    const clBtn = document.createElement('button');
+    clBtn.type = 'button'; clBtn.className = 'btn';
+    clBtn.style.cssText = 'background:#fdecea;color:#c0392b;padding:3px 10px;font-size:11px';
+    clBtn.textContent = '✕ Clear';
+    clBtn.onclick = () => { fbTokens = []; fbUpdateDisplay(); };
+    opBtns.appendChild(clBtn);
+
+    // Sync result type
+    document.getElementById('fbResultType').value = fbTargetRow.querySelector('.f-result-type').value || '';
+
+    fbUpdateDisplay();
+    document.getElementById('formulaModal').style.display = 'flex';
+}
+
+function fbBuildString() {
+    return fbTokens.join(' ')
+        .replace(/\( /g, '(')
+        .replace(/ \)/g, ')')
+        .replace(/ ,/g,  ',')
+        .replace(/,(?! )/g, ', ');
+}
+
+function fbUpdateDisplay() {
+    document.getElementById('fbPreview').textContent = fbBuildString() || '—';
+}
+
+function fbApply() {
+    const formula    = fbBuildString();
+    const resultType = document.getElementById('fbResultType').value;
+    if (fbTargetRow) {
+        fbTargetRow.querySelector('.f-options').value              = formula;
+        fbTargetRow.querySelector('.f-formula-text').textContent   = formula || '—';
+        fbTargetRow.querySelector('.f-result-type').value          = resultType;
+    }
+    document.getElementById('formulaModal').style.display = 'none';
+}
+
+function fbCancel() {
+    document.getElementById('formulaModal').style.display = 'none';
 }
 </script>
 {% endblock %}

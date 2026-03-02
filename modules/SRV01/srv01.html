@@ -415,74 +415,95 @@ function renderFields(existingValues) {
 }
 
 function recalculate() {
-    // Find all calculated fields and compute their values
     const container = document.getElementById('fieldsContainer');
     const allInputs = container.querySelectorAll('[data-field-name]');
 
-    // Build a map of field_name → value
+    // Build field values map
     const fieldValues = {};
     allInputs.forEach(inp => {
-        const name = inp.dataset.fieldName;
-        if (inp.dataset.fieldType === 'checkbox') {
-            fieldValues[name] = inp.checked ? '1' : '0';
-        } else {
-            fieldValues[name] = inp.value;
-        }
+        fieldValues[inp.dataset.fieldName] = inp.dataset.fieldType === 'checkbox'
+            ? (inp.checked ? '1' : '0') : inp.value;
     });
 
     // Process calculated fields
     allInputs.forEach(inp => {
         if (inp.dataset.fieldType !== 'calculated') return;
-
-        const formula = inp.dataset.formula || '';
-        const resultType = inp.dataset.resultType || 'number';
-
-        // Parse "field_b - field_a" pattern
-        const match = formula.match(/^(\w+)\s*-\s*(\w+)$/);
-        if (match) {
-            const endFieldName = match[1];
-            const startFieldName = match[2];
-            const endVal = fieldValues[endFieldName];
-            const startVal = fieldValues[startFieldName];
-
-            if (endVal && startVal) {
-                const endDate = new Date(endVal);
-                const startDate = new Date(startVal);
-                const diffMs = endDate - startDate;
-
-                let result;
-                if (resultType === 'hours') {
-                    result = (diffMs / 3600000).toFixed(2);
-                } else if (resultType === 'days') {
-                    result = (diffMs / 86400000).toFixed(2);
-                } else {
-                    result = (diffMs / 3600000).toFixed(2);
-                }
-
-                if (diffMs >= 0) {
-                    inp.value = result;
-                } else {
-                    inp.value = '0';
-                }
-            } else {
-                inp.value = '';
-            }
-        }
-
-        // Update billable qty if this field is the billable one
+        const result = evaluateFormula(inp.dataset.formula || '', fieldValues, inp.dataset.resultType || '');
+        inp.value = result !== null ? result : '';
         if (inp.dataset.isBillableQty == 1 && inp.value) {
             document.getElementById('billableQty').value = inp.value;
         }
     });
 
-    // Also check non-calculated billable qty fields
+    // Non-calculated billable qty
     allInputs.forEach(inp => {
         if (inp.dataset.fieldType === 'calculated') return;
         if (inp.dataset.isBillableQty == 1) {
-            const val = inp.dataset.fieldType === 'checkbox' ? (inp.checked ? '1' : '0') : inp.value;
-            document.getElementById('billableQty').value = val;
+            document.getElementById('billableQty').value =
+                inp.dataset.fieldType === 'checkbox' ? (inp.checked ? '1' : '0') : inp.value;
         }
     });
+}
+
+function evaluateFormula(formula, fieldValues, resultType) {
+    if (!formula) return null;
+    formula = formula.trim();
+
+    // A token is either max/min(...) or a plain field name (\w+)
+    const tokStr = '(?:(?:max|min)\\s*\\(\\s*\\w+\\s*,\\s*\\w+\\s*\\)|\\w+)';
+
+    // Resolve a token to a Date (for datetime fields) or number/string
+    function resolveToken(token) {
+        token = token.trim();
+        const m = token.match(/^(max|min)\s*\(\s*(\w+)\s*,\s*(\w+)\s*\)$/i);
+        if (m) {
+            const fn = m[1].toLowerCase();
+            const aRaw = fieldValues[m[2]] || '', bRaw = fieldValues[m[3]] || '';
+            const aDate = aRaw ? new Date(aRaw) : null;
+            const bDate = bRaw ? new Date(bRaw) : null;
+            if (aDate && bDate && !isNaN(aDate) && !isNaN(bDate)) {
+                return fn === 'max' ? (aDate >= bDate ? aDate : bDate)
+                                    : (aDate <= bDate ? aDate : bDate);
+            }
+            const a = parseFloat(aRaw) || 0, b = parseFloat(bRaw) || 0;
+            return fn === 'max' ? Math.max(a, b) : Math.min(a, b);
+        }
+        // Plain field name — return Date if it looks like a datetime, else raw string
+        const raw = fieldValues[token] || '';
+        if (raw) {
+            const d = new Date(raw);
+            if (!isNaN(d) && isNaN(parseFloat(raw))) return d;
+        }
+        return raw;
+    }
+
+    // Match: TOKEN op TOKEN  (handles simple A-B and compound max(A,B)-min(A,B))
+    const compoundRe = new RegExp('^(' + tokStr + ')\\s*([\\+\\-\\*\\/])\\s*(' + tokStr + ')$', 'i');
+    const cm = formula.match(compoundRe);
+    if (cm) {
+        const left = resolveToken(cm[1]), op = cm[2], right = resolveToken(cm[3]);
+        if (op === '-' && left instanceof Date && right instanceof Date) {
+            const diffMs = left - right;
+            if (resultType === 'days') return (diffMs / 86400000).toFixed(2);
+            return (diffMs / 3600000).toFixed(2);   // hours default
+        }
+        const a = left instanceof Date ? 0 : (parseFloat(left) || 0);
+        const b = right instanceof Date ? 0 : (parseFloat(right) || 0);
+        if (op === '+') return (a + b).toFixed(2);
+        if (op === '-') return (a - b).toFixed(2);
+        if (op === '*') return (a * b).toFixed(2);
+        if (op === '/') return b !== 0 ? (a / b).toFixed(2) : '0.00';
+    }
+
+    // Standalone max(A, B) or min(A, B) — numeric only
+    const funcM = formula.match(/^(max|min)\s*\(\s*(\w+)\s*,\s*(\w+)\s*\)$/i);
+    if (funcM) {
+        const a = parseFloat(fieldValues[funcM[2]]) || 0;
+        const b = parseFloat(fieldValues[funcM[3]]) || 0;
+        return funcM[1].toLowerCase() === 'max' ? Math.max(a, b).toFixed(2) : Math.min(a, b).toFixed(2);
+    }
+
+    return null;
 }
 
 function collectFieldValues() {

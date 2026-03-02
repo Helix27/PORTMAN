@@ -162,13 +162,13 @@ def delete_service_record(record_id):
 
 
 def get_service_types_with_fields():
-    """Get service types that have custom fields configured"""
+    """Get all active service types (custom fields load separately if configured)"""
     conn = get_db()
     cur = get_cursor(conn)
     cur.execute('''
         SELECT id, service_code, service_name, uom
         FROM finance_service_types
-        WHERE is_active = 1 AND has_custom_fields = 1
+        WHERE is_active = 1
         ORDER BY service_name
     ''')
     rows = cur.fetchall()

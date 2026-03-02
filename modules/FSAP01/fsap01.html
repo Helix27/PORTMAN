@@ -1,254 +1,201 @@
 {% extends "base.html" %}
 
-{% block title %}SAP Financial Integration - PORTMAN{% endblock %}
+{% block title %}SAP / GST Integration Logs - PORTMAN{% endblock %}
 
 {% block content %}
 <style>
-    .sap-tabs { display: flex; gap: 0; margin-bottom: 0; }
-    .sap-tab { padding: 8px 20px; font-size: 12px; font-weight: 600; border: 2px solid #bdc3c7; border-bottom: none; background: #ecf0f1; cursor: pointer; border-radius: 4px 4px 0 0; color: #7f8c8d; }
-    .sap-tab.active { background: white; color: #2c3e50; border-color: #8e44ad; }
-    .sap-panel { border: 2px solid #8e44ad; border-radius: 0 4px 4px 4px; padding: 15px; background: white; display: none; }
-    .sap-panel.active { display: block; }
-    .status-badge { padding: 2px 8px; border-radius: 3px; font-size: 10px; font-weight: 600; }
-    .status-Pending { background: #fef9e7; color: #7d6608; }
-    .status-Synced { background: #d5f5e3; color: #1e8449; }
-    .status-Draft { background: #eaf2f8; color: #2471a3; }
-    .status-Failed { background: #fadbd8; color: #c0392b; }
+    .tabs { display: flex; margin-bottom: 15px; border-bottom: 2px solid #ecf0f1; }
+    .tab { padding: 10px 20px; cursor: pointer; font-size: 12px; background: none; border: none; border-bottom: 3px solid transparent; }
+    .tab.active { border-bottom-color: #d90429; color: #d90429; font-weight: 600; }
+    .tab-panel { display: none; }
+    .tab-panel.active { display: block; }
+    .row-info { font-size: 11px; color: #7f8c8d; margin-left: auto; align-self: center; }
+    .toolbar { display: flex; align-items: center; margin-bottom: 10px; gap: 8px; }
+    .badge { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 10px; font-weight: 600; }
+    .badge-posted   { background: #d5f5e3; color: #1e8449; }
+    .badge-pending  { background: #fef9e7; color: #7d6608; }
+    .badge-none     { background: #f5f5f5; color: #999; }
+    .badge-irn      { background: #d6eaf8; color: #1a5276; }
+
+    /* Dark theme */
+    .dark-theme #sapInvTable .tabulator,
+    .dark-theme #sapCnTable .tabulator,
+    .dark-theme #gstTable .tabulator { background: #1e1e1e; color: #e0e0e0; border-color: #444; }
+    .dark-theme .tabulator .tabulator-header { background: #2d2d2d; color: #e0e0e0; border-bottom-color: #444; }
+    .dark-theme .tabulator .tabulator-row { background: #1e1e1e; color: #e0e0e0; border-bottom-color: #333; }
+    .dark-theme .tabulator .tabulator-row:nth-child(even) { background: #252525; }
+    .dark-theme .tabulator .tabulator-row:hover { background: #2a2a2a; }
+    .dark-theme .tabulator .tabulator-footer { background: #2d2d2d; color: #ccc; border-top-color: #444; }
 </style>
 
 <div class="module-header">
-    <h2>SAP Financial Integration</h2>
+    <h2>SAP / GST Integration Logs</h2>
     <span class="module-code">FSAP01</span>
 </div>
 
-<div class="sap-tabs">
-    <div class="sap-tab active" onclick="switchTab('ar')">Advance Receipts</div>
-    <div class="sap-tab" onclick="switchTab('ip')">Incoming Payments</div>
-    <div class="sap-tab" onclick="switchTab('jv')">GL Journal Vouchers</div>
+<div class="tabs">
+    <button class="tab active" onclick="showTab('sapInv')">SAP – Invoices</button>
+    <button class="tab" onclick="showTab('sapCn')">SAP – Credit Notes</button>
+    <button class="tab" onclick="showTab('gst')">GST e-Invoice</button>
 </div>
 
-<!-- Advance Receipts -->
-<div class="sap-panel active" id="panel-ar">
+<!-- SAP Invoice Logs -->
+<div id="sapInvPanel" class="tab-panel active">
     <div class="toolbar">
-        {% if permissions.can_add %}<button class="btn btn-add" onclick="addARRow()">+ Add Receipt</button>{% endif %}
-        {% if permissions.can_delete %}<button class="btn btn-delete" onclick="deleteARSelected()">Delete Selected</button>{% endif %}
-        {% if permissions.can_add or permissions.can_edit %}<button class="btn btn-save" onclick="saveAR()">Save All</button>{% endif %}
-        <div class="row-info" style="display:inline">Rows: <span id="arRowCount">0</span></div>
+        <span style="font-size:11px;color:#7f8c8d">Read-only view — SAP posting is triggered from <strong>FIN01 / FINV01</strong></span>
+        <span class="row-info">Rows: <span id="sapInvCount">0</span> / <span id="sapInvTotal">0</span></span>
     </div>
-    <div id="arTable"></div>
+    <div id="sapInvTable"></div>
 </div>
 
-<!-- Incoming Payments -->
-<div class="sap-panel" id="panel-ip">
+<!-- SAP Credit Note Logs -->
+<div id="sapCnPanel" class="tab-panel">
     <div class="toolbar">
-        {% if permissions.can_add %}<button class="btn btn-add" onclick="addIPRow()">+ Add Payment</button>{% endif %}
-        {% if permissions.can_delete %}<button class="btn btn-delete" onclick="deleteIPSelected()">Delete Selected</button>{% endif %}
-        {% if permissions.can_add or permissions.can_edit %}<button class="btn btn-save" onclick="saveIP()">Save All</button>{% endif %}
-        <div class="row-info" style="display:inline">Rows: <span id="ipRowCount">0</span></div>
+        <span style="font-size:11px;color:#7f8c8d">Read-only view — SAP posting is triggered from <strong>FCN01</strong></span>
+        <span class="row-info">Rows: <span id="sapCnCount">0</span> / <span id="sapCnTotal">0</span></span>
     </div>
-    <div id="ipTable"></div>
+    <div id="sapCnTable"></div>
 </div>
 
-<!-- GL Journal Vouchers -->
-<div class="sap-panel" id="panel-jv">
+<!-- GST e-Invoice Logs -->
+<div id="gstPanel" class="tab-panel">
     <div class="toolbar">
-        {% if permissions.can_add %}<button class="btn btn-add" onclick="addJVRow()">+ Add JV</button>{% endif %}
-        {% if permissions.can_delete %}<button class="btn btn-delete" onclick="deleteJVSelected()">Delete Selected</button>{% endif %}
-        {% if permissions.can_add or permissions.can_edit %}<button class="btn btn-save" onclick="saveJV()">Save All</button>{% endif %}
-        <div class="row-info" style="display:inline">Rows: <span id="jvRowCount">0</span></div>
+        <span style="font-size:11px;color:#7f8c8d">Read-only view — GST e-invoice is triggered from <strong>FIN01 / FINV01</strong></span>
+        <span class="row-info">Rows: <span id="gstCount">0</span> / <span id="gstTotal">0</span></span>
     </div>
-    <div id="jvTable"></div>
+    <div id="gstTable"></div>
 </div>
+
 {% endblock %}
 
 {% block scripts %}
 <script>
-    addToRecent('FSAP01', 'SAP Financial Integration');
-    const canEdit = {{ permissions.can_edit|default(0) }} || {{ permissions.can_add|default(0) }};
-    let arTable, ipTable, jvTable;
+addToRecent('FSAP01', 'SAP/GST Integration Logs');
 
-    function switchTab(tab) {
-        document.querySelectorAll('.sap-tab').forEach(t => t.classList.remove('active'));
-        document.querySelectorAll('.sap-panel').forEach(p => p.classList.remove('active'));
-        event.target.classList.add('active');
-        document.getElementById(`panel-${tab}`).classList.add('active');
-    }
+const isDark = localStorage.getItem('theme') === 'dark';
 
-    function statusFmt(cell) {
-        const v = cell.getValue() || 'Pending';
-        return `<span class="status-badge status-${v}">${v}</span>`;
-    }
+function sapBadge(val) {
+    if (val) return `<span class="badge badge-posted">${val}</span>`;
+    return `<span class="badge badge-none">Not Posted</span>`;
+}
+function irnBadge(val) {
+    if (val) return `<span class="badge badge-irn">${val.substring(0, 20)}…</span>`;
+    return `<span class="badge badge-none">No IRN</span>`;
+}
+function statusBadge(val) {
+    if (!val) return '';
+    const cls = (val === 'Posted' || val === 'Approved') ? 'badge-posted' : 'badge-pending';
+    return `<span class="badge ${cls}">${val}</span>`;
+}
 
-    // ===== ADVANCE RECEIPTS =====
-    function initAR() {
-        arTable = new Tabulator("#arTable", {
-            height: "calc(100vh - 250px)", layout: "fitData",
-            columns: [
-                {formatter: "rowSelection", titleFormatter: "rowSelection", hozAlign: "center", headerSort: false, width: 40},
-                {title: "Receipt #", field: "receipt_number", editor: canEdit ? "input" : false, width: 130},
-                {title: "Date", field: "receipt_date", editor: canEdit ? "date" : false, width: 110},
-                {title: "Party Type", field: "party_type", editor: canEdit ? "select" : false,
-                    editorParams: {values: {'': '', Agent: 'Agent', Customer: 'Customer', ImporterExporter: 'ImporterExporter'}}, width: 120},
-                {title: "Party Name", field: "party_name", editor: canEdit ? "input" : false, width: 180},
-                {title: "Amount", field: "amount", editor: canEdit ? "number" : false, hozAlign: "right", width: 110,
-                    formatter: "money", formatterParams: {precision: 2}},
-                {title: "Currency", field: "currency", editor: canEdit ? "input" : false, width: 70},
-                {title: "Payment Method", field: "payment_method", editor: canEdit ? "input" : false, width: 120},
-                {title: "Bank Ref", field: "bank_reference", editor: canEdit ? "input" : false, width: 140},
-                {title: "SAP Doc #", field: "sap_document_number", width: 120},
-                {title: "SAP FY", field: "sap_fiscal_year", width: 70},
-                {title: "Status", field: "status", width: 90, formatter: statusFmt},
-                {title: "Remarks", field: "remarks", editor: canEdit ? "input" : false, width: 200}
-            ],
-            pagination: true, paginationMode: "remote", paginationSize: 20,
-            ajaxURL: "/api/module/FSAP01/advance-receipts",
-            ajaxResponse: function(url, params, response) {
-                document.getElementById('arRowCount').textContent = response.total;
-                return response;
-            },
-            selectable: true
-        });
-    }
+// SAP Invoice table
+const sapInvTable = new Tabulator('#sapInvTable', {
+    height: 'calc(100vh - 210px)',
+    layout: 'fitData',
+    pagination: true,
+    paginationMode: 'remote',
+    paginationSize: 50,
+    ajaxURL: '/api/module/FSAP01/sap-invoice-logs',
+    ajaxResponse: function(url, params, resp) {
+        document.getElementById('sapInvCount').textContent = resp.data.length;
+        document.getElementById('sapInvTotal').textContent = resp.total;
+        return resp;
+    },
+    columns: [
+        {title: 'Invoice #',      field: 'invoice_number',     width: 140},
+        {title: 'Date',           field: 'invoice_date',        width: 100},
+        {title: 'FY',             field: 'financial_year',      width: 80},
+        {title: 'Party',          field: 'customer_name',       minWidth: 160},
+        {title: 'Type',           field: 'customer_type',       width: 90},
+        {title: 'Amount',         field: 'total_amount',        width: 110, hozAlign: 'right',
+            formatter: 'money', formatterParams: {precision: 2}},
+        {title: 'Inv Status',     field: 'invoice_status',      width: 110,
+            formatter: function(cell) { return statusBadge(cell.getValue()); }},
+        {title: 'SAP Doc #',      field: 'sap_document_number', width: 130,
+            formatter: function(cell) { return sapBadge(cell.getValue()); }},
+        {title: 'SAP Post Date',  field: 'sap_posting_date',    width: 120},
+        {title: 'SAP FY',         field: 'sap_fiscal_year',     width: 80},
+        {title: 'SAP Co. Code',   field: 'sap_company_code',    width: 110},
+        {title: 'Posted By',      field: 'posted_by',           width: 110},
+        {title: 'Posted Date',    field: 'posted_date',         width: 110},
+    ]
+});
+if (isDark) document.getElementById('sapInvTable').classList.add('tabulator-dark');
 
-    function addARRow() { arTable.addRow({currency: 'INR', receipt_date: new Date().toISOString().split('T')[0]}, false); }
+// SAP Credit Note table
+const sapCnTable = new Tabulator('#sapCnTable', {
+    height: 'calc(100vh - 210px)',
+    layout: 'fitData',
+    pagination: true,
+    paginationMode: 'remote',
+    paginationSize: 50,
+    ajaxURL: '/api/module/FSAP01/sap-cn-logs',
+    ajaxResponse: function(url, params, resp) {
+        document.getElementById('sapCnCount').textContent = resp.data.length;
+        document.getElementById('sapCnTotal').textContent = resp.total;
+        return resp;
+    },
+    columns: [
+        {title: 'CN Number',      field: 'credit_note_number',      width: 140},
+        {title: 'Date',           field: 'credit_note_date',         width: 100},
+        {title: 'FY',             field: 'financial_year',           width: 80},
+        {title: 'Party',          field: 'party_name',               minWidth: 160},
+        {title: 'Orig. Invoice',  field: 'original_invoice_number',  width: 140},
+        {title: 'Amount',         field: 'total_amount',             width: 110, hozAlign: 'right',
+            formatter: 'money', formatterParams: {precision: 2}},
+        {title: 'Status',         field: 'credit_note_status',       width: 100,
+            formatter: function(cell) { return statusBadge(cell.getValue()); }},
+        {title: 'SAP Doc #',      field: 'sap_document_number',      width: 130,
+            formatter: function(cell) { return sapBadge(cell.getValue()); }},
+        {title: 'SAP Post Date',  field: 'sap_posting_date',         width: 120},
+        {title: 'Created By',     field: 'created_by',               width: 110},
+        {title: 'Created Date',   field: 'created_date',             width: 110},
+    ]
+});
+if (isDark) document.getElementById('sapCnTable').classList.add('tabulator-dark');
 
-    async function saveAR() {
-        for (const row of arTable.getRows()) {
-            const data = row.getData();
-            if (!data.party_name) continue;
-            const res = await fetch('/api/module/FSAP01/advance-receipts/save', {
-                method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(data)
-            });
-            const result = await res.json();
-            if (result.id) row.update({id: result.id});
-        }
-        arTable.setData("/api/module/FSAP01/advance-receipts");
-    }
+// GST e-Invoice table
+const gstTable = new Tabulator('#gstTable', {
+    height: 'calc(100vh - 210px)',
+    layout: 'fitData',
+    pagination: true,
+    paginationMode: 'remote',
+    paginationSize: 50,
+    ajaxURL: '/api/module/FSAP01/gst-logs',
+    ajaxResponse: function(url, params, resp) {
+        document.getElementById('gstCount').textContent = resp.data.length;
+        document.getElementById('gstTotal').textContent = resp.total;
+        return resp;
+    },
+    columns: [
+        {title: 'Invoice #',    field: 'invoice_number',  width: 140},
+        {title: 'Date',         field: 'invoice_date',     width: 100},
+        {title: 'FY',           field: 'financial_year',   width: 80},
+        {title: 'Party',        field: 'customer_name',    minWidth: 160},
+        {title: 'Type',         field: 'customer_type',    width: 90},
+        {title: 'Amount',       field: 'total_amount',     width: 110, hozAlign: 'right',
+            formatter: 'money', formatterParams: {precision: 2}},
+        {title: 'Status',       field: 'invoice_status',   width: 110,
+            formatter: function(cell) { return statusBadge(cell.getValue()); }},
+        {title: 'GST IRN',      field: 'gst_irn',          minWidth: 180,
+            formatter: function(cell) { return irnBadge(cell.getValue()); }},
+        {title: 'Ack Number',   field: 'gst_ack_number',   width: 140},
+        {title: 'Ack Date',     field: 'gst_ack_date',     width: 110},
+        {title: 'Created By',   field: 'created_by',       width: 110},
+    ]
+});
+if (isDark) document.getElementById('gstTable').classList.add('tabulator-dark');
 
-    function deleteARSelected() {
-        const sel = arTable.getSelectedRows();
-        if (!sel.length) { alert('Select rows'); return; }
-        if (!confirm(`Delete ${sel.length} row(s)?`)) return;
-        sel.forEach(async r => {
-            if (r.getData().id) await fetch('/api/module/FSAP01/advance-receipts/delete', {
-                method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({id: r.getData().id})
-            });
-            r.delete();
-        });
-    }
+function showTab(name) {
+    document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+    document.getElementById(name + 'Panel').classList.add('active');
+    const idx = {sapInv: 0, sapCn: 1, gst: 2}[name];
+    document.querySelectorAll('.tab')[idx].classList.add('active');
 
-    // ===== INCOMING PAYMENTS =====
-    function initIP() {
-        ipTable = new Tabulator("#ipTable", {
-            height: "calc(100vh - 250px)", layout: "fitData",
-            columns: [
-                {formatter: "rowSelection", titleFormatter: "rowSelection", hozAlign: "center", headerSort: false, width: 40},
-                {title: "Payment #", field: "payment_number", editor: canEdit ? "input" : false, width: 130},
-                {title: "Date", field: "payment_date", editor: canEdit ? "date" : false, width: 110},
-                {title: "Party Type", field: "party_type", editor: canEdit ? "select" : false,
-                    editorParams: {values: {'': '', Agent: 'Agent', Customer: 'Customer', ImporterExporter: 'ImporterExporter'}}, width: 120},
-                {title: "Party Name", field: "party_name", editor: canEdit ? "input" : false, width: 180},
-                {title: "Amount", field: "amount", editor: canEdit ? "number" : false, hozAlign: "right", width: 110,
-                    formatter: "money", formatterParams: {precision: 2}},
-                {title: "Currency", field: "currency", editor: canEdit ? "input" : false, width: 70},
-                {title: "Payment Method", field: "payment_method", editor: canEdit ? "input" : false, width: 120},
-                {title: "Bank Ref", field: "bank_reference", editor: canEdit ? "input" : false, width: 140},
-                {title: "SAP Doc #", field: "sap_document_number", width: 120},
-                {title: "SAP FY", field: "sap_fiscal_year", width: 70},
-                {title: "Status", field: "status", width: 90, formatter: statusFmt},
-                {title: "Remarks", field: "remarks", editor: canEdit ? "input" : false, width: 200}
-            ],
-            pagination: true, paginationMode: "remote", paginationSize: 20,
-            ajaxURL: "/api/module/FSAP01/incoming-payments",
-            ajaxResponse: function(url, params, response) {
-                document.getElementById('ipRowCount').textContent = response.total;
-                return response;
-            },
-            selectable: true
-        });
-    }
-
-    function addIPRow() { ipTable.addRow({currency: 'INR', payment_date: new Date().toISOString().split('T')[0]}, false); }
-
-    async function saveIP() {
-        for (const row of ipTable.getRows()) {
-            const data = row.getData();
-            if (!data.party_name) continue;
-            const res = await fetch('/api/module/FSAP01/incoming-payments/save', {
-                method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(data)
-            });
-            const result = await res.json();
-            if (result.id) row.update({id: result.id});
-        }
-        ipTable.setData("/api/module/FSAP01/incoming-payments");
-    }
-
-    function deleteIPSelected() {
-        const sel = ipTable.getSelectedRows();
-        if (!sel.length) { alert('Select rows'); return; }
-        if (!confirm(`Delete ${sel.length} row(s)?`)) return;
-        sel.forEach(async r => {
-            if (r.getData().id) await fetch('/api/module/FSAP01/incoming-payments/delete', {
-                method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({id: r.getData().id})
-            });
-            r.delete();
-        });
-    }
-
-    // ===== GL JOURNAL VOUCHERS =====
-    function initJV() {
-        jvTable = new Tabulator("#jvTable", {
-            height: "calc(100vh - 250px)", layout: "fitData",
-            columns: [
-                {formatter: "rowSelection", titleFormatter: "rowSelection", hozAlign: "center", headerSort: false, width: 40},
-                {title: "JV Number", field: "jv_number", editor: canEdit ? "input" : false, width: 130},
-                {title: "JV Date", field: "jv_date", editor: canEdit ? "date" : false, width: 110},
-                {title: "Description", field: "description", editor: canEdit ? "input" : false, width: 250},
-                {title: "Total Debit", field: "total_debit", editor: canEdit ? "number" : false, hozAlign: "right", width: 110,
-                    formatter: "money", formatterParams: {precision: 2}},
-                {title: "Total Credit", field: "total_credit", editor: canEdit ? "number" : false, hozAlign: "right", width: 110,
-                    formatter: "money", formatterParams: {precision: 2}},
-                {title: "SAP Doc #", field: "sap_document_number", width: 120},
-                {title: "SAP FY", field: "sap_fiscal_year", width: 70},
-                {title: "Status", field: "status", width: 90, formatter: statusFmt}
-            ],
-            pagination: true, paginationMode: "remote", paginationSize: 20,
-            ajaxURL: "/api/module/FSAP01/gl-jvs",
-            ajaxResponse: function(url, params, response) {
-                document.getElementById('jvRowCount').textContent = response.total;
-                return response;
-            },
-            selectable: true
-        });
-    }
-
-    function addJVRow() { jvTable.addRow({jv_date: new Date().toISOString().split('T')[0]}, false); }
-
-    async function saveJV() {
-        for (const row of jvTable.getRows()) {
-            const data = row.getData();
-            if (!data.jv_number && !data.description) continue;
-            const res = await fetch('/api/module/FSAP01/gl-jvs/save', {
-                method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(data)
-            });
-            const result = await res.json();
-            if (result.id) row.update({id: result.id});
-        }
-        jvTable.setData("/api/module/FSAP01/gl-jvs");
-    }
-
-    function deleteJVSelected() {
-        const sel = jvTable.getSelectedRows();
-        if (!sel.length) { alert('Select rows'); return; }
-        if (!confirm(`Delete ${sel.length} row(s)?`)) return;
-        sel.forEach(async r => {
-            if (r.getData().id) await fetch('/api/module/FSAP01/gl-jvs/delete', {
-                method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({id: r.getData().id})
-            });
-            r.delete();
-        });
-    }
-
-    initAR(); initIP(); initJV();
+    // Trigger data load on first switch
+    if (name === 'sapCn') sapCnTable.setData('/api/module/FSAP01/sap-cn-logs');
+    if (name === 'gst')   gstTable.setData('/api/module/FSAP01/gst-logs');
+}
 </script>
 {% endblock %}
