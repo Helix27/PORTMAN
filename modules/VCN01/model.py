@@ -25,15 +25,44 @@ def get_vessels():
     conn.close()
     return [{'value': f"{r['doc_num']}/{r['vessel_name']}", 'doc_num': r['doc_num'], 'vessel_name': r['vessel_name']} for r in rows]
 
-def get_data(page=1, size=20):
+def get_data(page=1, size=20, filters=None):
     conn = get_db()
     cur = get_cursor(conn)
-    cur.execute('SELECT COUNT(*) FROM vcn_header')
-    total = cur.fetchone()['count']
-    cur.execute('SELECT * FROM vcn_header ORDER BY id DESC LIMIT %s OFFSET %s', (size, (page-1)*size))
-    rows = cur.fetchall()
-    conn.close()
-    return [dict(r) for r in rows], total
+
+    allowed = {'operation_type','vcn_doc_num','vessel_name','vessel_agent_name',
+               'cargo_type','doc_status','doc_date','importer_exporter_name',
+               'customer_name','load_port','discharge_port'}
+    where_clauses, params = [], []
+    for f in (filters or []):
+        field = f.get('field', '')
+        if field not in allowed:
+            continue
+        ftype = f.get('type')
+        if ftype == 'contains' and f.get('value'):
+            where_clauses.append(f"{field} ILIKE %s")
+            params.append(f"%{f['value']}%")
+        elif ftype == 'multi' and f.get('values'):
+            ph = ','.join(['%s'] * len(f['values']))
+            where_clauses.append(f"{field} IN ({ph})")
+            params.extend(f['values'])
+        elif ftype == 'range':
+            if f.get('from'):
+                where_clauses.append(f"{field} >= %s")
+                params.append(f['from'])
+            if f.get('to'):
+                where_clauses.append(f"{field} <= %s")
+                params.append(f['to'])
+
+    where_sql = f"WHERE {' AND '.join(where_clauses)}" if where_clauses else ""
+    try:
+        cur.execute(f'SELECT COUNT(*) FROM vcn_header {where_sql}', params)
+        total = cur.fetchone()['count']
+        cur.execute(f'SELECT * FROM vcn_header {where_sql} ORDER BY id DESC LIMIT %s OFFSET %s',
+                    params + [size, (page - 1) * size])
+        rows = cur.fetchall()
+        return [dict(r) for r in rows], total
+    finally:
+        conn.close()
 
 def save_header(data):
     _clean_empty(data)

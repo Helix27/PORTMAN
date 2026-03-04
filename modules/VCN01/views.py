@@ -1,3 +1,4 @@
+import json as _json
 from flask import Blueprint, render_template, request, jsonify, session, redirect, url_for
 from functools import wraps
 from . import model
@@ -30,9 +31,16 @@ def view():
 @bp.route('/api/module/VCN01/data')
 @login_required
 def get_data():
-    page = int(request.args.get('page', 1))
-    size = int(request.args.get('size', 20))
-    data, total = model.get_data(page, size)
+    try:
+        page = int(request.args.get('page', 1))
+        size = int(request.args.get('size', 20))
+    except (ValueError, TypeError):
+        page, size = 1, 20
+    try:
+        filters = _json.loads(request.args.get('filters', '[]'))
+    except _json.JSONDecodeError:
+        filters = []
+    data, total = model.get_data(page, size, filters)
     return jsonify({'data': data, 'last_page': (total + size - 1) // size, 'total': total})
 
 @bp.route('/api/module/VCN01/vessels')
@@ -59,9 +67,13 @@ def save():
     if not is_new:
         current_status = model.get_doc_status(data['id'])
         if current_status == 'Approved':
-            return jsonify({'error': 'Cannot edit an approved record'}), 403
-
-    data['doc_status'] = 'Draft'
+            if not is_approver:
+                return jsonify({'error': 'Cannot edit an approved record'}), 403
+            data['doc_status'] = 'Approved'
+        else:
+            data['doc_status'] = 'Draft'
+    else:
+        data['doc_status'] = 'Draft'
 
     row_id, doc_num = model.save_header(data)
     return jsonify({'success': True, 'id': row_id, 'vcn_doc_num': doc_num, 'doc_status': data.get('doc_status')})

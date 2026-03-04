@@ -4,6 +4,23 @@
 
 {% block head %}
 <style>
+    .btn-approve {
+        background: #38a169; color: white; border: none;
+        padding: 2px 7px; border-radius: 4px; cursor: pointer;
+        font-size: 12px; font-weight: 700; line-height: 1.6;
+    }
+    .btn-approve:hover { background: #276749; }
+    .btn-reject {
+        background: #e53e3e; color: white; border: none;
+        padding: 2px 7px; border-radius: 4px; cursor: pointer;
+        font-size: 12px; font-weight: 700; line-height: 1.6;
+    }
+    .btn-reject:hover { background: #9b2c2c; }
+    .approval-badge {
+        padding: 2px 8px; border-radius: 12px;
+        font-size: 11px; font-weight: 600; cursor: pointer;
+        display: inline-block;
+    }
     .detail-modal {
         display: none;
         position: fixed;
@@ -220,6 +237,116 @@
         gap: 8px;
         align-items: center;
     }
+    /* Dirty section indicator */
+    .sub-section-header.dirty-section::after {
+        content: ' ●';
+        color: #e53e3e;
+        font-size: 12px;
+        margin-left: 4px;
+    }
+    /* Unsaved warning modal */
+    .unsaved-modal-overlay {
+        display: none;
+        position: fixed;
+        inset: 0;
+        background: rgba(0,0,0,0.6);
+        z-index: 19999;
+        align-items: center;
+        justify-content: center;
+    }
+    .unsaved-modal-overlay.active { display: flex; }
+    .unsaved-modal-box {
+        background: white;
+        border-radius: 8px;
+        padding: 20px 24px;
+        max-width: 380px;
+        width: 90%;
+        box-shadow: 0 8px 32px rgba(0,0,0,0.3);
+    }
+    .dark-theme .unsaved-modal-box { background: #1e293b; color: #e2e8f0; }
+    .unsaved-modal-box h4 { margin: 0 0 8px; font-size: 15px; }
+    .unsaved-modal-box ul { margin: 0 0 16px; padding-left: 18px; font-size: 13px; }
+    .unsaved-modal-actions { display: flex; gap: 8px; justify-content: flex-end; flex-wrap: wrap; }
+    /* Header unsaved banner */
+    .unsaved-banner {
+        display: none;
+        background: #fffbeb;
+        border: 1px solid #f6e05e;
+        color: #744210;
+        padding: 6px 14px;
+        font-size: 12px;
+        font-weight: 500;
+        border-radius: 4px;
+        margin-bottom: 6px;
+        align-items: center;
+        gap: 8px;
+    }
+    .unsaved-banner.visible { display: flex; }
+    .dark-theme .unsaved-banner { background: #2d3748; border-color: #4a5568; color: #fbd38d; }
+    /* Autosave toast */
+    .autosave-toast {
+        position: fixed;
+        bottom: 20px;
+        right: 20px;
+        background: #2d3748;
+        color: white;
+        padding: 10px 16px;
+        border-radius: 6px;
+        font-size: 12px;
+        z-index: 99999;
+        opacity: 0;
+        transition: opacity 0.3s;
+        pointer-events: none;
+    }
+    .autosave-toast.show { opacity: 1; }
+    /* Filter panel */
+    .filter-panel {
+        background: #f7fafc;
+        border: 1px solid #e2e8f0;
+        border-radius: 6px;
+        padding: 10px 14px;
+        margin-bottom: 8px;
+    }
+    .dark-theme .filter-panel { background: #1e293b; border-color: #334155; }
+    .filter-row {
+        display: flex;
+        gap: 8px;
+        align-items: center;
+        margin-bottom: 6px;
+        flex-wrap: wrap;
+    }
+    .filter-col-select, .filter-text-input, .filter-from, .filter-to {
+        padding: 4px 8px;
+        border: 1px solid #cbd5e0;
+        border-radius: 4px;
+        font-size: 12px;
+        background: white;
+    }
+    .dark-theme .filter-col-select,
+    .dark-theme .filter-text-input,
+    .dark-theme .filter-from,
+    .dark-theme .filter-to { background: #0f172a; color: #e2e8f0; border-color: #334155; }
+    .filter-multi-list {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+        align-items: center;
+    }
+    .filter-multi-list label { display: flex; gap: 4px; align-items: center; font-size: 12px; cursor: pointer; }
+    .filter-remove {
+        background: none;
+        border: none;
+        color: #e53e3e;
+        cursor: pointer;
+        font-size: 16px;
+        padding: 0 4px;
+        line-height: 1;
+    }
+    .filter-actions { display: flex; gap: 8px; margin-top: 6px; flex-wrap: wrap; }
+    .btn-filter-add { background: #edf2f7; color: #2d3748; border: 1px solid #cbd5e0; padding: 4px 12px; border-radius: 4px; font-size: 12px; cursor: pointer; }
+    .btn-filter-apply { background: #3182ce; color: white; border: none; padding: 5px 14px; border-radius: 4px; font-size: 12px; cursor: pointer; }
+    .btn-filter-clear { background: #e2e8f0; color: #2d3748; border: none; padding: 5px 14px; border-radius: 4px; font-size: 12px; cursor: pointer; }
+    .sub-save-status { font-size: 11px; color: #38a169; margin-left: 8px; }
 </style>
 {% endblock %}
 
@@ -234,7 +361,20 @@
     {% if permissions.can_add %}<button class="btn btn-add" onclick="addRow()">+ Add Row</button>{% endif %}
     {% if permissions.can_delete %}<button class="btn btn-delete" onclick="deleteSelected()">Delete Selected</button>{% endif %}
     {% if permissions.can_add or permissions.can_edit %}<button class="btn btn-save" onclick="saveAll()">Save (Ctrl+S)</button>{% endif %}
+    <button class="btn" style="font-size:12px;padding:4px 12px;" onclick="toggleFilterPanel()">⚙ Filters <span id="filterBadge" style="display:none;background:#3182ce;color:white;border-radius:10px;padding:1px 6px;font-size:11px;margin-left:4px;">0</span></button>
     <div class="row-info">Rows: <span id="rowCount">0</span> / <span id="totalCount">0</span></div>
+</div>
+<!-- Header unsaved banner -->
+<div id="unsavedBanner" class="unsaved-banner">
+    ⚠ You have unsaved header changes &mdash; <button class="btn btn-save" onclick="saveAll()" style="margin:0;padding:3px 10px;font-size:12px;">Save Now</button>
+</div>
+<div id="filterPanel" class="filter-panel" style="display:none;">
+    <div id="filterRows"></div>
+    <div class="filter-actions">
+        <button class="btn-filter-add" onclick="addFilterRow()">+ Add Filter</button>
+        <button class="btn-filter-apply" onclick="applyFilters()">Apply</button>
+        <button class="btn-filter-clear" onclick="clearFilters()">Clear All</button>
+    </div>
 </div>
 
 <div id="table"></div>
@@ -243,7 +383,10 @@
 <div id="detailsModal" class="detail-modal">
     <div class="detail-modal-content">
         <div class="detail-modal-header">
-            <h3 id="modalTitle">LDUD Details</h3>
+            <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+                <h3 id="modalTitle" style="margin:0;">Details</h3>
+                <span id="modalDirtyBadge" style="display:none;background:#fed7d7;color:#c53030;padding:2px 8px;border-radius:12px;font-size:11px;font-weight:600;">⚠ Unsaved changes</span>
+            </div>
             <button class="detail-modal-close" onclick="closeDetailsModal()">Close</button>
         </div>
         <div class="detail-modal-body">
@@ -251,6 +394,32 @@
         </div>
     </div>
 </div>
+<!-- Reject Modal -->
+<div id="rejectModal" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.5);z-index:99999;align-items:center;justify-content:center;">
+    <div style="background:white;border-radius:8px;padding:24px;max-width:420px;width:90%;box-shadow:0 4px 24px rgba(0,0,0,0.3);">
+        <h3 style="margin:0 0 14px;font-size:16px;font-weight:600;">Reject Record</h3>
+        <label style="display:block;margin-bottom:6px;font-size:13px;font-weight:500;">Reason <span style="color:#e53e3e">*</span></label>
+        <textarea id="rejectComment" rows="4" placeholder="Enter rejection reason..." style="width:100%;box-sizing:border-box;padding:8px;border:1px solid #cbd5e0;border-radius:4px;font-size:13px;resize:vertical;"></textarea>
+        <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:14px;">
+            <button onclick="closeRejectModal()" style="padding:6px 18px;border:1px solid #cbd5e0;background:white;border-radius:4px;cursor:pointer;font-size:13px;">Cancel</button>
+            <button onclick="confirmReject()" style="padding:6px 18px;background:#e53e3e;color:white;border:none;border-radius:4px;cursor:pointer;font-size:13px;font-weight:600;">Reject</button>
+        </div>
+    </div>
+</div>
+<!-- Unsaved Changes Warning Modal -->
+<div id="unsavedModal" class="unsaved-modal-overlay">
+    <div class="unsaved-modal-box">
+        <h4>⚠ Unsaved Changes</h4>
+        <p style="font-size:13px;margin:0 0 8px;">The following sections have unsaved changes:</p>
+        <ul id="unsavedSectionList"></ul>
+        <div class="unsaved-modal-actions">
+            <button onclick="unsavedGoBack()" style="padding:6px 14px;border:1px solid #cbd5e0;background:white;border-radius:4px;cursor:pointer;font-size:13px;">Go Back</button>
+            <button onclick="unsavedDiscard()" style="padding:6px 14px;background:#e53e3e;color:white;border:none;border-radius:4px;cursor:pointer;font-size:13px;">Discard &amp; Close</button>
+            <button onclick="unsavedSaveAll()" style="padding:6px 14px;background:#38a169;color:white;border:none;border-radius:4px;cursor:pointer;font-size:13px;font-weight:600;">Save All &amp; Close</button>
+        </div>
+    </div>
+</div>
+<!-- Autosave Toast -->
 {% endblock %}
 
 {% block scripts %}
@@ -258,6 +427,7 @@
     addToRecent('LDUD01', 'Loading Unloading');
 
     let table;
+    let moduleConfig = {};
     let vcnList = [];
     let delayTypes = [];
     let bargeList = [];
@@ -269,6 +439,11 @@
     let equipmentList = [];
     let subTables = {};
     let stowagePlanData = {}; // Store stowage plan data per LDUD ID
+
+    // Dirty tracking
+    let dirtySubSections = {};
+    let headerDirty = false;
+    let _isSaving = false;
     let stowageHoldMeta = {}; // Hold metadata per LDUD ID
     let vesselOpsHoldFields = {}; // Dynamic vessel ops hold columns per LDUD ID
     let currentOperationTypes = {}; // Track operation type per ldud ID
@@ -297,8 +472,79 @@
         }
     }
 
+    function showUnsavedBanner() {
+        document.getElementById('unsavedBanner').classList.add('visible');
+    }
+    function hideUnsavedBanner() {
+        document.getElementById('unsavedBanner').classList.remove('visible');
+        headerDirty = false;
+    }
+
+    function markDirty(section) {
+        dirtySubSections[section] = true;
+        const header = document.querySelector(`[data-section="${section}"]`);
+        if (header) header.classList.add('dirty-section');
+        updateModalDirtyBadge();
+    }
+
+    function clearDirty(section) {
+        dirtySubSections[section] = false;
+        const header = document.querySelector(`[data-section="${section}"]`);
+        if (header) header.classList.remove('dirty-section');
+        updateModalDirtyBadge();
+    }
+
+    function clearAllDirty() {
+        dirtySubSections = {};
+        document.querySelectorAll('.sub-section-header.dirty-section').forEach(el => el.classList.remove('dirty-section'));
+        updateModalDirtyBadge();
+    }
+
+    function updateModalDirtyBadge() {
+        const hasDirty = Object.values(dirtySubSections).some(Boolean);
+        const badge = document.getElementById('modalDirtyBadge');
+        if (badge) badge.style.display = hasDirty ? 'inline-block' : 'none';
+    }
+
+    function getDirtySections() {
+        return Object.entries(dirtySubSections).filter(([,v]) => v).map(([k]) => k);
+    }
+
+    function showSubStatus(type, parentId, msg) {
+        const header = document.querySelector(`[data-section="${type}"]`);
+        if (!header) return;
+        let status = header.querySelector('.sub-save-status');
+        if (!status) {
+            status = document.createElement('span');
+            status.className = 'sub-save-status';
+            header.querySelector('.sub-section-actions').appendChild(status);
+        }
+        status.textContent = msg;
+        setTimeout(() => { status.textContent = ''; }, 3000);
+    }
+
+    function unsavedGoBack() {
+        document.getElementById('unsavedModal').classList.remove('active');
+    }
+
+    function unsavedDiscard() {
+        document.getElementById('unsavedModal').classList.remove('active');
+        closeDetailsModal(true);
+    }
+
+    async function unsavedSaveAll() {
+        const dirty = getDirtySections();
+        for (const section of dirty) {
+            await saveSubTable(section, currentLdudId, true);
+        }
+        document.getElementById('unsavedModal').classList.remove('active');
+        if (getDirtySections().length === 0) {
+            closeDetailsModal(true);
+        }
+    }
+
     async function loadMasterData() {
-        const [vcnRes, delayRes, bargeRes, contractorRes, cargoRes, ancRes, pplRes, holdsRes, equipRes] = await Promise.all([
+        const [vcnRes, delayRes, bargeRes, contractorRes, cargoRes, ancRes, pplRes, holdsRes, equipRes, configRes] = await Promise.all([
             fetch('/api/module/LDUD01/vcn_list'),
             fetch('/api/module/VDM01/all'),
             fetch('/api/module/VBM01/all'),
@@ -307,7 +553,8 @@
             fetch('/api/module/VANM01/all'),
             fetch('/api/module/PPL01/all'),
             fetch('/api/module/VHO01/all'),
-            fetch('/api/module/VEM01/all')
+            fetch('/api/module/VEM01/all'),
+            fetch('/admin/api/config/LDUD01')
         ]);
         vcnList = await vcnRes.json();
         delayTypes = await delayRes.json();
@@ -318,6 +565,8 @@
         payloaderList = await pplRes.json();
         holdMasterList = await holdsRes.json();
         equipmentList = await equipRes.json();
+        moduleConfig = await configRes.json();
+        initFilterConfig();
         initTable();
     }
 
@@ -454,7 +703,7 @@
         }
     }
 
-    async function saveVesselOpsTable(ldudId) {
+    async function saveVesselOpsTable(ldudId, silent = false) {
         const tableRef = subTables[ldudId] && subTables[ldudId].vessel_ops;
         if (!tableRef) return;
 
@@ -530,7 +779,8 @@
 
             await tableRef.setData(`/api/module/LDUD01/vessel_ops/${ldudId}`);
             updateHoldSummary(ldudId);
-            alert(`Saved ${savedCount} cell(s)${deletedCount ? `, removed ${deletedCount} empty cell(s)` : ''}`);
+            clearDirty('vessel_ops');
+            if (!silent) showSubStatus('vessel_ops', ldudId, `Saved ${savedCount} cell(s)${deletedCount ? `, removed ${deletedCount} empty cell(s)` : ''}`);
         } catch (err) {
             alert(`Error saving vessel operations: ${err.message}`);
         }
@@ -557,6 +807,8 @@
     }
 
     function initTable() {
+        const isApprover = moduleConfig.approver_id == '{{ session.user_id }}';
+        const isAdmin = {{ 'true' if session.get('is_admin') else 'false' }};
         const canEdit = permissions.can_edit || permissions.can_add;
         const vcnOptions = {};
         vcnList.forEach(v => { vcnOptions[v.value] = v.value; });
@@ -632,18 +884,27 @@
             {title: "Discharge/Loading Completed", field: "ops_completed", width: 170,
                 titleFormatter: function() { return "Disch./Load. Completed"; },
                 formatter: datetimeCellFormatter},
-            {title: "Status", field: "doc_status", width: 80,
+            {title: "Status", field: "doc_status", width: 90,
                 formatter: function(cell) {
                     const val = cell.getValue();
-                    let color = '#718096';
-                    if (val === 'Approved') color = '#38a169';
-                    else if (val === 'Rejected') color = '#e53e3e';
-                    else if (val === 'Pending') color = '#d69e2e';
-                    return `<span style="color:${color};font-weight:500">${val || ''}</span>`;
+                    const id = cell.getRow().getData().id;
+                    let color = '#744210', bg = '#fefcbf';
+                    if (val === 'Approved') { color = '#276749'; bg = '#c6f6d5'; }
+                    else if (val === 'Rejected') { color = '#9b2c2c'; bg = '#fed7d7'; }
+                    const click = id ? `onclick="showApprovalLog(${id}, event)"` : '';
+                    return `<span class="approval-badge" style="background:${bg};color:${color};" ${click} title="Click for history">${val || ''}</span>`;
                 }
             },
-            {title: "Created By", field: "created_by", width: 90}
-        ];
+            {title: "Created By", field: "created_by", width: 90},
+            (isApprover || isAdmin) ? {
+                title: "Approval", field: "_approval_actions", width: 90, headerSort: false,
+                formatter: function(cell) {
+                    const data = cell.getRow().getData();
+                    if (!data.id || data.doc_status === 'Approved') return '';
+                    return `<button class="btn-approve" onclick="approveRow(${data.id})">✓</button> <button class="btn-reject" onclick="rejectRow(${data.id})">✗</button>`;
+                }
+            } : null
+        ].filter(Boolean);
 
         table = new Tabulator("#table", {
             height: "calc(100vh - 160px)",
@@ -653,6 +914,7 @@
             paginationMode: "remote",
             paginationSize: 20,
             ajaxURL: "/api/module/LDUD01/data",
+            ajaxParams: function() { return currentFilters.length ? { filters: JSON.stringify(currentFilters) } : {}; },
             ajaxResponse: function(url, params, response) {
                 // Build display field using doc_date and operation_type from VCN
                 response.data.forEach(r => {
@@ -664,7 +926,33 @@
                 document.getElementById('totalCount').textContent = response.total;
                 return response;
             },
-            selectable: true
+            selectable: true,
+            rowFormatter: function(row) {
+                const data = row.getData();
+                const status = data.doc_status;
+                const el = row.getElement();
+                if (status === 'Approved') el.style.backgroundColor = '#f0fff4';
+                else if (status === 'Rejected') el.style.backgroundColor = '#fff5f5';
+                else el.style.backgroundColor = '#fffff0';
+                if (data._autosave_error) {
+                    el.style.outline = '2px solid #e53e3e';
+                    el.title = `Autosave failed: ${data._autosave_error}`;
+                } else {
+                    el.style.outline = '';
+                    el.title = '';
+                }
+            }
+        });
+
+        table.on('cellEdited', function() {
+            if (_isSaving) return;
+            headerDirty = true;
+            showUnsavedBanner();
+        });
+        table.on('rowAdded', function() {
+            if (_isSaving) return;
+            headerDirty = true;
+            showUnsavedBanner();
         });
 
         if (localStorage.getItem('theme') === 'dark') {
@@ -675,6 +963,8 @@
     async function openDetailsModal(data) {
         const ldudId = data.id;
         const operationType = data.operation_type || 'Import';
+        clearAllDirty();
+        dirtySubSections = {};
         currentLdudId = ldudId;
 
         // Set modal title
@@ -692,7 +982,7 @@
         if (operationType === 'Export') {
             vesselOpsSection = `
             <div class="sub-section">
-                <div class="sub-section-header">
+                <div class="sub-section-header" data-section="vessel_ops">
                     <span>MV Anchorage Loading</span>
                     <div class="sub-section-actions">
                         ${canAct ? `<button class="btn-sub-add" onclick="addVesselOpsDateRow(${ldudId})">+ Add</button>` : ''}
@@ -707,7 +997,7 @@
         } else {
             vesselOpsSection = `
             <div class="sub-section">
-                <div class="sub-section-header">
+                <div class="sub-section-header" data-section="vessel_ops">
                     <span>MV Anchorage Discharge</span>
                     <div class="sub-section-actions">
                         ${canAct ? `<button class="btn-sub-add" onclick="addVesselOpsDateRow(${ldudId})">+ Add</button>` : ''}
@@ -726,7 +1016,7 @@
         subContainer.className = 'sub-table-container';
         subContainer.innerHTML = `
             <div class="sub-section">
-                <div class="sub-section-header">
+                <div class="sub-section-header" data-section="delays">
                     <span>Delays</span>
                     <div class="sub-section-actions">
                         ${canAct ? `<button class="btn-sub-add" onclick="addSubRow('delays', ${ldudId})">+ Add</button>` : ''}
@@ -736,7 +1026,7 @@
                 <div class="sub-section-content"><div id="delays-table-${ldudId}" class="sub-tabulator"></div></div>
             </div>
             <div class="sub-section">
-                <div class="sub-section-header">
+                <div class="sub-section-header" data-section="anchorage">
                     <span>${anchorageTitle}</span>
                     <div class="sub-section-actions">
                         ${canAct ? `<button class="btn-sub-add" onclick="addSubRow('anchorage', ${ldudId})">+ Add</button>` : ''}
@@ -747,7 +1037,7 @@
             </div>
             ${vesselOpsSection}
             <div class="sub-section">
-                <div class="sub-section-header">
+                <div class="sub-section-header" data-section="barge_lines">
                     <span>${operationType === 'Export' ? 'Barge Lines Export' : 'Barge Lines'}</span>
                     <div class="sub-section-actions">
                         ${canAct ? `<button class="btn-sub-add" onclick="addSubRow('barge_lines', ${ldudId})">+ Add</button>` : ''}
@@ -759,7 +1049,7 @@
                 </div>
             </div>
             <div class="sub-section">
-                <div class="sub-section-header">
+                <div class="sub-section-header" data-section="barge_cleaning">
                     <span>Barge Cleaning Lines</span>
                     <div class="sub-section-actions">
                         ${canAct ? `<button class="btn-sub-add" onclick="addSubRow('barge_cleaning', ${ldudId})">+ Add</button>` : ''}
@@ -769,7 +1059,7 @@
                 <div class="sub-section-content"><div id="barge_cleaning-table-${ldudId}" class="sub-tabulator"></div></div>
             </div>
             <div class="sub-section">
-                <div class="sub-section-header">
+                <div class="sub-section-header" data-section="hold_completion">
                     <span>${operationType === 'Export' ? 'Hold Loading Completion' : 'Hold Discharge Completion'}</span>
                     <div class="sub-section-actions">
                         ${canAct ? `<button class="btn-sub-save" onclick="saveSubTable('hold_completion', ${ldudId})">Save</button>` : ''}
@@ -789,22 +1079,24 @@
         await initSubTables(ldudId, operationType);
     }
 
-    function closeDetailsModal() {
+    function closeDetailsModal(force = false) {
+        const dirty = getDirtySections();
+        if (!force && dirty.length > 0) {
+            const list = document.getElementById('unsavedSectionList');
+            list.innerHTML = dirty.map(s => `<li>${s.replace(/_/g,' ')}</li>`).join('');
+            document.getElementById('unsavedModal').classList.add('active');
+            return;
+        }
         const modal = document.getElementById('detailsModal');
         modal.classList.remove('active');
-
-        // Clean up sub-tables
         if (currentLdudId && subTables[currentLdudId]) {
             Object.values(subTables[currentLdudId]).forEach(t => {
-                if (t && typeof t.destroy === 'function') {
-                    t.destroy();
-                }
+                if (t && typeof t.destroy === 'function') t.destroy();
             });
             delete subTables[currentLdudId];
         }
-
-        // Clear modal content
         document.getElementById('modalSubTables').innerHTML = '';
+        clearAllDirty();
         currentLdudId = null;
     }
 
@@ -1180,6 +1472,7 @@
             layout: "fitDataFill",
             height: 200,
             ajaxURL: `/api/module/LDUD01/delays/${ldudId}`,
+            cellEdited: () => markDirty('delays'),
             columns: [
                 {title: "Crane No", field: "crane_number", width: 110, editor: canEdit ? craneMultiSelectEditor : false,
                     formatter: function(cell) {
@@ -1218,6 +1511,7 @@
             layout: "fitColumns",
             height: 200,
             ajaxURL: `/api/module/LDUD01/anchorage/${ldudId}`,
+            cellEdited: () => markDirty('anchorage'),
             columns: [
                 {title: "Anchorage Name", field: "anchorage_name", widthGrow: 1, editor: canEdit ? "list" : false,
                     editorParams: {values: anchorageOptions, autocomplete: true, allowEmpty: true}},
@@ -1327,6 +1621,7 @@
             layout: "fitDataFill",
             height: 250,
             ajaxURL: `/api/module/LDUD01/barge_lines/${ldudId}`,
+            cellEdited: () => markDirty('barge_lines'),
             columns: bargeLinesColumns
         });
         if (isDark) document.querySelector(`#barge_lines-table-${ldudId}`).classList.add('tabulator-dark');
@@ -1442,6 +1737,7 @@
                     return buildVesselOpsRowsFromApi(ldudId, response);
                 },
                 columnHeaderVertAlign: "bottom",
+                cellEdited: () => markDirty('vessel_ops'),
                 columns: [
                     dateCol,
                     ...vesselOpsHoldColumnGroups,
@@ -1477,6 +1773,7 @@
             layout: "fitDataFill",
             height: 200,
             ajaxURL: `/api/module/LDUD01/barge_cleaning/${ldudId}`,
+            cellEdited: () => markDirty('barge_cleaning'),
             columns: [
                 {title: "Barge", field: "barge_name", width: 130, editor: canEdit ? "list" : false,
                     editorParams: function() { return {values: getBargeCleaningOptions(), autocomplete: true, allowEmpty: true}; }},
@@ -1575,6 +1872,7 @@
             layout: "fitColumns",
             height: 200,
             ajaxURL: `/api/module/LDUD01/hold_completion/${ldudId}`,
+            cellEdited: () => markDirty('hold_completion'),
             ajaxResponse: function(url, params, response) {
                 // Sync holds asynchronously then update the table
                 syncHoldCompletionRows(response).then(synced => {
@@ -1720,9 +2018,9 @@
         }
     }
 
-    async function saveSubTable(type, ldudId) {
+    async function saveSubTable(type, ldudId, silent = false) {
         if (type === 'vessel_ops') {
-            await saveVesselOpsTable(ldudId);
+            await saveVesselOpsTable(ldudId, silent);
             return;
         }
 
@@ -1754,7 +2052,8 @@
             }
         });
 
-        alert(`Saved ${savedCount} row(s)`);
+        clearDirty(type);
+        if (!silent) showSubStatus(type, ldudId, `Saved ${savedCount} row(s)`);
     }
 
     async function deleteSubRow(type, id, ldudId) {
@@ -1812,29 +2111,177 @@
     }
 
     async function saveAll() {
-        showStatus('Saving...', 'saving');
-        const rows = table.getRows();
-        let savedCount = 0;
-        for (const row of rows) {
-            const data = row.getData();
-            const res = await fetch("/api/module/LDUD01/save", {
-                method: 'POST',
-                headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify(data)
-            });
-            const result = await res.json();
-            if (result.id) {
-                row.update({id: result.id, doc_num: result.doc_num, doc_status: result.doc_status});
-                savedCount++;
+        _isSaving = true;
+        try {
+            showStatus('Saving...', 'saving');
+            const rows = table.getRows();
+            let savedCount = 0;
+            for (const row of rows) {
+                const data = row.getData();
+                const res = await fetch("/api/module/LDUD01/save", {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify(data)
+                });
+                const result = await res.json();
+                if (result.id) {
+                    row.update({id: result.id, doc_num: result.doc_num, doc_status: result.doc_status});
+                    savedCount++;
+                }
             }
+            showStatus(`Saved ${savedCount} row(s)`, 'saved');
+            hideUnsavedBanner();
+            await table.setData("/api/module/LDUD01/data");
+        } finally {
+            _isSaving = false;
         }
-        showStatus(`Saved ${savedCount} row(s)`, 'saved');
-        table.setData("/api/module/LDUD01/data");
     }
 
     document.addEventListener('keydown', function(e) {
         if ((e.ctrlKey || e.metaKey) && e.key === 's') { e.preventDefault(); saveAll(); }
     });
+
+    // Approval functions
+    let rejectTargetId = null;
+
+    async function approveRow(id) {
+        if (!confirm('Approve this record?')) return;
+        const res = await fetch('/api/module/LDUD01/approve', {
+            method: 'POST', headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({id: id})
+        });
+        const data = await res.json();
+        if (data.error) { alert(data.error); return; }
+        const row = table.getRows().find(r => r.getData().id === id);
+        if (row) { row.update({doc_status: 'Approved'}); row.reformat(); }
+    }
+
+    function rejectRow(id) {
+        rejectTargetId = id;
+        document.getElementById('rejectComment').value = '';
+        document.getElementById('rejectModal').style.display = 'flex';
+    }
+
+    function closeRejectModal() {
+        document.getElementById('rejectModal').style.display = 'none';
+        rejectTargetId = null;
+    }
+
+    async function confirmReject() {
+        const comment = document.getElementById('rejectComment').value.trim();
+        if (!comment) { alert('Please enter a rejection reason.'); return; }
+        const res = await fetch('/api/module/LDUD01/reject', {
+            method: 'POST', headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({id: rejectTargetId, comment: comment})
+        });
+        const data = await res.json();
+        if (data.error) { alert(data.error); return; }
+        const row = table.getRows().find(r => r.getData().id === rejectTargetId);
+        if (row) { row.update({doc_status: 'Rejected'}); row.reformat(); }
+        closeRejectModal();
+    }
+
+    async function showApprovalLog(id, event) {
+        event.stopPropagation();
+        const res = await fetch(`/api/module/LDUD01/approval-log/${id}`);
+        const log = await res.json();
+        if (!log.length) { alert('No approval history yet.'); return; }
+        const lines = log.map(e => `${e.actioned_at}  ${e.action} by ${e.actioned_by}${e.comment ? '\n  Reason: ' + e.comment : ''}`);
+        alert('Approval History:\n\n' + lines.join('\n\n'));
+    }
+
+    // ── Filter panel ──────────────────────────────────────────────────────────
+    let currentFilters = [];
+    let FILTER_CONFIG = {};
+
+    function initFilterConfig() {
+        FILTER_CONFIG = {
+            doc_num:        { label: 'LDUD Doc',       type: 'contains' },
+            vessel_name:    { label: 'Vessel Name',    type: 'contains' },
+            vcn_doc_num:    { label: 'VCN Doc',        type: 'contains' },
+            operation_type: { label: 'Operation Type', type: 'multi',   values: ['Import', 'Export'] },
+            cargo_type:     { label: 'Cargo Type',     type: 'multi',   values: cargoNames },
+            doc_date:       { label: 'Doc Date',       type: 'range' },
+            doc_status:     { label: 'Status',         type: 'multi',   values: ['Draft', 'Approved', 'Rejected', 'Pending'] },
+        };
+    }
+
+    function toggleFilterPanel() {
+        const panel = document.getElementById('filterPanel');
+        panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
+    }
+
+    function addFilterRow() {
+        const container = document.getElementById('filterRows');
+        const colOptions = Object.entries(FILTER_CONFIG)
+            .map(([k, v]) => `<option value="${k}">${v.label}</option>`).join('');
+        const row = document.createElement('div');
+        row.className = 'filter-row';
+        row.innerHTML = `
+            <select class="filter-col-select" onchange="onFilterColChange(this)">
+                <option value="">-- Column --</option>${colOptions}
+            </select>
+            <div class="filter-value-container"></div>
+            <button class="filter-remove" onclick="this.closest('.filter-row').remove();updateFilterBadge();">×</button>`;
+        container.appendChild(row);
+    }
+
+    function onFilterColChange(sel) {
+        const container = sel.closest('.filter-row').querySelector('.filter-value-container');
+        const col = sel.value;
+        if (!col) { container.innerHTML = ''; return; }
+        const cfg = FILTER_CONFIG[col];
+        if (cfg.type === 'contains') {
+            container.innerHTML = `<input class="filter-text-input" type="text" placeholder="contains...">`;
+        } else if (cfg.type === 'multi') {
+            container.innerHTML = `<div class="filter-multi-list">${
+                cfg.values.map(v => `<label><input type="checkbox" class="filter-checkbox" value="${v}"> ${v}</label>`).join('')
+            }</div>`;
+        } else if (cfg.type === 'range') {
+            container.innerHTML = `<input class="filter-from" type="date"> <span style="font-size:12px">to</span> <input class="filter-to" type="date">`;
+        }
+    }
+
+    function collectFilters() {
+        const filters = [];
+        document.querySelectorAll('#filterRows .filter-row').forEach(row => {
+            const col = (row.querySelector('.filter-col-select') || {}).value;
+            if (!col) return;
+            const cfg = FILTER_CONFIG[col];
+            if (cfg.type === 'contains') {
+                const v = (row.querySelector('.filter-text-input') || {}).value || '';
+                if (v.trim()) filters.push({ field: col, type: 'contains', value: v.trim() });
+            } else if (cfg.type === 'multi') {
+                const checked = [...row.querySelectorAll('.filter-checkbox:checked')].map(cb => cb.value);
+                if (checked.length) filters.push({ field: col, type: 'multi', values: checked });
+            } else if (cfg.type === 'range') {
+                const from = (row.querySelector('.filter-from') || {}).value || '';
+                const to   = (row.querySelector('.filter-to')   || {}).value || '';
+                if (from || to) filters.push({ field: col, type: 'range', from, to });
+            }
+        });
+        return filters;
+    }
+
+    function applyFilters() {
+        currentFilters = collectFilters();
+        updateFilterBadge();
+        table.replaceData();
+    }
+
+    function clearFilters() {
+        document.getElementById('filterRows').innerHTML = '';
+        currentFilters = [];
+        updateFilterBadge();
+        table.replaceData();
+    }
+
+    function updateFilterBadge() {
+        const active = collectFilters().length;
+        const badge = document.getElementById('filterBadge');
+        if (badge) { badge.textContent = active; badge.style.display = active > 0 ? 'inline' : 'none'; }
+    }
+    // ── End filter panel ──────────────────────────────────────────────────────
 
     loadMasterData();
 </script>

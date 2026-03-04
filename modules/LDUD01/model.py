@@ -52,128 +52,156 @@ def get_vcn_list():
     conn.close()
     return _build_vcn_list(rows)
 
-def get_data(page=1, size=20):
+def get_data(page=1, size=20, filters=None):
     conn = get_db()
     cur = get_cursor(conn)
-    cur.execute('SELECT COUNT(*) FROM ldud_header')
-    total = cur.fetchone()['count']
-    cur.execute('SELECT * FROM ldud_header ORDER BY id DESC LIMIT %s OFFSET %s', (size, (page-1)*size))
-    rows = [dict(r) for r in cur.fetchall()]
 
-    # Collect vcn_ids to batch-fetch computed fields
-    vcn_ids = list(set(r['vcn_id'] for r in rows if r.get('vcn_id')))
-    ldud_ids = [r['id'] for r in rows if r.get('id')]
+    allowed = {'doc_num','vessel_name','doc_status','doc_date','vcn_doc_num',
+               'operation_type','cargo_type'}
+    where_clauses, params = [], []
+    for f in (filters or []):
+        field = f.get('field', '')
+        if field not in allowed:
+            continue
+        ftype = f.get('type')
+        if ftype == 'contains' and f.get('value'):
+            where_clauses.append(f"{field} ILIKE %s")
+            params.append(f"%{f['value']}%")
+        elif ftype == 'multi' and f.get('values'):
+            ph = ','.join(['%s'] * len(f['values']))
+            where_clauses.append(f"{field} IN ({ph})")
+            params.extend(f['values'])
+        elif ftype == 'range':
+            if f.get('from'):
+                where_clauses.append(f"{field} >= %s")
+                params.append(f['from'])
+            if f.get('to'):
+                where_clauses.append(f"{field} <= %s")
+                params.append(f['to'])
 
-    vcn_cargo = {}   # vcn_id -> {cargo_names, bl_quantities}
-    vcn_agents = {}  # vcn_id -> {agent_name, stevedore_name}
-    vcn_meta = {}    # vcn_id -> {doc_date}
-    vo_by_cargo = {} # ldud_id -> {cargo_name: total_qty}
-    vo_times = {}    # ldud_id -> {first_start, last_end}
+    where_sql = f"WHERE {' AND '.join(where_clauses)}" if where_clauses else ""
+    try:
+        cur.execute(f'SELECT COUNT(*) FROM ldud_header {where_sql}', params)
+        total = cur.fetchone()['count']
+        cur.execute(f'SELECT * FROM ldud_header {where_sql} ORDER BY id DESC LIMIT %s OFFSET %s',
+                    params + [size, (page - 1) * size])
+        rows = [dict(r) for r in cur.fetchall()]
 
-    if vcn_ids:
-        # Fetch doc_date for display
-        cur.execute('SELECT id, doc_date FROM vcn_header WHERE id = ANY(%s)', (vcn_ids,))
-        for v in cur.fetchall():
-            vcn_meta[v['id']] = {'doc_date': v['doc_date'] or ''}
+        # Collect vcn_ids to batch-fetch computed fields
+        vcn_ids = list(set(r['vcn_id'] for r in rows if r.get('vcn_id')))
+        ldud_ids = [r['id'] for r in rows if r.get('id')]
 
-        # Cargo names, BL quantities and UOM from VCN cargo declarations (Import + Export)
-        cur.execute('''SELECT vcn_id, cargo_name, bl_quantity, quantity_uom FROM vcn_cargo_declaration
-                       WHERE vcn_id = ANY(%s) AND cargo_name IS NOT NULL''', (vcn_ids,))
-        import_cargo = cur.fetchall()
-        cur.execute('''SELECT vcn_id, cargo_name, bl_quantity, quantity_uom FROM vcn_export_cargo_declaration
-                       WHERE vcn_id = ANY(%s) AND cargo_name IS NOT NULL''', (vcn_ids,))
-        export_cargo = cur.fetchall()
-        for row_list in [import_cargo, export_cargo]:
-            for c in row_list:
-                vid = c['vcn_id']
-                if vid not in vcn_cargo:
-                    vcn_cargo[vid] = {'names': [], 'quantities': [], 'uoms': []}
-                name = c['cargo_name']
-                qty = float(c['bl_quantity'] or 0)
-                uom = c['quantity_uom'] or ''
-                if name not in vcn_cargo[vid]['names']:
-                    vcn_cargo[vid]['names'].append(name)
-                    vcn_cargo[vid]['quantities'].append(qty)
-                    vcn_cargo[vid]['uoms'].append(uom)
-                else:
-                    idx = vcn_cargo[vid]['names'].index(name)
-                    vcn_cargo[vid]['quantities'][idx] += qty
-                    if not vcn_cargo[vid]['uoms'][idx] and uom:
-                        vcn_cargo[vid]['uoms'][idx] = uom
+        vcn_cargo = {}   # vcn_id -> {cargo_names, bl_quantities}
+        vcn_agents = {}  # vcn_id -> {agent_name, stevedore_name}
+        vcn_meta = {}    # vcn_id -> {doc_date}
+        vo_by_cargo = {} # ldud_id -> {cargo_name: total_qty}
+        vo_times = {}    # ldud_id -> {first_start, last_end}
 
-        # Agent, Stevedore and meta from VCN header
-        cur.execute('''SELECT id, vessel_agent_name, importer_exporter_name
-                       FROM vcn_header WHERE id = ANY(%s)''', (vcn_ids,))
-        for v in cur.fetchall():
-            vcn_agents[v['id']] = {
-                'agent_name': v['vessel_agent_name'],
-                'stevedore_name': v['importer_exporter_name']
-            }
+        if vcn_ids:
+            # Fetch doc_date for display
+            cur.execute('SELECT id, doc_date FROM vcn_header WHERE id = ANY(%s)', (vcn_ids,))
+            for v in cur.fetchall():
+                vcn_meta[v['id']] = {'doc_date': v['doc_date'] or ''}
 
-    if ldud_ids:
-        # Quantity from vessel_operations per ldud, grouped by cargo_name
-        cur.execute('''SELECT ldud_id, cargo_name, SUM(quantity) as total_qty
-                       FROM ldud_vessel_operations WHERE ldud_id = ANY(%s)
-                       GROUP BY ldud_id, cargo_name''', (ldud_ids,))
-        for v in cur.fetchall():
-            lid = v['ldud_id']
-            if lid not in vo_by_cargo:
-                vo_by_cargo[lid] = {}
-            cn = v['cargo_name'] or ''
-            vo_by_cargo[lid][cn] = float(v['total_qty'] or 0)
+            # Cargo names, BL quantities and UOM from VCN cargo declarations (Import + Export)
+            cur.execute('''SELECT vcn_id, cargo_name, bl_quantity, quantity_uom FROM vcn_cargo_declaration
+                           WHERE vcn_id = ANY(%s) AND cargo_name IS NOT NULL''', (vcn_ids,))
+            import_cargo = cur.fetchall()
+            cur.execute('''SELECT vcn_id, cargo_name, bl_quantity, quantity_uom FROM vcn_export_cargo_declaration
+                           WHERE vcn_id = ANY(%s) AND cargo_name IS NOT NULL''', (vcn_ids,))
+            export_cargo = cur.fetchall()
+            for row_list in [import_cargo, export_cargo]:
+                for c in row_list:
+                    vid = c['vcn_id']
+                    if vid not in vcn_cargo:
+                        vcn_cargo[vid] = {'names': [], 'quantities': [], 'uoms': []}
+                    name = c['cargo_name']
+                    qty = float(c['bl_quantity'] or 0)
+                    uom = c['quantity_uom'] or ''
+                    if name not in vcn_cargo[vid]['names']:
+                        vcn_cargo[vid]['names'].append(name)
+                        vcn_cargo[vid]['quantities'].append(qty)
+                        vcn_cargo[vid]['uoms'].append(uom)
+                    else:
+                        idx = vcn_cargo[vid]['names'].index(name)
+                        vcn_cargo[vid]['quantities'][idx] += qty
+                        if not vcn_cargo[vid]['uoms'][idx] and uom:
+                            vcn_cargo[vid]['uoms'][idx] = uom
 
-        # Earliest discharge_started and latest discharge_commenced from anchorage recording
-        cur.execute('''SELECT ldud_id, MIN(discharge_started) as first_start, MAX(discharge_commenced) as last_end
-                       FROM ldud_anchorage WHERE ldud_id = ANY(%s)
-                       GROUP BY ldud_id''', (ldud_ids,))
-        for v in cur.fetchall():
-            vo_times[v['ldud_id']] = {
-                'first_start': str(v['first_start']).replace(' ', 'T') if v['first_start'] else None,
-                'last_end': str(v['last_end']).replace(' ', 'T') if v['last_end'] else None
-            }
+            # Agent, Stevedore and meta from VCN header
+            cur.execute('''SELECT id, vessel_agent_name, importer_exporter_name
+                           FROM vcn_header WHERE id = ANY(%s)''', (vcn_ids,))
+            for v in cur.fetchall():
+                vcn_agents[v['id']] = {
+                    'agent_name': v['vessel_agent_name'],
+                    'stevedore_name': v['importer_exporter_name']
+                }
 
-    # Enrich rows
-    for r in rows:
-        vid = r.get('vcn_id')
-        lid = r.get('id')
+        if ldud_ids:
+            # Quantity from vessel_operations per ldud, grouped by cargo_name
+            cur.execute('''SELECT ldud_id, cargo_name, SUM(quantity) as total_qty
+                           FROM ldud_vessel_operations WHERE ldud_id = ANY(%s)
+                           GROUP BY ldud_id, cargo_name''', (ldud_ids,))
+            for v in cur.fetchall():
+                lid = v['ldud_id']
+                if lid not in vo_by_cargo:
+                    vo_by_cargo[lid] = {}
+                cn = v['cargo_name'] or ''
+                vo_by_cargo[lid][cn] = float(v['total_qty'] or 0)
 
-        # Cargo info from VCN
-        ci = vcn_cargo.get(vid, {'names': [], 'quantities': [], 'uoms': []})
-        uoms = ci.get('uoms', [])
-        r['cargo_names_display'] = ', '.join(ci['names']) if ci['names'] else ''
-        bl_parts = []
-        for i, q in enumerate(ci['quantities']):
-            uom = uoms[i] if i < len(uoms) else ''
-            bl_parts.append(f"{int(round(q))} {uom}".strip())
-        r['bl_quantities_display'] = ', '.join(bl_parts) if bl_parts else ''
+            # Earliest discharge_started and latest discharge_commenced from anchorage recording
+            cur.execute('''SELECT ldud_id, MIN(discharge_started) as first_start, MAX(discharge_commenced) as last_end
+                           FROM ldud_anchorage WHERE ldud_id = ANY(%s)
+                           GROUP BY ldud_id''', (ldud_ids,))
+            for v in cur.fetchall():
+                vo_times[v['ldud_id']] = {
+                    'first_start': str(v['first_start']).replace(' ', 'T') if v['first_start'] else None,
+                    'last_end': str(v['last_end']).replace(' ', 'T') if v['last_end'] else None
+                }
 
-        # Per-cargo balance: BL qty - ops qty for each cargo
-        cargo_ops = vo_by_cargo.get(lid, {})
-        balances = []
-        for i, name in enumerate(ci['names']):
-            bl_qty = ci['quantities'][i]
-            ops_qty = cargo_ops.get(name, 0)
-            uom = uoms[i] if i < len(uoms) else ''
-            bal = int(round(bl_qty - ops_qty))
-            balances.append(f"{bal} {uom}".strip())
-        r['balance_display'] = ', '.join(balances) if balances else ''
+        # Enrich rows
+        for r in rows:
+            vid = r.get('vcn_id')
+            lid = r.get('id')
 
-        # VCN doc date for display
-        vm = vcn_meta.get(vid, {})
-        r['vcn_doc_date'] = vm.get('doc_date', '')
+            # Cargo info from VCN
+            ci = vcn_cargo.get(vid, {'names': [], 'quantities': [], 'uoms': []})
+            uoms = ci.get('uoms', [])
+            r['cargo_names_display'] = ', '.join(ci['names']) if ci['names'] else ''
+            bl_parts = []
+            for i, q in enumerate(ci['quantities']):
+                uom = uoms[i] if i < len(uoms) else ''
+                bl_parts.append(f"{int(round(q))} {uom}".strip())
+            r['bl_quantities_display'] = ', '.join(bl_parts) if bl_parts else ''
 
-        # Agent and Stevedore
-        ai = vcn_agents.get(vid, {})
-        r['agent_name'] = ai.get('agent_name', '')
-        r['stevedore_name'] = ai.get('stevedore_name', '')
+            # Per-cargo balance: BL qty - ops qty for each cargo
+            cargo_ops = vo_by_cargo.get(lid, {})
+            balances = []
+            for i, name in enumerate(ci['names']):
+                bl_qty = ci['quantities'][i]
+                ops_qty = cargo_ops.get(name, 0)
+                uom = uoms[i] if i < len(uoms) else ''
+                bal = int(round(bl_qty - ops_qty))
+                balances.append(f"{bal} {uom}".strip())
+            r['balance_display'] = ', '.join(balances) if balances else ''
 
-        # Discharge/Loading Started and Completed from vessel_operations
-        vt = vo_times.get(lid, {})
-        r['ops_started'] = vt.get('first_start')
-        r['ops_completed'] = vt.get('last_end')
+            # VCN doc date for display
+            vm = vcn_meta.get(vid, {})
+            r['vcn_doc_date'] = vm.get('doc_date', '')
 
-    conn.close()
-    return rows, total
+            # Agent and Stevedore
+            ai = vcn_agents.get(vid, {})
+            r['agent_name'] = ai.get('agent_name', '')
+            r['stevedore_name'] = ai.get('stevedore_name', '')
+
+            # Discharge/Loading Started and Completed from vessel_operations
+            vt = vo_times.get(lid, {})
+            r['ops_started'] = vt.get('first_start')
+            r['ops_completed'] = vt.get('last_end')
+
+        return rows, total
+    finally:
+        conn.close()
 
 def save_header(data):
     conn = get_db()
@@ -518,6 +546,48 @@ def get_hold_cargo(ldud_id):
     rows = cur.fetchall()
     conn.close()
     return {r['hold_name']: r['cargo_name'] or '' for r in rows}
+
+
+# Approval functions
+def get_doc_status(record_id):
+    conn = get_db()
+    cur = get_cursor(conn)
+    cur.execute('SELECT doc_status FROM ldud_header WHERE id=%s', (record_id,))
+    row = cur.fetchone()
+    conn.close()
+    return row['doc_status'] if row else None
+
+
+def approve_record(record_id, username):
+    conn = get_db()
+    cur = get_cursor(conn)
+    cur.execute("UPDATE ldud_header SET doc_status='Approved' WHERE id=%s", (record_id,))
+    cur.execute("""INSERT INTO approval_log (module_code, record_id, action, comment, actioned_by)
+                   VALUES ('LDUD01', %s, 'Approved', NULL, %s)""", (record_id, username))
+    conn.commit()
+    conn.close()
+
+
+def reject_record(record_id, comment, username):
+    conn = get_db()
+    cur = get_cursor(conn)
+    cur.execute("UPDATE ldud_header SET doc_status='Rejected' WHERE id=%s", (record_id,))
+    cur.execute("""INSERT INTO approval_log (module_code, record_id, action, comment, actioned_by)
+                   VALUES ('LDUD01', %s, 'Rejected', %s, %s)""", (record_id, comment, username))
+    conn.commit()
+    conn.close()
+
+
+def get_approval_log(record_id):
+    conn = get_db()
+    cur = get_cursor(conn)
+    cur.execute("""SELECT action, comment, actioned_by,
+                          to_char(actioned_at, 'DD-MM-YYYY HH24:MI') AS actioned_at
+                   FROM approval_log WHERE module_code='LDUD01' AND record_id=%s
+                   ORDER BY actioned_at DESC""", (record_id,))
+    rows = cur.fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
 
 
 def save_hold_cargo(ldud_id, hold_name, cargo_name):
