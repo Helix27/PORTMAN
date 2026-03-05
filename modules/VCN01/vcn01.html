@@ -379,6 +379,7 @@
             <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
                 <h3 id="modalTitle" style="margin:0;">Details</h3>
                 <span id="modalDirtyBadge" style="display:none;background:#fed7d7;color:#c53030;padding:2px 8px;border-radius:12px;font-size:11px;font-weight:600;">⚠ Unsaved changes</span>
+                <span id="modalLockBanner" style="display:none;"></span>
             </div>
             <button class="detail-modal-close" onclick="closeDetailsModal()">Close</button>
         </div>
@@ -588,6 +589,8 @@
 
     let isApprover = false;
     const isAdmin = {{ 'true' if session.get('is_admin') else 'false' }};
+    let editUnlockedRowId = null;
+    let currentModalData = null;
 
     function initTable() {
         isApprover = moduleConfig.approver_id == '{{ session.user_id }}' || isAdmin;
@@ -662,12 +665,18 @@
                 }
             },
             {
-                title: "Approval", field: "_approval_actions", width: 100, headerSort: false,
+                title: "Approval", field: "_approval_actions", width: 160, headerSort: false,
                 formatter: function(cell) {
                     const data = cell.getRow().getData();
                     if (!data.id) return '';
                     if (data.doc_status === 'Approved') {
-                        if (isApprover) return `<button class="btn-back-draft" onclick="openSendBackModal(${data.id})">↩ Draft</button>`;
+                        if (isApprover) {
+                            const unlocked = editUnlockedRowId === data.id;
+                            const editBtn = unlocked
+                                ? `<button class="btn-approve" onclick="saveEditedRow(${data.id})" title="Save changes">💾 Save</button>`
+                                : `<button class="btn-approve" onclick="editRow(${data.id})" title="Unlock for editing">✏️ Edit</button>`;
+                            return `${editBtn} <button class="btn-back-draft" onclick="openSendBackModal(${data.id})">↩ Draft</button>`;
+                        }
                         return '';
                     }
                     return `<button class="btn-info-approval" onclick="openApprovalInfoModal(${data.id})">ℹ️ Info</button>`;
@@ -706,8 +715,14 @@
             }
         });
 
-        table.on('cellEdited', function() {
+        table.on('cellEdited', function(cell) {
             if (_isSaving) return;
+            const rowData = cell.getRow().getData();
+            if (rowData.doc_status === 'Approved' && editUnlockedRowId !== rowData.id) {
+                cell.restoreOldValue();
+                alert('Click the ✏️ Edit button on this row to enable editing.');
+                return;
+            }
             headerDirty = true;
             showUnsavedBanner();
         });
@@ -729,6 +744,7 @@
         clearAllDirty();
         dirtySubSections = {};
         currentVcnId = vcnId;
+        currentModalData = data;
 
         // Set modal title
         document.getElementById('modalTitle').textContent = `Details for ${data.vcn_doc_num || 'VCN'} (${operationType})`;
@@ -736,6 +752,21 @@
         // Clear previous content
         const modalBody = document.getElementById('modalSubTables');
         modalBody.innerHTML = '';
+
+        const isRecordApproved = data.doc_status === 'Approved';
+        const isUnlocked = editUnlockedRowId === vcnId;
+        const canAct = (permissions.can_edit || permissions.can_add) && (!isRecordApproved || isUnlocked);
+
+        // Lock banner in modal header
+        const lockBanner = document.getElementById('modalLockBanner');
+        if (isRecordApproved && !isUnlocked) {
+            lockBanner.innerHTML = isApprover
+                ? `<span style="background:#feebc8;color:#744210;padding:2px 10px;border-radius:12px;font-size:11px;font-weight:600;">🔒 Approved — <button onclick="enableModalEditing()" style="background:none;border:none;color:#744210;cursor:pointer;font-weight:700;text-decoration:underline;font-size:11px;padding:0;">Enable Editing</button></span>`
+                : `<span style="background:#feebc8;color:#744210;padding:2px 10px;border-radius:12px;font-size:11px;font-weight:600;">🔒 Approved — Read Only</span>`;
+            lockBanner.style.display = 'inline-block';
+        } else {
+            lockBanner.style.display = 'none';
+        }
 
         // Build cargo section based on operation type
         let cargoSection = '';
@@ -745,8 +776,8 @@
                 <div class="sub-section-header" data-section="export_cargo">
                     <span>Export Cargo Declaration</span>
                     <div class="sub-section-actions">
-                        ${(permissions.can_edit || permissions.can_add) ? `<button class="btn-sub-add" onclick="addSubRow('export_cargo', ${vcnId})">+ Add</button>` : ''}
-                        ${(permissions.can_edit || permissions.can_add) ? `<button class="btn-sub-save" onclick="saveSubTable('export_cargo', ${vcnId})">Save</button>` : ''}
+                        ${canAct ? `<button class="btn-sub-add" onclick="addSubRow('export_cargo', ${vcnId})">+ Add</button>` : ''}
+                        ${canAct ? `<button class="btn-sub-save" onclick="saveSubTable('export_cargo', ${vcnId})">Save</button>` : ''}
                     </div>
                 </div>
                 <div class="sub-section-content"><div id="export-cargo-table-${vcnId}" class="sub-tabulator"></div></div>
@@ -757,8 +788,8 @@
                 <div class="sub-section-header" data-section="cargo">
                     <span>Cargo Declaration</span>
                     <div class="sub-section-actions">
-                        ${(permissions.can_edit || permissions.can_add) ? `<button class="btn-sub-add" onclick="addSubRow('cargo', ${vcnId})">+ Add</button>` : ''}
-                        ${(permissions.can_edit || permissions.can_add) ? `<button class="btn-sub-save" onclick="saveSubTable('cargo', ${vcnId})">Save</button>` : ''}
+                        ${canAct ? `<button class="btn-sub-add" onclick="addSubRow('cargo', ${vcnId})">+ Add</button>` : ''}
+                        ${canAct ? `<button class="btn-sub-save" onclick="saveSubTable('cargo', ${vcnId})">Save</button>` : ''}
                     </div>
                 </div>
                 <div class="sub-section-content"><div id="cargo-table-${vcnId}" class="sub-tabulator"></div></div>
@@ -773,8 +804,8 @@
                 <div class="sub-section-header" data-section="nominations">
                     <span>Nomination Details</span>
                     <div class="sub-section-actions">
-                        ${(permissions.can_edit || permissions.can_add) ? `<button class="btn-sub-add" onclick="addSubRow('nominations', ${vcnId})">+ Add</button>` : ''}
-                        ${(permissions.can_edit || permissions.can_add) ? `<button class="btn-sub-save" onclick="saveSubTable('nominations', ${vcnId})">Save</button>` : ''}
+                        ${canAct ? `<button class="btn-sub-add" onclick="addSubRow('nominations', ${vcnId})">+ Add</button>` : ''}
+                        ${canAct ? `<button class="btn-sub-save" onclick="saveSubTable('nominations', ${vcnId})">Save</button>` : ''}
                     </div>
                 </div>
                 <div class="sub-section-content"><div id="nominations-table-${vcnId}" class="sub-tabulator"></div></div>
@@ -786,8 +817,8 @@
                     <span>Stowage Plan</span>
                     <span id="stowage-total-${vcnId}" style="font-size:11px;color:#666;margin-left:10px;"></span>
                     <div class="sub-section-actions">
-                        ${(permissions.can_edit || permissions.can_add) ? `<button class="btn-sub-add" onclick="addSubRow('stowage', ${vcnId})">+ Add</button>` : ''}
-                        ${(permissions.can_edit || permissions.can_add) ? `<button class="btn-sub-save" onclick="saveSubTable('stowage', ${vcnId})">Save</button>` : ''}
+                        ${canAct ? `<button class="btn-sub-add" onclick="addSubRow('stowage', ${vcnId})">+ Add</button>` : ''}
+                        ${canAct ? `<button class="btn-sub-save" onclick="saveSubTable('stowage', ${vcnId})">Save</button>` : ''}
                     </div>
                 </div>
                 <div class="sub-section-content"><div id="stowage-table-${vcnId}" class="sub-tabulator"></div></div>
@@ -796,8 +827,8 @@
                 <div class="sub-section-header" data-section="delays">
                     <span>Pre Berthing/Anchoring Delays</span>
                     <div class="sub-section-actions">
-                        ${(permissions.can_edit || permissions.can_add) ? `<button class="btn-sub-add" onclick="addSubRow('delays', ${vcnId})">+ Add</button>` : ''}
-                        ${(permissions.can_edit || permissions.can_add) ? `<button class="btn-sub-save" onclick="saveSubTable('delays', ${vcnId})">Save</button>` : ''}
+                        ${canAct ? `<button class="btn-sub-add" onclick="addSubRow('delays', ${vcnId})">+ Add</button>` : ''}
+                        ${canAct ? `<button class="btn-sub-save" onclick="saveSubTable('delays', ${vcnId})">Save</button>` : ''}
                     </div>
                 </div>
                 <div class="sub-section-content"><div id="delays-table-${vcnId}" class="sub-tabulator"></div></div>
@@ -857,7 +888,9 @@
     // datetimeEditor and dateEditor are now global (defined in base.html)
 
     async function initSubTables(vcnId, operationType = 'Import') {
-        const canEdit = permissions.can_edit || permissions.can_add;
+        const _vcnData = table.getRows().map(r => r.getData()).find(d => d.id === vcnId) || {};
+        const _isApproved = _vcnData.doc_status === 'Approved';
+        const canEdit = (permissions.can_edit || permissions.can_add) && (!_isApproved || editUnlockedRowId === vcnId);
         const isDark = localStorage.getItem('theme') === 'dark';
 
         // Run type options for nominations
@@ -1263,6 +1296,42 @@
         } finally {
             _isSaving = false;
         }
+    }
+
+    // Row edit unlock functions
+    function editRow(id) {
+        if (editUnlockedRowId !== null && editUnlockedRowId !== id) {
+            alert('Please save your changes to the current row first.');
+            return;
+        }
+        editUnlockedRowId = id;
+        const row = table.getRows().find(r => r.getData().id === id);
+        if (row) { row.reformat(); row.getElement().style.outline = '2px solid #3182ce'; }
+    }
+
+    async function saveEditedRow(id) {
+        const row = table.getRows().find(r => r.getData().id === id);
+        if (!row) return;
+        const data = row.getData();
+        try {
+            const res = await fetch("/api/module/VCN01/save", {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify(data)
+            });
+            const result = await res.json();
+            if (result.error) { alert(result.error); return; }
+            if (result.id) row.update({id: result.id, vcn_doc_num: result.vcn_doc_num, doc_status: result.doc_status});
+        } catch (e) { alert('Save failed'); return; }
+        editUnlockedRowId = null;
+        row.reformat();
+        row.getElement().style.outline = '';
+    }
+
+    function enableModalEditing() {
+        if (!currentModalData) return;
+        editRow(currentModalData.id);
+        openDetailsModal(currentModalData);
     }
 
     // Approval functions

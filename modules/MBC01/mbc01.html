@@ -372,6 +372,7 @@
             <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
                 <h3 id="modalTitle" style="margin:0;">Details</h3>
                 <span id="modalDirtyBadge" style="display:none;background:#fed7d7;color:#c53030;padding:2px 8px;border-radius:12px;font-size:11px;font-weight:600;">⚠ Unsaved changes</span>
+                <span id="modalLockBanner" style="display:none;"></span>
             </div>
             <button class="detail-modal-close" onclick="closeDetailsModal()">Close</button>
         </div>
@@ -585,6 +586,8 @@
 
     let isApprover = false;
     const isAdmin = {{ 'true' if session.get('is_admin') else 'false' }};
+    let editUnlockedRowId = null;
+    let currentModalData = null;
 
     function initTable() {
         isApprover = moduleConfig.approver_id == '{{ session.user_id }}' || isAdmin;
@@ -659,12 +662,18 @@
             },
             {title: "Created By", field: "created_by", width: 90},
             {
-                title: "Approval", field: "_approval_actions", width: 100, headerSort: false,
+                title: "Approval", field: "_approval_actions", width: 160, headerSort: false,
                 formatter: function(cell) {
                     const data = cell.getRow().getData();
                     if (!data.id) return '';
                     if (data.doc_status === 'Approved') {
-                        if (isApprover) return `<button class="btn-back-draft" onclick="openSendBackModal(${data.id})">↩ Draft</button>`;
+                        if (isApprover) {
+                            const unlocked = editUnlockedRowId === data.id;
+                            const editBtn = unlocked
+                                ? `<button class="btn-approve" onclick="saveEditedRow(${data.id})" title="Save changes">💾 Save</button>`
+                                : `<button class="btn-approve" onclick="editRow(${data.id})" title="Unlock for editing">✏️ Edit</button>`;
+                            return `${editBtn} <button class="btn-back-draft" onclick="openSendBackModal(${data.id})">↩ Draft</button>`;
+                        }
                         return '';
                     }
                     return `<button class="btn-info-approval" onclick="openApprovalInfoModal(${data.id})">ℹ️ Info</button>`;
@@ -703,8 +712,14 @@
             }
         });
 
-        table.on('cellEdited', function() {
+        table.on('cellEdited', function(cell) {
             if (_isSaving) return;
+            const rowData = cell.getRow().getData();
+            if (rowData.doc_status === 'Approved' && editUnlockedRowId !== rowData.id) {
+                cell.restoreOldValue();
+                alert('Click the ✏️ Edit button on this row to enable editing.');
+                return;
+            }
             headerDirty = true;
             showUnsavedBanner();
         });
@@ -725,12 +740,26 @@
         clearAllDirty();
         dirtySubSections = {};
         currentMbcId = mbcId;
+        currentModalData = data;
 
         document.getElementById('modalTitle').textContent = `Details for ${data.doc_num || 'MBC'} (${operationType})`;
 
         const modalBody = document.getElementById('modalSubTables');
         modalBody.innerHTML = '';
-        const canAct = permissions.can_edit || permissions.can_add;
+        const isRecordApproved = data.doc_status === 'Approved';
+        const isUnlocked = editUnlockedRowId === mbcId;
+        const canAct = (permissions.can_edit || permissions.can_add) && (!isRecordApproved || isUnlocked);
+
+        // Lock banner in modal header
+        const lockBanner = document.getElementById('modalLockBanner');
+        if (isRecordApproved && !isUnlocked) {
+            lockBanner.innerHTML = isApprover
+                ? `<span style="background:#feebc8;color:#744210;padding:2px 10px;border-radius:12px;font-size:11px;font-weight:600;">🔒 Approved — <button onclick="enableModalEditing()" style="background:none;border:none;color:#744210;cursor:pointer;font-weight:700;text-decoration:underline;font-size:11px;padding:0;">Enable Editing</button></span>`
+                : `<span style="background:#feebc8;color:#744210;padding:2px 10px;border-radius:12px;font-size:11px;font-weight:600;">🔒 Approved — Read Only</span>`;
+            lockBanner.style.display = 'inline-block';
+        } else {
+            lockBanner.style.display = 'none';
+        }
 
         const subContainer = document.createElement('div');
         subContainer.className = 'sub-table-container';
@@ -854,7 +883,9 @@
     });
 
     async function initSubTables(mbcId, operationType, blQty) {
-        const canEdit = permissions.can_edit || permissions.can_add;
+        const _mbcData = table.getRows().map(r => r.getData()).find(d => d.id === mbcId) || {};
+        const _isApproved = _mbcData.doc_status === 'Approved';
+        const canEdit = (permissions.can_edit || permissions.can_add) && (!_isApproved || editUnlockedRowId === mbcId);
         const isDark = localStorage.getItem('theme') === 'dark';
 
         const berthOptions = {};
@@ -1148,6 +1179,42 @@
         } finally {
             _isSaving = false;
         }
+    }
+
+    // Row edit unlock functions
+    function editRow(id) {
+        if (editUnlockedRowId !== null && editUnlockedRowId !== id) {
+            alert('Please save your changes to the current row first.');
+            return;
+        }
+        editUnlockedRowId = id;
+        const row = table.getRows().find(r => r.getData().id === id);
+        if (row) { row.reformat(); row.getElement().style.outline = '2px solid #3182ce'; }
+    }
+
+    async function saveEditedRow(id) {
+        const row = table.getRows().find(r => r.getData().id === id);
+        if (!row) return;
+        const data = row.getData();
+        try {
+            const res = await fetch("/api/module/MBC01/save", {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify(data)
+            });
+            const result = await res.json();
+            if (result.error) { alert(result.error); return; }
+            if (result.id) row.update({id: result.id, doc_num: result.doc_num, doc_status: result.doc_status});
+        } catch (e) { alert('Save failed'); return; }
+        editUnlockedRowId = null;
+        row.reformat();
+        row.getElement().style.outline = '';
+    }
+
+    function enableModalEditing() {
+        if (!currentModalData) return;
+        editRow(currentModalData.id);
+        openDetailsModal(currentModalData);
     }
 
     // Approval functions

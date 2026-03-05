@@ -1025,6 +1025,7 @@
             lockBanner.style.cssText = 'background:#c6f6d5;color:#276749;padding:6px 14px;font-size:12px;font-weight:600;border-bottom:2px solid #9ae6b4;display:none;';
             document.querySelector('.detail-modal-header').after(lockBanner);
         }
+        const isRecordClosed = data.doc_status === 'Closed';
         if (isRecordClosed && !isApprover && !isAdmin) {
             lockBanner.textContent = '🔒 This vessel is Closed — view only';
             lockBanner.style.display = 'block';
@@ -1040,7 +1041,6 @@
         modalBody.innerHTML = '';
 
         const anchorageTitle = operationType === 'Export' ? 'Anchorage Recording Export' : 'Anchorage Recording';
-        const isRecordClosed = data.doc_status === 'Closed';
         const canAct = (permissions.can_edit || permissions.can_add) && (!isRecordClosed || isApprover || isAdmin);
 
         // Build vessel ops section — Import uses pivot+hold-summary, Export uses simple row table
