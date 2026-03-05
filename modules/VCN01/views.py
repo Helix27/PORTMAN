@@ -79,6 +79,12 @@ def save():
     return jsonify({'success': True, 'id': row_id, 'vcn_doc_num': doc_num, 'doc_status': data.get('doc_status')})
 
 
+@bp.route('/api/module/VCN01/approval_check/<int:record_id>')
+@login_required
+def approval_check(record_id):
+    return jsonify(model.get_approval_eligibility(record_id))
+
+
 @bp.route('/api/module/VCN01/approve', methods=['POST'])
 @login_required
 def approve():
@@ -89,26 +95,29 @@ def approve():
     record_id = request.json.get('id')
     if not record_id:
         return jsonify({'error': 'Missing id'}), 400
+    eligibility = model.get_approval_eligibility(record_id)
+    if not eligibility['eligible']:
+        return jsonify({'error': 'Record not eligible for approval', 'missing': eligibility['missing']}), 400
     model.approve_record(record_id, session.get('username'))
     return jsonify({'doc_status': 'Approved'})
 
 
-@bp.route('/api/module/VCN01/reject', methods=['POST'])
+@bp.route('/api/module/VCN01/send_back', methods=['POST'])
 @login_required
-def reject():
+def send_back():
     config = get_module_config('VCN01')
     is_approver = str(config.get('approver_id', '')) == str(session.get('user_id')) or session.get('is_admin')
     if not is_approver:
-        return jsonify({'error': 'No permission to reject'}), 403
+        return jsonify({'error': 'No permission'}), 403
     data = request.json
     record_id = data.get('id')
     comment = (data.get('comment') or '').strip()
     if not record_id:
         return jsonify({'error': 'Missing id'}), 400
     if not comment:
-        return jsonify({'error': 'Rejection comment is required'}), 400
-    model.reject_record(record_id, comment, session.get('username'))
-    return jsonify({'doc_status': 'Rejected'})
+        return jsonify({'error': 'A reason is required when sending back to Draft'}), 400
+    model.send_back_to_draft(record_id, comment, session.get('username'))
+    return jsonify({'doc_status': 'Draft'})
 
 
 @bp.route('/api/module/VCN01/approval-log/<int:record_id>')

@@ -410,6 +410,73 @@ def get_doc_status(record_id):
     return row['doc_status'] if row else None
 
 
+def get_approval_eligibility(vcn_id):
+    conn = get_db()
+    cur = get_cursor(conn)
+    cur.execute('''SELECT operation_type, vessel_name, vessel_agent_name,
+                          importer_exporter_name, cargo_type, discharge_port
+                   FROM vcn_header WHERE id=%s''', (vcn_id,))
+    header = cur.fetchone()
+    if not header:
+        conn.close()
+        return {'eligible': False, 'missing': ['Record not found']}
+
+    missing = []
+    if not header['operation_type']:
+        missing.append('Operation Type')
+    if not header['vessel_name']:
+        missing.append('Vessel Name')
+    if not header['vessel_agent_name']:
+        missing.append('Agent Name')
+    if not header['importer_exporter_name']:
+        missing.append('Stevedore Name')
+    if not header['cargo_type']:
+        missing.append('Cargo Type')
+    if not header['discharge_port']:
+        missing.append('Discharge Port')
+
+    op_type = header['operation_type']
+    if op_type == 'Export':
+        cur.execute('''SELECT COUNT(*) as cnt FROM vcn_export_cargo_declaration
+                       WHERE vcn_id=%s AND cargo_name IS NOT NULL AND cargo_name != \'\'
+                       AND bl_quantity IS NOT NULL AND bl_quantity > 0
+                       AND quantity_uom IS NOT NULL AND quantity_uom != \'\'
+                       AND bl_no IS NOT NULL AND bl_no != \'\'
+                       AND bl_date IS NOT NULL''', (vcn_id,))
+    else:
+        cur.execute('''SELECT COUNT(*) as cnt FROM vcn_cargo_declaration
+                       WHERE vcn_id=%s AND cargo_name IS NOT NULL AND cargo_name != \'\'
+                       AND bl_quantity IS NOT NULL AND bl_quantity > 0
+                       AND quantity_uom IS NOT NULL AND quantity_uom != \'\'
+                       AND bl_no IS NOT NULL AND bl_no != \'\'
+                       AND bl_date IS NOT NULL''', (vcn_id,))
+    if cur.fetchone()['cnt'] < 1:
+        missing.append('Cargo Declaration (min 1 complete entry: cargo name, BL no, date, quantity, UOM)')
+
+    cur.execute('''SELECT COALESCE(v.no_of_holds, 0) AS no_of_holds
+                   FROM vcn_header h LEFT JOIN vessels v ON v.vessel_name = h.vessel_name
+                   WHERE h.id = %s''', (vcn_id,))
+    holds_row = cur.fetchone()
+    no_of_holds = holds_row['no_of_holds'] if holds_row else 0
+
+    cur.execute('''SELECT COUNT(DISTINCT hold_name) as distinct_holds
+                   FROM vcn_stowage_plan WHERE vcn_id=%s
+                   AND hold_name IS NOT NULL AND hold_name != \'\'
+                   AND cargo_name IS NOT NULL AND cargo_name != \'\'
+                   AND hatchwise_quantity IS NOT NULL AND hatchwise_quantity > 0''', (vcn_id,))
+    distinct_holds = cur.fetchone()['distinct_holds'] or 0
+
+    if no_of_holds > 0 and distinct_holds < no_of_holds:
+        missing.append(f'Stowage Plan ({distinct_holds}/{no_of_holds} holds covered — all holds need cargo & quantity)')
+    elif no_of_holds == 0:
+        cur.execute('SELECT COUNT(*) as cnt FROM vcn_stowage_plan WHERE vcn_id=%s', (vcn_id,))
+        if cur.fetchone()['cnt'] < 1:
+            missing.append('Stowage Plan (minimum 1 entry required)')
+
+    conn.close()
+    return {'eligible': len(missing) == 0, 'missing': missing}
+
+
 def approve_record(record_id, username):
     conn = get_db()
     cur = get_cursor(conn)
@@ -420,12 +487,12 @@ def approve_record(record_id, username):
     conn.close()
 
 
-def reject_record(record_id, comment, username):
+def send_back_to_draft(record_id, comment, username):
     conn = get_db()
     cur = get_cursor(conn)
-    cur.execute("UPDATE vcn_header SET doc_status='Rejected' WHERE id=%s", (record_id,))
+    cur.execute("UPDATE vcn_header SET doc_status='Draft' WHERE id=%s", (record_id,))
     cur.execute("""INSERT INTO approval_log (module_code, record_id, action, comment, actioned_by)
-                   VALUES ('VCN01', %s, 'Rejected', %s, %s)""", (record_id, comment, username))
+                   VALUES ('VCN01', %s, 'Back to Draft', %s, %s)""", (record_id, comment, username))
     conn.commit()
     conn.close()
 

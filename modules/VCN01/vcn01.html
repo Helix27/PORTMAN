@@ -10,12 +10,18 @@
         font-size: 12px; font-weight: 700; line-height: 1.6;
     }
     .btn-approve:hover { background: #276749; }
-    .btn-reject {
-        background: #e53e3e; color: white; border: none;
+    .btn-back-draft {
+        background: #744210; color: white; border: none;
         padding: 2px 7px; border-radius: 4px; cursor: pointer;
         font-size: 12px; font-weight: 700; line-height: 1.6;
     }
-    .btn-reject:hover { background: #9b2c2c; }
+    .btn-back-draft:hover { background: #553009; }
+    .btn-info-approval {
+        background: #3182ce; color: white; border: none;
+        padding: 2px 7px; border-radius: 4px; cursor: pointer;
+        font-size: 12px; font-weight: 700; line-height: 1.6;
+    }
+    .btn-info-approval:hover { background: #2b6cb0; }
     .approval-badge {
         padding: 2px 8px; border-radius: 12px;
         font-size: 11px; font-weight: 600; cursor: pointer;
@@ -382,15 +388,27 @@
     </div>
 </div>
 
-<!-- Reject Modal -->
-<div id="rejectModal" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.5);z-index:99999;align-items:center;justify-content:center;">
+<!-- Approval Info Modal -->
+<div id="approvalInfoModal" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.5);z-index:99999;align-items:center;justify-content:center;">
+    <div style="background:white;border-radius:8px;padding:24px;max-width:460px;width:90%;box-shadow:0 4px 24px rgba(0,0,0,0.3);">
+        <h3 style="margin:0 0 14px;font-size:16px;font-weight:600;">Approval Checklist</h3>
+        <div id="approvalInfoBody" style="font-size:13px;margin-bottom:16px;"></div>
+        <div style="display:flex;justify-content:flex-end;gap:8px;">
+            <button onclick="closeApprovalInfoModal()" style="padding:6px 18px;border:1px solid #cbd5e0;background:white;border-radius:4px;cursor:pointer;font-size:13px;">Close</button>
+            <button id="approvalInfoApproveBtn" style="display:none;padding:6px 18px;background:#38a169;color:white;border:none;border-radius:4px;cursor:pointer;font-size:13px;font-weight:600;" onclick="confirmApprove()">✓ Approve</button>
+        </div>
+    </div>
+</div>
+
+<!-- Send Back to Draft Modal -->
+<div id="sendBackModal" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.5);z-index:99999;align-items:center;justify-content:center;">
     <div style="background:white;border-radius:8px;padding:24px;max-width:420px;width:90%;box-shadow:0 4px 24px rgba(0,0,0,0.3);">
-        <h3 style="margin:0 0 14px;font-size:16px;font-weight:600;">Reject Record</h3>
+        <h3 style="margin:0 0 14px;font-size:16px;font-weight:600;">Send Back to Draft</h3>
         <label style="display:block;margin-bottom:6px;font-size:13px;font-weight:500;">Reason <span style="color:#e53e3e">*</span></label>
-        <textarea id="rejectComment" rows="4" placeholder="Enter rejection reason..." style="width:100%;box-sizing:border-box;padding:8px;border:1px solid #cbd5e0;border-radius:4px;font-size:13px;resize:vertical;"></textarea>
+        <textarea id="sendBackComment" rows="4" placeholder="Enter reason for sending back to Draft..." style="width:100%;box-sizing:border-box;padding:8px;border:1px solid #cbd5e0;border-radius:4px;font-size:13px;resize:vertical;"></textarea>
         <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:14px;">
-            <button onclick="closeRejectModal()" style="padding:6px 18px;border:1px solid #cbd5e0;background:white;border-radius:4px;cursor:pointer;font-size:13px;">Cancel</button>
-            <button onclick="confirmReject()" style="padding:6px 18px;background:#e53e3e;color:white;border:none;border-radius:4px;cursor:pointer;font-size:13px;font-weight:600;">Reject</button>
+            <button onclick="closeSendBackModal()" style="padding:6px 18px;border:1px solid #cbd5e0;background:white;border-radius:4px;cursor:pointer;font-size:13px;">Cancel</button>
+            <button onclick="confirmSendBack()" style="padding:6px 18px;background:#744210;color:white;border:none;border-radius:4px;cursor:pointer;font-size:13px;font-weight:600;">↩ Send Back</button>
         </div>
     </div>
 </div>
@@ -568,11 +586,11 @@
         initTable();
     }
 
+    let isApprover = false;
+    const isAdmin = {{ 'true' if session.get('is_admin') else 'false' }};
+
     function initTable() {
-        const isApprover = moduleConfig.approver_id == '{{ session.user_id }}';
-        const isAdmin = {{ 'true' if session.get('is_admin') else 'false' }};
-        const needsApproval = moduleConfig.approval_add || moduleConfig.approval_edit;
-        const canEditStatus = isApprover || isAdmin || !needsApproval;
+        isApprover = moduleConfig.approver_id == '{{ session.user_id }}' || isAdmin;
         const canEdit = permissions.can_edit || permissions.can_add;
 
         const vesselOptions = {};
@@ -638,20 +656,23 @@
                     const id = cell.getRow().getData().id;
                     let color, bg;
                     if (val === 'Approved') { color = '#276749'; bg = '#c6f6d5'; }
-                    else if (val === 'Rejected') { color = '#9b2c2c'; bg = '#fed7d7'; }
                     else { color = '#744210'; bg = '#fefcbf'; }
                     const click = id ? `onclick="showApprovalLog(${id}, event)"` : '';
                     return `<span class="approval-badge" style="background:${bg};color:${color};" ${click} title="Click for history">${val}</span>`;
                 }
             },
-            (isApprover || isAdmin) ? {
-                title: "Approval", field: "_approval_actions", width: 90, headerSort: false,
+            {
+                title: "Approval", field: "_approval_actions", width: 100, headerSort: false,
                 formatter: function(cell) {
                     const data = cell.getRow().getData();
-                    if (!data.id || data.doc_status === 'Approved') return '';
-                    return `<button class="btn-approve" onclick="approveRow(${data.id})">✓</button> <button class="btn-reject" onclick="rejectRow(${data.id})">✗</button>`;
+                    if (!data.id) return '';
+                    if (data.doc_status === 'Approved') {
+                        if (isApprover) return `<button class="btn-back-draft" onclick="openSendBackModal(${data.id})">↩ Draft</button>`;
+                        return '';
+                    }
+                    return `<button class="btn-info-approval" onclick="openApprovalInfoModal(${data.id})">ℹ️ Info</button>`;
                 }
-            } : null
+            }
         ].filter(Boolean);
 
         table = new Tabulator("#table", {
@@ -674,7 +695,6 @@
                 const status = data.doc_status;
                 const el = row.getElement();
                 if (status === 'Approved') el.style.backgroundColor = '#f0fff4';
-                else if (status === 'Rejected') el.style.backgroundColor = '#fff5f5';
                 else el.style.backgroundColor = '#fffff0';
                 if (data._autosave_error) {
                     el.style.outline = '2px solid #e53e3e';
@@ -1246,43 +1266,71 @@
     }
 
     // Approval functions
-    let rejectTargetId = null;
+    let approvalTargetId = null;
+    let sendBackTargetId = null;
 
-    async function approveRow(id) {
-        if (!confirm('Approve this record?')) return;
+    async function openApprovalInfoModal(id) {
+        approvalTargetId = id;
+        const body = document.getElementById('approvalInfoBody');
+        const approveBtn = document.getElementById('approvalInfoApproveBtn');
+        body.innerHTML = '<em style="color:#718096;">Checking requirements...</em>';
+        approveBtn.style.display = 'none';
+        document.getElementById('approvalInfoModal').style.display = 'flex';
+
+        const res = await fetch(`/api/module/VCN01/approval_check/${id}`);
+        const data = await res.json();
+
+        if (data.eligible) {
+            body.innerHTML = '<div style="color:#276749;font-weight:600;margin-bottom:8px;">✅ All requirements met.</div>' +
+                (isApprover ? '<p style="color:#4a5568;font-size:12px;margin:0;">Click Approve to approve this record.</p>' :
+                 '<p style="color:#4a5568;font-size:12px;margin:0;">Waiting for approver to approve.</p>');
+            if (isApprover) approveBtn.style.display = 'inline-block';
+        } else {
+            const items = data.missing.map(m => `<li style="margin:4px 0;">❌ ${m}</li>`).join('');
+            body.innerHTML = `<p style="margin:0 0 8px;font-weight:600;color:#744210;">The following must be completed before approval:</p><ul style="margin:0;padding-left:18px;">${items}</ul>`;
+        }
+    }
+
+    function closeApprovalInfoModal() {
+        document.getElementById('approvalInfoModal').style.display = 'none';
+        approvalTargetId = null;
+    }
+
+    async function confirmApprove() {
         const res = await fetch('/api/module/VCN01/approve', {
             method: 'POST', headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({id: id})
+            body: JSON.stringify({id: approvalTargetId})
         });
         const data = await res.json();
         if (data.error) { alert(data.error); return; }
-        const row = table.getRows().find(r => r.getData().id === id);
+        const row = table.getRows().find(r => r.getData().id === approvalTargetId);
         if (row) { row.update({doc_status: 'Approved'}); row.reformat(); }
+        closeApprovalInfoModal();
     }
 
-    function rejectRow(id) {
-        rejectTargetId = id;
-        document.getElementById('rejectComment').value = '';
-        document.getElementById('rejectModal').style.display = 'flex';
+    function openSendBackModal(id) {
+        sendBackTargetId = id;
+        document.getElementById('sendBackComment').value = '';
+        document.getElementById('sendBackModal').style.display = 'flex';
     }
 
-    function closeRejectModal() {
-        document.getElementById('rejectModal').style.display = 'none';
-        rejectTargetId = null;
+    function closeSendBackModal() {
+        document.getElementById('sendBackModal').style.display = 'none';
+        sendBackTargetId = null;
     }
 
-    async function confirmReject() {
-        const comment = document.getElementById('rejectComment').value.trim();
-        if (!comment) { alert('Please enter a rejection reason.'); return; }
-        const res = await fetch('/api/module/VCN01/reject', {
+    async function confirmSendBack() {
+        const comment = document.getElementById('sendBackComment').value.trim();
+        if (!comment) { alert('Please enter a reason.'); return; }
+        const res = await fetch('/api/module/VCN01/send_back', {
             method: 'POST', headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({id: rejectTargetId, comment: comment})
+            body: JSON.stringify({id: sendBackTargetId, comment: comment})
         });
         const data = await res.json();
         if (data.error) { alert(data.error); return; }
-        const row = table.getRows().find(r => r.getData().id === rejectTargetId);
-        if (row) { row.update({doc_status: 'Rejected'}); row.reformat(); }
-        closeRejectModal();
+        const row = table.getRows().find(r => r.getData().id === sendBackTargetId);
+        if (row) { row.update({doc_status: 'Draft'}); row.reformat(); }
+        closeSendBackModal();
     }
 
     async function showApprovalLog(id, event) {
@@ -1314,7 +1362,7 @@
             load_port:              { label: 'Load Port',      type: 'contains' },
             discharge_port:         { label: 'Discharge Port', type: 'contains' },
             doc_date:               { label: 'Doc Date',       type: 'range' },
-            doc_status:             { label: 'Status',         type: 'multi',    values: ['Draft', 'Approved', 'Rejected'] },
+            doc_status:             { label: 'Status',         type: 'multi',    values: ['Draft', 'Approved'] },
         };
     }
 

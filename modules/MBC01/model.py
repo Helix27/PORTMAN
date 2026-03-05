@@ -333,6 +333,30 @@ def get_doc_status(record_id):
     return row['doc_status'] if row else None
 
 
+def get_approval_eligibility(mbc_id):
+    conn = get_db()
+    cur = get_cursor(conn)
+    cur.execute('SELECT operation_type, mbc_name, cargo_name, bl_quantity FROM mbc_header WHERE id=%s', (mbc_id,))
+    header = cur.fetchone()
+    if not header:
+        conn.close()
+        return {'eligible': False, 'missing': ['Record not found']}
+    missing = []
+    if not header['operation_type']:
+        missing.append('Operation Type')
+    if not header['mbc_name']:
+        missing.append('MBC Name')
+    if not header['cargo_name']:
+        missing.append('Cargo Name')
+    if not header['bl_quantity']:
+        missing.append('BL Quantity')
+    cur.execute('SELECT COUNT(*) as cnt FROM mbc_customer_details WHERE mbc_id=%s', (mbc_id,))
+    if cur.fetchone()['cnt'] < 1:
+        missing.append('Customer Details (minimum 1 entry required)')
+    conn.close()
+    return {'eligible': len(missing) == 0, 'missing': missing}
+
+
 def approve_record(record_id, username):
     conn = get_db()
     cur = get_cursor(conn)
@@ -343,12 +367,12 @@ def approve_record(record_id, username):
     conn.close()
 
 
-def reject_record(record_id, comment, username):
+def send_back_to_draft(record_id, comment, username):
     conn = get_db()
     cur = get_cursor(conn)
-    cur.execute("UPDATE mbc_header SET doc_status='Rejected' WHERE id=%s", (record_id,))
+    cur.execute("UPDATE mbc_header SET doc_status='Draft' WHERE id=%s", (record_id,))
     cur.execute("""INSERT INTO approval_log (module_code, record_id, action, comment, actioned_by)
-                   VALUES ('MBC01', %s, 'Rejected', %s, %s)""", (record_id, comment, username))
+                   VALUES ('MBC01', %s, 'Back to Draft', %s, %s)""", (record_id, comment, username))
     conn.commit()
     conn.close()
 
