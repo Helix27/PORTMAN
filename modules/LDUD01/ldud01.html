@@ -4,19 +4,25 @@
 
 {% block head %}
 <style>
-    .btn-approve {
-        background: #38a169; color: white; border: none;
+    .btn-closure {
+        background: #2b6cb0; color: white; border: none;
         padding: 2px 7px; border-radius: 4px; cursor: pointer;
         font-size: 12px; font-weight: 700; line-height: 1.6;
     }
-    .btn-approve:hover { background: #276749; }
-    .btn-reject {
-        background: #e53e3e; color: white; border: none;
+    .btn-closure:hover { background: #1a4f8f; }
+    .btn-reopen {
+        background: #c05621; color: white; border: none;
         padding: 2px 7px; border-radius: 4px; cursor: pointer;
         font-size: 12px; font-weight: 700; line-height: 1.6;
     }
-    .btn-reject:hover { background: #9b2c2c; }
-    .approval-badge {
+    .btn-reopen:hover { background: #9c4221; }
+    .btn-info-closure {
+        background: #718096; color: white; border: none;
+        padding: 2px 7px; border-radius: 4px; cursor: pointer;
+        font-size: 12px; font-weight: 700; line-height: 1.6;
+    }
+    .btn-info-closure:hover { background: #4a5568; }
+    .closure-badge {
         padding: 2px 8px; border-radius: 12px;
         font-size: 11px; font-weight: 600; cursor: pointer;
         display: inline-block;
@@ -394,15 +400,39 @@
         </div>
     </div>
 </div>
-<!-- Reject Modal -->
-<div id="rejectModal" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.5);z-index:99999;align-items:center;justify-content:center;">
+<!-- Closure Modal -->
+<div id="closureModal" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.5);z-index:99999;align-items:center;justify-content:center;">
+    <div style="background:white;border-radius:8px;padding:24px;max-width:480px;width:90%;box-shadow:0 4px 24px rgba(0,0,0,0.3);">
+        <h3 style="margin:0 0 14px;font-size:16px;font-weight:600;">🔒 Vessel Closure</h3>
+        <!-- Missing requirements (when not eligible) -->
+        <div id="closureMissingSection" style="display:none;">
+            <p style="margin:0 0 8px;font-size:13px;font-weight:500;color:#c05621;">The following requirements are not yet met:</p>
+            <ul id="closureMissingList" style="margin:0 0 14px;padding-left:18px;font-size:13px;color:#744210;"></ul>
+        </div>
+        <!-- Eligible content -->
+        <div id="closureEligibleSection" style="display:none;">
+            <div id="closureQtyInfo" style="background:#f0fff4;border:1px solid #9ae6b4;border-radius:6px;padding:10px 14px;margin-bottom:14px;font-size:13px;"></div>
+            <label style="display:block;margin-bottom:6px;font-size:13px;font-weight:500;">Confirm your password <span style="color:#e53e3e">*</span></label>
+            <input type="password" id="closurePassword" placeholder="Enter your login password…" style="width:100%;box-sizing:border-box;padding:8px;border:1px solid #cbd5e0;border-radius:4px;font-size:13px;margin-bottom:14px;">
+            <div style="display:flex;gap:8px;">
+                <button id="btnCloseVessel" onclick="confirmClose('Closed')" style="flex:1;padding:8px;background:#276749;color:white;border:none;border-radius:4px;cursor:pointer;font-size:13px;font-weight:600;">✓ Close Vessel</button>
+                <button id="btnPartialClose" onclick="confirmClose('Partial Close')" style="flex:1;padding:8px;background:#c05621;color:white;border:none;border-radius:4px;cursor:pointer;font-size:13px;font-weight:600;">⚡ Partial Close</button>
+            </div>
+        </div>
+        <div style="display:flex;justify-content:flex-end;margin-top:14px;">
+            <button onclick="closeClosureModal()" style="padding:6px 18px;border:1px solid #cbd5e0;background:white;border-radius:4px;cursor:pointer;font-size:13px;">Cancel</button>
+        </div>
+    </div>
+</div>
+<!-- Reopen (Back to Draft) Modal -->
+<div id="reopenModal" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.5);z-index:99999;align-items:center;justify-content:center;">
     <div style="background:white;border-radius:8px;padding:24px;max-width:420px;width:90%;box-shadow:0 4px 24px rgba(0,0,0,0.3);">
-        <h3 style="margin:0 0 14px;font-size:16px;font-weight:600;">Reject Record</h3>
+        <h3 style="margin:0 0 14px;font-size:16px;font-weight:600;">↩ Send Back to Draft</h3>
         <label style="display:block;margin-bottom:6px;font-size:13px;font-weight:500;">Reason <span style="color:#e53e3e">*</span></label>
-        <textarea id="rejectComment" rows="4" placeholder="Enter rejection reason..." style="width:100%;box-sizing:border-box;padding:8px;border:1px solid #cbd5e0;border-radius:4px;font-size:13px;resize:vertical;"></textarea>
+        <textarea id="reopenComment" rows="4" placeholder="Enter reason for reopening…" style="width:100%;box-sizing:border-box;padding:8px;border:1px solid #cbd5e0;border-radius:4px;font-size:13px;resize:vertical;"></textarea>
         <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:14px;">
-            <button onclick="closeRejectModal()" style="padding:6px 18px;border:1px solid #cbd5e0;background:white;border-radius:4px;cursor:pointer;font-size:13px;">Cancel</button>
-            <button onclick="confirmReject()" style="padding:6px 18px;background:#e53e3e;color:white;border:none;border-radius:4px;cursor:pointer;font-size:13px;font-weight:600;">Reject</button>
+            <button onclick="closeReopenModal()" style="padding:6px 18px;border:1px solid #cbd5e0;background:white;border-radius:4px;cursor:pointer;font-size:13px;">Cancel</button>
+            <button onclick="confirmReopen()" style="padding:6px 18px;background:#c05621;color:white;border:none;border-radius:4px;cursor:pointer;font-size:13px;font-weight:600;">Send to Draft</button>
         </div>
     </div>
 </div>
@@ -450,6 +480,10 @@
     let holdCargoConfig = {}; // Per-hold cargo config per LDUD ID
     let vcnCargoCache = {}; // VCN-specific cargo names per LDUD ID (for Export)
     let currentLdudId = null;
+
+    // Module-scope so openDetailsModal and closure functions can access them
+    let isApprover = false;
+    let isAdmin = {{ 'true' if session.get('is_admin') else 'false' }};
 
     const currentUser = '{{ session.username }}';
     const permissions = {
@@ -807,8 +841,7 @@
     }
 
     function initTable() {
-        const isApprover = moduleConfig.approver_id == '{{ session.user_id }}';
-        const isAdmin = {{ 'true' if session.get('is_admin') else 'false' }};
+        isApprover = moduleConfig.approver_id == '{{ session.user_id }}' || isAdmin;
         const canEdit = permissions.can_edit || permissions.can_add;
         const vcnOptions = {};
         vcnList.forEach(v => { vcnOptions[v.value] = v.value; });
@@ -884,26 +917,35 @@
             {title: "Discharge/Loading Completed", field: "ops_completed", width: 170,
                 titleFormatter: function() { return "Disch./Load. Completed"; },
                 formatter: datetimeCellFormatter},
-            {title: "Status", field: "doc_status", width: 90,
+            {title: "Status", field: "doc_status", width: 110,
                 formatter: function(cell) {
                     const val = cell.getValue();
                     const id = cell.getRow().getData().id;
                     let color = '#744210', bg = '#fefcbf';
-                    if (val === 'Approved') { color = '#276749'; bg = '#c6f6d5'; }
-                    else if (val === 'Rejected') { color = '#9b2c2c'; bg = '#fed7d7'; }
-                    const click = id ? `onclick="showApprovalLog(${id}, event)"` : '';
-                    return `<span class="approval-badge" style="background:${bg};color:${color};" ${click} title="Click for history">${val || ''}</span>`;
+                    if (val === 'Closed') { color = '#276749'; bg = '#c6f6d5'; }
+                    else if (val === 'Partial Close') { color = '#c05621'; bg = '#feebc8'; }
+                    const click = id ? `onclick="showClosureLog(${id}, event)"` : '';
+                    return `<span class="closure-badge" style="background:${bg};color:${color};" ${click} title="Click for history">${val || 'Draft'}</span>`;
                 }
             },
             {title: "Created By", field: "created_by", width: 90},
-            (isApprover || isAdmin) ? {
-                title: "Approval", field: "_approval_actions", width: 90, headerSort: false,
+            {title: "Material PO", field: "material_po_number", editor: canEdit ? "input" : false, width: 120},
+            {
+                title: "Closure", field: "_closure_actions", width: 110, headerSort: false,
                 formatter: function(cell) {
                     const data = cell.getRow().getData();
-                    if (!data.id || data.doc_status === 'Approved') return '';
-                    return `<button class="btn-approve" onclick="approveRow(${data.id})">✓</button> <button class="btn-reject" onclick="rejectRow(${data.id})">✗</button>`;
+                    if (!data.id) return '';
+                    const status = data.doc_status || 'Draft';
+                    if (isApprover || isAdmin) {
+                        if (status === 'Closed') {
+                            return `<button class="btn-reopen" onclick="reopenRow(${data.id})">↩ Draft</button>`;
+                        }
+                        return `<button class="btn-closure" onclick="openClosureModal(${data.id})">🔒 Close</button>`;
+                    }
+                    // Non-approver: info button only
+                    return `<button class="btn-info-closure" onclick="showClosureInfo(${data.id})">ℹ️ Info</button>`;
                 }
-            } : null
+            }
         ].filter(Boolean);
 
         table = new Tabulator("#table", {
@@ -931,8 +973,8 @@
                 const data = row.getData();
                 const status = data.doc_status;
                 const el = row.getElement();
-                if (status === 'Approved') el.style.backgroundColor = '#f0fff4';
-                else if (status === 'Rejected') el.style.backgroundColor = '#fff5f5';
+                if (status === 'Closed') el.style.backgroundColor = '#f0fff4';
+                else if (status === 'Partial Close') el.style.backgroundColor = '#fffbf0';
                 else el.style.backgroundColor = '#fffff0';
                 if (data._autosave_error) {
                     el.style.outline = '2px solid #e53e3e';
@@ -944,8 +986,14 @@
             }
         });
 
-        table.on('cellEdited', function() {
+        table.on('cellEdited', function(cell) {
             if (_isSaving) return;
+            const rowData = cell.getRow().getData();
+            if (rowData.doc_status === 'Closed' && !isApprover && !isAdmin) {
+                cell.restoreOldValue();
+                alert('This vessel is Closed and cannot be edited.');
+                return;
+            }
             headerDirty = true;
             showUnsavedBanner();
         });
@@ -969,13 +1017,31 @@
 
         // Set modal title
         document.getElementById('modalTitle').textContent = `Details for ${data.doc_num || 'LDUD'} (${operationType})`;
+        // Show lock banner for closed records
+        let lockBanner = document.getElementById('modalLockBanner');
+        if (!lockBanner) {
+            lockBanner = document.createElement('div');
+            lockBanner.id = 'modalLockBanner';
+            lockBanner.style.cssText = 'background:#c6f6d5;color:#276749;padding:6px 14px;font-size:12px;font-weight:600;border-bottom:2px solid #9ae6b4;display:none;';
+            document.querySelector('.detail-modal-header').after(lockBanner);
+        }
+        if (isRecordClosed && !isApprover && !isAdmin) {
+            lockBanner.textContent = '🔒 This vessel is Closed — view only';
+            lockBanner.style.display = 'block';
+        } else if (isRecordClosed) {
+            lockBanner.textContent = '🔒 This vessel is Closed — you can edit as approver';
+            lockBanner.style.display = 'block';
+        } else {
+            lockBanner.style.display = 'none';
+        }
 
         // Clear previous content
         const modalBody = document.getElementById('modalSubTables');
         modalBody.innerHTML = '';
 
         const anchorageTitle = operationType === 'Export' ? 'Anchorage Recording Export' : 'Anchorage Recording';
-        const canAct = permissions.can_edit || permissions.can_add;
+        const isRecordClosed = data.doc_status === 'Closed';
+        const canAct = (permissions.can_edit || permissions.can_add) && (!isRecordClosed || isApprover || isAdmin);
 
         // Build vessel ops section — Import uses pivot+hold-summary, Export uses simple row table
         let vesselOpsSection = '';
@@ -2074,7 +2140,7 @@
         table.addRow({
             created_by: currentUser,
             created_date: getTodayDate(),
-            doc_status: 'Pending'
+            doc_status: 'Draft'
         }, true);
     }
 
@@ -2141,53 +2207,98 @@
         if ((e.ctrlKey || e.metaKey) && e.key === 's') { e.preventDefault(); saveAll(); }
     });
 
-    // Approval functions
-    let rejectTargetId = null;
+    // ── Closure functions ────────────────────────────────────────────────────
+    let closureTargetId = null;
+    let reopenTargetId = null;
 
-    async function approveRow(id) {
-        if (!confirm('Approve this record?')) return;
-        const res = await fetch('/api/module/LDUD01/approve', {
+    async function openClosureModal(id) {
+        closureTargetId = id;
+        document.getElementById('closurePassword').value = '';
+        document.getElementById('closureMissingSection').style.display = 'none';
+        document.getElementById('closureEligibleSection').style.display = 'none';
+        document.getElementById('closureModal').style.display = 'flex';
+
+        const res = await fetch(`/api/module/LDUD01/closure_check/${id}`);
+        const check = await res.json();
+
+        if (!check.eligible) {
+            const list = document.getElementById('closureMissingList');
+            list.innerHTML = check.missing.map(m => `<li>${m}</li>`).join('');
+            document.getElementById('closureMissingSection').style.display = 'block';
+        } else {
+            const diff = (check.barge_total - check.bl_total).toFixed(2);
+            const qty = document.getElementById('closureQtyInfo');
+            qty.innerHTML = check.can_full_close
+                ? `<strong>✓ Quantities match</strong> — Barge total: <strong>${check.barge_total.toFixed(2)}</strong> | BL total: <strong>${check.bl_total.toFixed(2)}</strong><br><small>Full Close Vessel available.</small>`
+                : `<strong>⚡ Partial quantities</strong> — Barge total: <strong>${check.barge_total.toFixed(2)}</strong> | BL total: <strong>${check.bl_total.toFixed(2)}</strong> | Remaining: <strong>${Math.abs(diff)}</strong><br><small>Only Partial Close available for billing cut-off.</small>`;
+            document.getElementById('btnCloseVessel').style.display = check.can_full_close ? 'block' : 'none';
+            document.getElementById('btnPartialClose').style.display = 'block';
+            document.getElementById('closureEligibleSection').style.display = 'block';
+        }
+    }
+
+    async function showClosureInfo(id) {
+        const res = await fetch(`/api/module/LDUD01/closure_check/${id}`);
+        const check = await res.json();
+        if (check.eligible) {
+            const msg = `✓ All requirements met.\nBarge total: ${check.barge_total.toFixed(2)} | BL total: ${check.bl_total.toFixed(2)}\n${check.can_full_close ? 'Full close available.' : 'Partial close available (quantities differ).'}`;
+            alert(msg);
+        } else {
+            alert('Requirements not yet met:\n\n• ' + check.missing.join('\n• '));
+        }
+    }
+
+    function closeClosureModal() {
+        document.getElementById('closureModal').style.display = 'none';
+        closureTargetId = null;
+    }
+
+    async function confirmClose(closeType) {
+        const password = document.getElementById('closurePassword').value.trim();
+        if (!password) { alert('Please enter your password.'); return; }
+        const res = await fetch('/api/module/LDUD01/close', {
             method: 'POST', headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({id: id})
+            body: JSON.stringify({id: closureTargetId, close_type: closeType, password: password})
         });
         const data = await res.json();
         if (data.error) { alert(data.error); return; }
-        const row = table.getRows().find(r => r.getData().id === id);
-        if (row) { row.update({doc_status: 'Approved'}); row.reformat(); }
+        const row = table.getRows().find(r => r.getData().id === closureTargetId);
+        if (row) { row.update({doc_status: data.doc_status}); row.reformat(); }
+        closeClosureModal();
     }
 
-    function rejectRow(id) {
-        rejectTargetId = id;
-        document.getElementById('rejectComment').value = '';
-        document.getElementById('rejectModal').style.display = 'flex';
+    function reopenRow(id) {
+        reopenTargetId = id;
+        document.getElementById('reopenComment').value = '';
+        document.getElementById('reopenModal').style.display = 'flex';
     }
 
-    function closeRejectModal() {
-        document.getElementById('rejectModal').style.display = 'none';
-        rejectTargetId = null;
+    function closeReopenModal() {
+        document.getElementById('reopenModal').style.display = 'none';
+        reopenTargetId = null;
     }
 
-    async function confirmReject() {
-        const comment = document.getElementById('rejectComment').value.trim();
-        if (!comment) { alert('Please enter a rejection reason.'); return; }
-        const res = await fetch('/api/module/LDUD01/reject', {
+    async function confirmReopen() {
+        const comment = document.getElementById('reopenComment').value.trim();
+        if (!comment) { alert('Please enter a reason.'); return; }
+        const res = await fetch('/api/module/LDUD01/reopen', {
             method: 'POST', headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({id: rejectTargetId, comment: comment})
+            body: JSON.stringify({id: reopenTargetId, comment: comment})
         });
         const data = await res.json();
         if (data.error) { alert(data.error); return; }
-        const row = table.getRows().find(r => r.getData().id === rejectTargetId);
-        if (row) { row.update({doc_status: 'Rejected'}); row.reformat(); }
-        closeRejectModal();
+        const row = table.getRows().find(r => r.getData().id === reopenTargetId);
+        if (row) { row.update({doc_status: 'Draft'}); row.reformat(); }
+        closeReopenModal();
     }
 
-    async function showApprovalLog(id, event) {
+    async function showClosureLog(id, event) {
         event.stopPropagation();
-        const res = await fetch(`/api/module/LDUD01/approval-log/${id}`);
+        const res = await fetch(`/api/module/LDUD01/closure-log/${id}`);
         const log = await res.json();
-        if (!log.length) { alert('No approval history yet.'); return; }
+        if (!log.length) { alert('No closure history yet.'); return; }
         const lines = log.map(e => `${e.actioned_at}  ${e.action} by ${e.actioned_by}${e.comment ? '\n  Reason: ' + e.comment : ''}`);
-        alert('Approval History:\n\n' + lines.join('\n\n'));
+        alert('Closure History:\n\n' + lines.join('\n\n'));
     }
 
     // ── Filter panel ──────────────────────────────────────────────────────────
@@ -2202,7 +2313,7 @@
             operation_type: { label: 'Operation Type', type: 'multi',   values: ['Import', 'Export'] },
             cargo_type:     { label: 'Cargo Type',     type: 'multi',   values: cargoNames },
             doc_date:       { label: 'Doc Date',       type: 'range' },
-            doc_status:     { label: 'Status',         type: 'multi',   values: ['Draft', 'Approved', 'Rejected', 'Pending'] },
+            doc_status:     { label: 'Status',         type: 'multi',   values: ['Draft', 'Partial Close', 'Closed'] },
         };
     }
 

@@ -69,10 +69,12 @@ def save():
 
     if not is_new:
         current_status = model.get_doc_status(data['id'])
-        if current_status == 'Approved':
+        if current_status == 'Closed':
             if not is_approver:
-                return jsonify({'error': 'Cannot edit an approved record'}), 403
-            data['doc_status'] = 'Approved'
+                return jsonify({'error': 'Cannot edit a closed record'}), 403
+            data['doc_status'] = 'Closed'
+        elif current_status == 'Partial Close':
+            data['doc_status'] = 'Partial Close'
         else:
             data['doc_status'] = 'Draft'
     else:
@@ -82,42 +84,73 @@ def save():
     return jsonify({'id': row_id, 'doc_num': doc_num, 'doc_status': data.get('doc_status', 'Draft')})
 
 
-@bp.route('/api/module/LDUD01/approve', methods=['POST'])
+@bp.route('/api/module/LDUD01/closure_check/<int:ldud_id>')
 @login_required
-def approve():
+def closure_check(ldud_id):
+    return jsonify(model.get_closure_eligibility(ldud_id))
+
+
+@bp.route('/api/module/LDUD01/close', methods=['POST'])
+@login_required
+def close():
     config = get_module_config('LDUD01')
     is_approver = str(config.get('approver_id', '')) == str(session.get('user_id')) or session.get('is_admin')
     if not is_approver:
-        return jsonify({'error': 'No permission to approve'}), 403
-    record_id = request.json.get('id')
+        return jsonify({'error': 'No permission to close'}), 403
+    data = request.json
+    record_id = data.get('id')
+    close_type = data.get('close_type')
+    password = (data.get('password') or '').strip()
     if not record_id:
         return jsonify({'error': 'Missing id'}), 400
-    model.approve_record(record_id, session.get('username'))
-    return jsonify({'doc_status': 'Approved'})
+    if close_type not in ['Closed', 'Partial Close']:
+        return jsonify({'error': 'Invalid close type'}), 400
+    if not password:
+        return jsonify({'error': 'Password is required'}), 400
+
+    # Verify password server-side
+    from database import get_db, get_cursor
+    conn = get_db()
+    cur = get_cursor(conn)
+    cur.execute('SELECT id FROM users WHERE id=%s AND password=%s', [session.get('user_id'), password])
+    user = cur.fetchone()
+    conn.close()
+    if not user:
+        return jsonify({'error': 'Incorrect password'}), 403
+
+    # Re-verify eligibility server-side
+    eligibility = model.get_closure_eligibility(record_id)
+    if not eligibility['eligible']:
+        return jsonify({'error': 'Record not eligible for closure', 'missing': eligibility['missing']}), 400
+    if close_type == 'Closed' and not eligibility['can_full_close']:
+        return jsonify({'error': f"Barge total ({eligibility['barge_total']}) does not match BL total ({eligibility['bl_total']}) — use Partial Close instead"}), 400
+
+    model.close_record(record_id, close_type, session.get('username'))
+    return jsonify({'doc_status': close_type})
 
 
-@bp.route('/api/module/LDUD01/reject', methods=['POST'])
+@bp.route('/api/module/LDUD01/reopen', methods=['POST'])
 @login_required
-def reject():
+def reopen():
     config = get_module_config('LDUD01')
     is_approver = str(config.get('approver_id', '')) == str(session.get('user_id')) or session.get('is_admin')
     if not is_approver:
-        return jsonify({'error': 'No permission to reject'}), 403
+        return jsonify({'error': 'No permission to reopen'}), 403
     data = request.json
     record_id = data.get('id')
     comment = (data.get('comment') or '').strip()
     if not record_id:
         return jsonify({'error': 'Missing id'}), 400
     if not comment:
-        return jsonify({'error': 'Rejection comment is required'}), 400
-    model.reject_record(record_id, comment, session.get('username'))
-    return jsonify({'doc_status': 'Rejected'})
+        return jsonify({'error': 'A reason is required when sending back to Draft'}), 400
+    model.reopen_record(record_id, comment, session.get('username'))
+    return jsonify({'doc_status': 'Draft'})
 
 
-@bp.route('/api/module/LDUD01/approval-log/<int:record_id>')
+@bp.route('/api/module/LDUD01/closure-log/<int:record_id>')
 @login_required
-def approval_log(record_id):
-    return jsonify(model.get_approval_log(record_id))
+def closure_log(record_id):
+    return jsonify(model.get_closure_log(record_id))
 
 @bp.route('/api/module/LDUD01/delete', methods=['POST'])
 @login_required

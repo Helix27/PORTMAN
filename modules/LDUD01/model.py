@@ -548,7 +548,7 @@ def get_hold_cargo(ldud_id):
     return {r['hold_name']: r['cargo_name'] or '' for r in rows}
 
 
-# Approval functions
+# Closure functions
 def get_doc_status(record_id):
     conn = get_db()
     cur = get_cursor(conn)
@@ -558,27 +558,105 @@ def get_doc_status(record_id):
     return row['doc_status'] if row else None
 
 
-def approve_record(record_id, username):
+def get_closure_eligibility(ldud_id):
+    """Check all closure prerequisites and return eligibility info."""
     conn = get_db()
     cur = get_cursor(conn)
-    cur.execute("UPDATE ldud_header SET doc_status='Approved' WHERE id=%s", (record_id,))
+    missing = []
+
+    cur.execute('SELECT vessel_name, nor_tendered, vcn_id, operation_type FROM ldud_header WHERE id=%s', (ldud_id,))
+    header = cur.fetchone()
+    if not header:
+        conn.close()
+        return {'eligible': False, 'missing': ['Record not found'], 'barge_total': 0, 'bl_total': 0, 'can_full_close': False}
+
+    if not header['vessel_name']:
+        missing.append('Vessel Name (select a VCN to populate)')
+    if not header['nor_tendered']:
+        missing.append('NOR Tendered (header field)')
+
+    # Anchorage recording: ≥1 row
+    cur.execute('SELECT COUNT(*) FROM ldud_anchorage WHERE ldud_id=%s', (ldud_id,))
+    if cur.fetchone()['count'] == 0:
+        missing.append('Anchorage Recording — at least 1 entry required')
+
+    # Anchorage: at least one row with discharge_started (gives Disch./Load Start)
+    cur.execute('SELECT COUNT(*) FROM ldud_anchorage WHERE ldud_id=%s AND discharge_started IS NOT NULL', (ldud_id,))
+    if cur.fetchone()['count'] == 0:
+        missing.append('Disch./Load Start — fill Discharge Started in Anchorage Recording')
+
+    # MV Anchorage Discharge/Loading: ≥1 vessel_operations row
+    cur.execute('SELECT COUNT(*) FROM ldud_vessel_operations WHERE ldud_id=%s', (ldud_id,))
+    if cur.fetchone()['count'] == 0:
+        missing.append('MV Anchorage Discharge/Loading — at least 1 entry required')
+
+    # Barge Lines: ≥1 row
+    cur.execute('SELECT COUNT(*) FROM ldud_barge_lines WHERE ldud_id=%s', (ldud_id,))
+    if cur.fetchone()['count'] == 0:
+        missing.append('Barge Lines — at least 1 entry required')
+
+    # Hold Completion: ≥1 row, all with commenced AND completed
+    cur.execute('SELECT COUNT(*) FROM ldud_hold_completion WHERE ldud_id=%s', (ldud_id,))
+    hc_total = cur.fetchone()['count']
+    if hc_total == 0:
+        missing.append('Hold Discharge/Loading Completion — at least 1 entry required')
+    else:
+        cur.execute('''SELECT COUNT(*) FROM ldud_hold_completion
+                       WHERE ldud_id=%s AND (commenced IS NULL OR completed IS NULL)''', (ldud_id,))
+        hc_incomplete = cur.fetchone()['count']
+        if hc_incomplete > 0:
+            missing.append(f'Hold Completion — {hc_incomplete} hold(s) missing Commenced/Completed dates')
+
+    # Barge total vs BL total
+    cur.execute('SELECT COALESCE(SUM(discharge_quantity), 0) AS total FROM ldud_barge_lines WHERE ldud_id=%s', (ldud_id,))
+    barge_total = float(cur.fetchone()['total'])
+
+    bl_total = 0.0
+    vcn_id = header['vcn_id']
+    op_type = header['operation_type']
+    if vcn_id:
+        if op_type == 'Export':
+            cur.execute('SELECT COALESCE(SUM(bl_quantity), 0) AS total FROM vcn_export_cargo_declaration WHERE vcn_id=%s', (vcn_id,))
+        else:
+            cur.execute('SELECT COALESCE(SUM(bl_quantity), 0) AS total FROM vcn_cargo_declaration WHERE vcn_id=%s', (vcn_id,))
+        bl_total = float(cur.fetchone()['total'])
+
+    conn.close()
+    eligible = len(missing) == 0
+    can_full_close = eligible and bl_total > 0 and abs(barge_total - bl_total) < 0.01
+
+    return {
+        'eligible': eligible,
+        'missing': missing,
+        'barge_total': barge_total,
+        'bl_total': bl_total,
+        'can_full_close': can_full_close
+    }
+
+
+def close_record(record_id, close_type, username):
+    """close_type: 'Closed' or 'Partial Close'"""
+    conn = get_db()
+    cur = get_cursor(conn)
+    cur.execute('UPDATE ldud_header SET doc_status=%s WHERE id=%s', (close_type, record_id))
     cur.execute("""INSERT INTO approval_log (module_code, record_id, action, comment, actioned_by)
-                   VALUES ('LDUD01', %s, 'Approved', NULL, %s)""", (record_id, username))
+                   VALUES ('LDUD01', %s, %s, NULL, %s)""", (record_id, close_type, username))
     conn.commit()
     conn.close()
 
 
-def reject_record(record_id, comment, username):
+def reopen_record(record_id, comment, username):
+    """Send record back to Draft with a logged reason."""
     conn = get_db()
     cur = get_cursor(conn)
-    cur.execute("UPDATE ldud_header SET doc_status='Rejected' WHERE id=%s", (record_id,))
+    cur.execute("UPDATE ldud_header SET doc_status='Draft' WHERE id=%s", (record_id,))
     cur.execute("""INSERT INTO approval_log (module_code, record_id, action, comment, actioned_by)
-                   VALUES ('LDUD01', %s, 'Rejected', %s, %s)""", (record_id, comment, username))
+                   VALUES ('LDUD01', %s, 'Back to Draft', %s, %s)""", (record_id, comment, username))
     conn.commit()
     conn.close()
 
 
-def get_approval_log(record_id):
+def get_closure_log(record_id):
     conn = get_db()
     cur = get_cursor(conn)
     cur.execute("""SELECT action, comment, actioned_by,

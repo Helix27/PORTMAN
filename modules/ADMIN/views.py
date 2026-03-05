@@ -143,3 +143,39 @@ def save_config(module_code):
     config = request.json
     save_module_config(module_code, config)
     return jsonify({'success': True})
+
+
+# ── LDUD Vessel Closure Admin ─────────────────────────────────────────────────
+
+@bp.route('/api/ldud/vessels')
+@admin_required
+def get_ldud_vessels():
+    conn = get_db()
+    cur = get_cursor(conn)
+    cur.execute('''
+        SELECT id, doc_num, vessel_name, vcn_doc_num, operation_type, doc_status, created_by
+        FROM ldud_header
+        WHERE doc_status IN ('Closed', 'Partial Close')
+        ORDER BY id DESC
+    ''')
+    rows = cur.fetchall()
+    conn.close()
+    return jsonify([dict(r) for r in rows])
+
+
+@bp.route('/api/ldud/open_vessel', methods=['POST'])
+@admin_required
+def open_vessel():
+    data = request.json
+    ldud_id = data.get('id')
+    if not ldud_id:
+        return jsonify({'error': 'Missing id'}), 400
+    conn = get_db()
+    cur = get_cursor(conn)
+    cur.execute("UPDATE ldud_header SET doc_status='Draft' WHERE id=%s", (ldud_id,))
+    cur.execute("""INSERT INTO approval_log (module_code, record_id, action, comment, actioned_by)
+                   VALUES ('LDUD01', %s, 'Reopened by Admin', 'Manually reopened via Admin panel', %s)""",
+                (ldud_id, session.get('username')))
+    conn.commit()
+    conn.close()
+    return jsonify({'success': True})

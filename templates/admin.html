@@ -12,6 +12,7 @@
     <button class="tab-btn active" onclick="showTab('users')">User Management</button>
     <button class="tab-btn" onclick="showTab('permissions')">Module Permissions</button>
     <button class="tab-btn" onclick="showTab('config')">Module Config</button>
+    <button class="tab-btn" onclick="showTab('vessels')">Vessel Closure</button>
 </div>
 
 <!-- User Management Tab -->
@@ -116,6 +117,31 @@
     </div>
 </div>
 
+<!-- Vessel Closure Tab -->
+<div id="vessels-tab" class="tab-content">
+    <div class="admin-section">
+        <h3>Vessel Closure Management</h3>
+        <p style="font-size:13px;color:#718096;margin:0 0 12px;">Shows all Closed and Partial Close vessels from LDUD01. Use "Open Vessel" to reset a record back to Draft.</p>
+        <div class="toolbar">
+            <button class="btn btn-save" onclick="loadLdudVessels()">↻ Refresh</button>
+        </div>
+        <table class="admin-table" id="ldudVesselsTable">
+            <thead>
+                <tr>
+                    <th>Doc Num</th>
+                    <th>Vessel Name</th>
+                    <th>VCN Doc</th>
+                    <th>Operation</th>
+                    <th>Status</th>
+                    <th>Created By</th>
+                    <th>Action</th>
+                </tr>
+            </thead>
+            <tbody id="ldudVesselsBody"></tbody>
+        </table>
+    </div>
+</div>
+
 <!-- Add User Modal -->
 <div id="addUserModal" class="modal" style="display:none;">
     <div class="modal-content">
@@ -214,8 +240,9 @@ async function loadModules() {
 function showTab(tab) {
     document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
     document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
-    document.querySelector(`[onclick="showTab('${tab}')"]`).classList.add('active');
+    document.querySelector(`[onclick*="showTab('${tab}')"]`).classList.add('active');
     document.getElementById(`${tab}-tab`).classList.add('active');
+    if (tab === 'vessels') loadLdudVessels();
 }
 
 function showAddUser() { document.getElementById('addUserModal').style.display = 'flex'; }
@@ -361,6 +388,42 @@ async function saveConfig() {
 
     if (res.ok) alert('Config saved!');
     else alert('Failed to save config');
+}
+
+// ── Vessel Closure ───────────────────────────────────────────────────────────
+async function loadLdudVessels() {
+    const res = await fetch('/admin/api/ldud/vessels');
+    const vessels = await res.json();
+    const tbody = document.getElementById('ldudVesselsBody');
+    if (!vessels.length) {
+        tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:#718096;padding:16px;">No closed or partial-closed vessels found.</td></tr>';
+        return;
+    }
+    tbody.innerHTML = vessels.map(v => {
+        const statusColor = v.doc_status === 'Closed' ? '#276749' : '#c05621';
+        const statusBg   = v.doc_status === 'Closed' ? '#c6f6d5' : '#feebc8';
+        return `<tr>
+            <td>${v.doc_num || ''}</td>
+            <td>${v.vessel_name || ''}</td>
+            <td>${v.vcn_doc_num || ''}</td>
+            <td>${v.operation_type || ''}</td>
+            <td><span style="background:${statusBg};color:${statusColor};padding:2px 8px;border-radius:10px;font-size:11px;font-weight:600;">${v.doc_status}</span></td>
+            <td>${v.created_by || ''}</td>
+            <td><button class="btn btn-danger" onclick="openVessel(${v.id}, '${(v.doc_num||'').replace(/'/g,"\\'")}')">Open Vessel</button></td>
+        </tr>`;
+    }).join('');
+}
+
+async function openVessel(id, docNum) {
+    if (!confirm(`Reset "${docNum}" back to Draft? This will allow editing again.`)) return;
+    const res = await fetch('/admin/api/ldud/open_vessel', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({id})
+    });
+    const data = await res.json();
+    if (data.error) { alert(data.error); return; }
+    loadLdudVessels();
 }
 
 // Initialize
