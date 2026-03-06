@@ -34,11 +34,11 @@
     padding: 3px 10px; border-radius: 4px;
     font-size: 11px; font-weight: 700; letter-spacing: 0.5px;
 }
-.back-link {
-    margin-left: auto; font-size: 12px; color: #4a90d9;
-    text-decoration: none; font-weight: 600;
+.breadcrumb {
+    font-size: 11px; color: var(--text-secondary); margin-bottom: 10px;
 }
-.back-link:hover { text-decoration: underline; }
+.breadcrumb a { color: #4a90d9; text-decoration: none; }
+.breadcrumb a:hover { text-decoration: underline; }
 
 /* ── Toolbar ─────────────────────────────────────────────── */
 .toolbar {
@@ -393,17 +393,18 @@ td.pvtAxisContainer.pvtCols::before {
 <div class="page-header">
     <h2>Custom Report Designer</h2>
     <span class="module-badge">RP01</span>
-    <a class="back-link" href="/module/RP01/">&larr; Reports</a>
+</div>
+<div class="breadcrumb">
+    <a href="/module/RP01/">Reports</a> &rsaquo; Custom Report Designer
 </div>
 
 <div class="toolbar">
     <div class="toolbar-group">
         <label for="src-sel">Data Source</label>
         <select id="src-sel">
-            <option value="vessel-ops">Vessel Operations</option>
-            <option value="delays">Delay Analysis</option>
-            <option value="barge-lines">Barge Lines</option>
-            <option value="financials">Financials</option>
+            <option value="mbc-ops">MBC Operation</option>
+            <option value="vessel-ops">Vessel Operation</option>
+            <option value="vessel-barge">Vessel - Barge Lines</option>
         </select>
     </div>
     <div class="toolbar-group">
@@ -664,10 +665,9 @@ function setStatus(msg, isErr) {
 }
 function srcLabel(s) {
     return {
-        'vessel-ops':  'Vessel Operations',
-        'delays':      'Delay Analysis',
-        'barge-lines': 'Barge Lines',
-        'financials':  'Financials',
+        'mbc-ops':      'MBC Operation',
+        'vessel-ops':   'Vessel Operation',
+        'vessel-barge': 'Vessel - Barge Lines',
     }[s] || s;
 }
 function esc(s) {
