@@ -27,10 +27,13 @@
     .entry-panel { background: #f8f9fa; border: 2px solid #3498db; border-radius: 4px; padding: 15px; margin-bottom: 15px; display: none; }
     .entry-panel h3 { margin: 0 0 12px 0; font-size: 13px; color: #3498db; border-bottom: 2px solid #3498db; padding-bottom: 5px; }
     .form-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; margin-bottom: 12px; }
+    .form-grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 12px; }
     .form-group { display: flex; flex-direction: column; }
     .form-group label { font-size: 10px; font-weight: 600; color: #555; margin-bottom: 3px; text-transform: uppercase; }
     .form-group input, .form-group select, .form-group textarea { padding: 6px; font-size: 11px; border: 1px solid #ddd; border-radius: 3px; }
     .form-group input[readonly] { background: #ecf0f1; }
+    .section-divider { border: none; border-top: 1px dashed #ccc; margin: 10px 0; }
+    .section-label { font-size: 10px; font-weight: 700; color: #8e44ad; text-transform: uppercase; margin: 0 0 8px 0; }
 
     /* Dynamic fields */
     .fields-section { border-top: 1px solid #ddd; padding-top: 12px; margin-top: 12px; }
@@ -45,6 +48,9 @@
     .filters { display: flex; gap: 10px; margin-bottom: 15px; align-items: center; font-size: 11px; }
     .filters select { padding: 5px; font-size: 11px; border: 1px solid #ddd; border-radius: 3px; }
     .filters label { font-weight: 600; color: #555; }
+
+    .ref-section { background: #fff8e1; border: 1px dashed #f39c12; border-radius: 4px; padding: 10px; margin-bottom: 12px; }
+    .ref-section .section-label { color: #e67e22; }
 </style>
 
 <div class="module-header">
@@ -62,13 +68,14 @@
 <div class="entry-panel" id="entryPanel">
     <h3 id="entryTitle">New Service Record</h3>
 
+    <!-- Row 1: Record info -->
     <div class="form-grid">
         <div class="form-group">
             <label>Record Number</label>
             <input type="text" id="recordNumber" readonly placeholder="Auto-generated">
         </div>
         <div class="form-group">
-            <label>Record Date</label>
+            <label>Record Date *</label>
             <input type="date" id="recordDate">
         </div>
         <div class="form-group">
@@ -77,29 +84,54 @@
         </div>
     </div>
 
+    <!-- Row 2: Customer (primary source) -->
+    <p class="section-label">Bill To (Customer / Agent)</p>
     <div class="form-grid">
         <div class="form-group">
-            <label>Source Type</label>
-            <select id="sourceType" onchange="loadSourceOptions()">
+            <label>Customer Type *</label>
+            <select id="customerType" onchange="loadCustomerOptions()">
                 <option value="">-- Select --</option>
-                <option value="VCN">VCN (Vessel Call)</option>
-                <option value="MBC">MBC (MBC Operation)</option>
+                <option value="Customer">Customer</option>
+                <option value="Agent">Agent</option>
             </select>
         </div>
         <div class="form-group">
-            <label>Source Document</label>
-            <select id="sourceId" onchange="onSourceSelected()">
-                <option value="">-- Select Source Type First --</option>
+            <label>Customer / Agent *</label>
+            <select id="customerId">
+                <option value="">-- Select Customer Type First --</option>
             </select>
         </div>
         <div class="form-group">
-            <label>Service Type</label>
+            <label>Service Type *</label>
             <select id="serviceTypeId" onchange="loadFieldDefinitions()">
                 <option value="">-- Select --</option>
             </select>
         </div>
     </div>
 
+    <!-- Row 3: Optional VCN/MBC reference -->
+    <div class="ref-section">
+        <p class="section-label">Optional Reference (VCN / MBC)</p>
+        <div class="form-grid">
+            <div class="form-group">
+                <label>Reference Type</label>
+                <select id="refSourceType" onchange="loadRefOptions()">
+                    <option value="">-- None --</option>
+                    <option value="VCN">VCN (Vessel Call)</option>
+                    <option value="MBC">MBC (MBC Operation)</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label>Reference Document</label>
+                <select id="refSourceId">
+                    <option value="">-- Select Reference Type First --</option>
+                </select>
+            </div>
+            <div class="form-group"></div>
+        </div>
+    </div>
+
+    <!-- Row 4: Qty & Remarks -->
     <div class="form-grid">
         <div class="form-group">
             <label>Remarks</label>
@@ -133,11 +165,11 @@
 
 <!-- Filters -->
 <div class="filters">
-    <label>Source:</label>
+    <label>Customer Type:</label>
     <select id="filterSource" onchange="applyFilters()">
         <option value="">All</option>
-        <option value="VCN">VCN</option>
-        <option value="MBC">MBC</option>
+        <option value="Customer">Customer</option>
+        <option value="Agent">Agent</option>
     </select>
     <label>Status:</label>
     <select id="filterBilled" onchange="applyFilters()">
@@ -153,8 +185,9 @@
         <tr>
             <th>Record #</th>
             <th>Date</th>
-            <th>Source</th>
+            <th>Customer</th>
             <th>Service Type</th>
+            <th>Reference</th>
             <th>Billable Qty</th>
             <th>UOM</th>
             <th>Status</th>
@@ -169,6 +202,7 @@
             <td>{{ row.record_date }}</td>
             <td>{{ row.source_type }} - {{ row.source_display }}</td>
             <td>{{ row.service_name }}</td>
+            <td>{{ row.ref_source_display or '-' }}</td>
             <td>{{ row.billable_quantity }}</td>
             <td>{{ row.billable_uom }}</td>
             <td>
@@ -215,6 +249,10 @@ let currentRecordId = null;
 
 document.addEventListener('DOMContentLoaded', () => {
     loadServiceTypes();
+    // Set filter values from URL
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('source_type')) document.getElementById('filterSource').value = params.get('source_type');
+    if (params.get('billed_status')) document.getElementById('filterBilled').value = params.get('billed_status');
 });
 
 async function loadServiceTypes() {
@@ -225,6 +263,38 @@ async function loadServiceTypes() {
     sel.innerHTML = '<option value="">-- Select --</option>';
     serviceTypesData.forEach(st => {
         sel.innerHTML += `<option value="${st.id}" data-uom="${st.uom || ''}">${st.service_name}</option>`;
+    });
+}
+
+async function loadCustomerOptions() {
+    const customerType = document.getElementById('customerType').value;
+    const sel = document.getElementById('customerId');
+    if (!customerType) {
+        sel.innerHTML = '<option value="">-- Select Customer Type First --</option>';
+        return;
+    }
+    sel.innerHTML = '<option value="">-- Loading... --</option>';
+    const resp = await fetch(`/api/module/SRV01/customer-options/${customerType}`);
+    const json = await resp.json();
+    sel.innerHTML = '<option value="">-- Select --</option>';
+    (json.data || []).forEach(c => {
+        sel.innerHTML += `<option value="${c.id}">${c.name}</option>`;
+    });
+}
+
+async function loadRefOptions() {
+    const refType = document.getElementById('refSourceType').value;
+    const sel = document.getElementById('refSourceId');
+    if (!refType) {
+        sel.innerHTML = '<option value="">-- Select Reference Type First --</option>';
+        return;
+    }
+    sel.innerHTML = '<option value="">-- Loading... --</option>';
+    const resp = await fetch(`/api/module/SRV01/source-options/${refType}`);
+    const json = await resp.json();
+    sel.innerHTML = '<option value="">-- None --</option>';
+    (json.data || []).forEach(opt => {
+        sel.innerHTML += `<option value="${opt.id}">${opt.display}</option>`;
     });
 }
 
@@ -245,8 +315,10 @@ function resetForm() {
     document.getElementById('recordNumber').value = '';
     document.getElementById('recordDate').value = new Date().toISOString().slice(0, 10);
     document.getElementById('docStatus').value = 'Pending';
-    document.getElementById('sourceType').value = '';
-    document.getElementById('sourceId').innerHTML = '<option value="">-- Select Source Type First --</option>';
+    document.getElementById('customerType').value = '';
+    document.getElementById('customerId').innerHTML = '<option value="">-- Select Customer Type First --</option>';
+    document.getElementById('refSourceType').value = '';
+    document.getElementById('refSourceId').innerHTML = '<option value="">-- Select Reference Type First --</option>';
     document.getElementById('serviceTypeId').value = '';
     document.getElementById('remarks').value = '';
     document.getElementById('billableQty').value = '';
@@ -254,28 +326,6 @@ function resetForm() {
     document.getElementById('fieldsSection').style.display = 'none';
     document.getElementById('fieldsContainer').innerHTML = '';
     fieldDefinitions = [];
-}
-
-async function loadSourceOptions() {
-    const sourceType = document.getElementById('sourceType').value;
-    const sel = document.getElementById('sourceId');
-    sel.innerHTML = '<option value="">-- Loading... --</option>';
-
-    if (!sourceType) {
-        sel.innerHTML = '<option value="">-- Select Source Type First --</option>';
-        return;
-    }
-
-    const resp = await fetch(`/api/module/SRV01/source-options/${sourceType}`);
-    const json = await resp.json();
-    sel.innerHTML = '<option value="">-- Select --</option>';
-    (json.data || []).forEach(opt => {
-        sel.innerHTML += `<option value="${opt.id}">${opt.display}</option>`;
-    });
-}
-
-function onSourceSelected() {
-    // Could add logic here if needed
 }
 
 async function loadFieldDefinitions() {
@@ -292,7 +342,6 @@ async function loadFieldDefinitions() {
         return;
     }
 
-    // Set UOM from service type
     const stOpt = document.getElementById('serviceTypeId').selectedOptions[0];
     document.getElementById('billableUom').value = stOpt.dataset.uom || '';
 
@@ -368,7 +417,6 @@ function renderFields(existingValues) {
                         input.appendChild(o);
                     });
                 } catch (e) {
-                    // If field_options is comma-separated text instead of JSON
                     (fd.field_options || '').split(',').map(s => s.trim()).filter(Boolean).forEach(opt => {
                         const o = document.createElement('option');
                         o.value = opt;
@@ -408,7 +456,6 @@ function renderFields(existingValues) {
         container.appendChild(div);
     });
 
-    // If loading existing values, run recalculate
     if (existingValues && existingValues.length > 0) {
         recalculate();
     }
@@ -418,14 +465,12 @@ function recalculate() {
     const container = document.getElementById('fieldsContainer');
     const allInputs = container.querySelectorAll('[data-field-name]');
 
-    // Build field values map
     const fieldValues = {};
     allInputs.forEach(inp => {
         fieldValues[inp.dataset.fieldName] = inp.dataset.fieldType === 'checkbox'
             ? (inp.checked ? '1' : '0') : inp.value;
     });
 
-    // Process calculated fields
     allInputs.forEach(inp => {
         if (inp.dataset.fieldType !== 'calculated') return;
         const result = evaluateFormula(inp.dataset.formula || '', fieldValues, inp.dataset.resultType || '');
@@ -435,7 +480,6 @@ function recalculate() {
         }
     });
 
-    // Non-calculated billable qty
     allInputs.forEach(inp => {
         if (inp.dataset.fieldType === 'calculated') return;
         if (inp.dataset.isBillableQty == 1) {
@@ -449,10 +493,8 @@ function evaluateFormula(formula, fieldValues, resultType) {
     if (!formula) return null;
     formula = formula.trim();
 
-    // A token is either max/min(...) or a plain field name (\w+)
     const tokStr = '(?:(?:max|min)\\s*\\(\\s*\\w+\\s*,\\s*\\w+\\s*\\)|\\w+)';
 
-    // Resolve a token to a Date (for datetime fields) or number/string
     function resolveToken(token) {
         token = token.trim();
         const m = token.match(/^(max|min)\s*\(\s*(\w+)\s*,\s*(\w+)\s*\)$/i);
@@ -468,7 +510,6 @@ function evaluateFormula(formula, fieldValues, resultType) {
             const a = parseFloat(aRaw) || 0, b = parseFloat(bRaw) || 0;
             return fn === 'max' ? Math.max(a, b) : Math.min(a, b);
         }
-        // Plain field name — return Date if it looks like a datetime, else raw string
         const raw = fieldValues[token] || '';
         if (raw) {
             const d = new Date(raw);
@@ -477,7 +518,6 @@ function evaluateFormula(formula, fieldValues, resultType) {
         return raw;
     }
 
-    // Match: TOKEN op TOKEN  (handles simple A-B and compound max(A,B)-min(A,B))
     const compoundRe = new RegExp('^(' + tokStr + ')\\s*([\\+\\-\\*\\/])\\s*(' + tokStr + ')$', 'i');
     const cm = formula.match(compoundRe);
     if (cm) {
@@ -485,7 +525,7 @@ function evaluateFormula(formula, fieldValues, resultType) {
         if (op === '-' && left instanceof Date && right instanceof Date) {
             const diffMs = left - right;
             if (resultType === 'days') return (diffMs / 86400000).toFixed(2);
-            return (diffMs / 3600000).toFixed(2);   // hours default
+            return (diffMs / 3600000).toFixed(2);
         }
         const a = left instanceof Date ? 0 : (parseFloat(left) || 0);
         const b = right instanceof Date ? 0 : (parseFloat(right) || 0);
@@ -495,7 +535,6 @@ function evaluateFormula(formula, fieldValues, resultType) {
         if (op === '/') return b !== 0 ? (a / b).toFixed(2) : '0.00';
     }
 
-    // Standalone max(A, B) or min(A, B) — numeric only
     const funcM = formula.match(/^(max|min)\s*\(\s*(\w+)\s*,\s*(\w+)\s*\)$/i);
     if (funcM) {
         const a = parseFloat(fieldValues[funcM[2]]) || 0;
@@ -511,40 +550,39 @@ function collectFieldValues() {
     const allInputs = container.querySelectorAll('[data-field-id]');
     const values = [];
     allInputs.forEach(inp => {
-        let val;
-        if (inp.dataset.fieldType === 'checkbox') {
-            val = inp.checked ? '1' : '0';
-        } else {
-            val = inp.value;
-        }
-        values.push({
-            field_definition_id: parseInt(inp.dataset.fieldId),
-            field_value: val
-        });
+        let val = inp.dataset.fieldType === 'checkbox' ? (inp.checked ? '1' : '0') : inp.value;
+        values.push({ field_definition_id: parseInt(inp.dataset.fieldId), field_value: val });
     });
     return values;
 }
 
 async function saveRecord() {
-    const sourceType = document.getElementById('sourceType').value;
-    const sourceId = document.getElementById('sourceId').value;
+    const customerType = document.getElementById('customerType').value;
+    const customerId = document.getElementById('customerId').value;
     const serviceTypeId = document.getElementById('serviceTypeId').value;
     const recordDate = document.getElementById('recordDate').value;
 
-    if (!sourceType || !sourceId || !serviceTypeId || !recordDate) {
-        alert('Please fill in Source Type, Source Document, Service Type, and Date.');
+    if (!customerType || !customerId || !serviceTypeId || !recordDate) {
+        alert('Please fill in Customer Type, Customer/Agent, Service Type, and Date.');
         return;
     }
 
-    // Recalculate before saving
     recalculate();
 
-    const sourceOpt = document.getElementById('sourceId').selectedOptions[0];
+    const customerOpt = document.getElementById('customerId').selectedOptions[0];
+    const refSourceType = document.getElementById('refSourceType').value || null;
+    const refSourceId = document.getElementById('refSourceId').value || null;
+    const refSourceOpt = document.getElementById('refSourceId').selectedOptions[0];
+    const refSourceDisplay = (refSourceId && refSourceOpt) ? refSourceOpt.textContent : null;
+
     const payload = {
         id: currentRecordId,
-        source_type: sourceType,
-        source_id: parseInt(sourceId),
-        source_display: sourceOpt ? sourceOpt.textContent : '',
+        source_type: customerType,
+        source_id: parseInt(customerId),
+        source_display: customerOpt ? customerOpt.textContent : '',
+        ref_source_type: refSourceType,
+        ref_source_id: refSourceId ? parseInt(refSourceId) : null,
+        ref_source_display: refSourceDisplay,
         service_type_id: parseInt(serviceTypeId),
         record_date: recordDate,
         billable_quantity: parseFloat(document.getElementById('billableQty').value) || 0,
@@ -589,17 +627,23 @@ async function editRecord(recordId) {
     document.getElementById('billableQty').value = h.billable_quantity || '';
     document.getElementById('billableUom').value = h.billable_uom || '';
 
-    // Set source type and load options
-    document.getElementById('sourceType').value = h.source_type;
-    await loadSourceOptions();
-    document.getElementById('sourceId').value = h.source_id;
+    // Set customer type and load customers
+    document.getElementById('customerType').value = h.source_type || '';
+    await loadCustomerOptions();
+    document.getElementById('customerId').value = h.source_id || '';
+
+    // Set optional ref source
+    document.getElementById('refSourceType').value = h.ref_source_type || '';
+    if (h.ref_source_type) {
+        await loadRefOptions();
+        document.getElementById('refSourceId').value = h.ref_source_id || '';
+    }
 
     // Set service type and load fields
     document.getElementById('serviceTypeId').value = h.service_type_id;
     const stOpt = document.getElementById('serviceTypeId').selectedOptions[0];
     if (stOpt) document.getElementById('billableUom').value = stOpt.dataset.uom || h.billable_uom || '';
 
-    // Load field definitions then render with existing values
     const fieldsResp = await fetch(`/api/module/SRV01/fields/${h.service_type_id}`);
     const fieldsJson = await fieldsResp.json();
     fieldDefinitions = fieldsJson.data || [];
@@ -654,5 +698,7 @@ function applyFilters() {
     if (billed) url += `billed_status=${billed}&`;
     window.location.href = url;
 }
+
+try { addToRecent('SRV01', 'Service Recording'); } catch(e) {}
 </script>
 {% endblock %}

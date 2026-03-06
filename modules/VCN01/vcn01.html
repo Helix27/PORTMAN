@@ -594,7 +594,6 @@
     let isApprover = false;
     const isAdmin = {{ 'true' if session.get('is_admin') else 'false' }};
     let editMode = false;
-    const selectedEditRowIds = new Set();
     let currentModalData = null;
 
     function initTable() {
@@ -609,15 +608,6 @@
 
         const columns = [
             {formatter: "rowSelection", titleFormatter: "rowSelection", hozAlign: "center", headerSort: false, width: 40},
-            {
-                field: '_select', title: '', width: 35, headerSort: false, visible: false,
-                formatter: function(cell) {
-                    const id = cell.getRow().getData().id;
-                    if (!id) return '';
-                    const checked = selectedEditRowIds.has(id);
-                    return `<input type="checkbox" ${checked ? 'checked' : ''} onclick="toggleRowSelection(${id},this)" style="cursor:pointer;width:14px;height:14px;">`;
-                }
-            },
             {
                 title: "Details",
                 formatter: function(cell) {
@@ -713,7 +703,7 @@
                 const data = row.getData();
                 const status = data.doc_status;
                 const el = row.getElement();
-                if (editMode && data.id && selectedEditRowIds.has(data.id)) {
+                if (editMode && data.id && row.isSelected()) {
                     el.style.backgroundColor = '#ebf8ff';
                     el.style.outline = '2px solid #3182ce';
                     el.title = '';
@@ -733,11 +723,24 @@
 
         table.on('cellEditing', function(cell) {
             const field = cell.getColumn().getField();
-            if (!field || field === '_select') return;
+            if (!field) return;
             const rowData = cell.getRow().getData();
-            if (!rowData.id || !editMode || !selectedEditRowIds.has(rowData.id)) {
+            if (!rowData.id || !editMode || !cell.getRow().isSelected()) {
                 cell.cancelEdit();
             }
+        });
+        table.on('rowSelectionChanged', function(data, rows, selected, deselected) {
+            if (!editMode) return;
+            selected.forEach(function(row) {
+                const d = row.getData();
+                if (d.doc_status === 'Approved' && !isApprover) {
+                    row.deselect();
+                    alert('Approved records can only be edited by the approver.');
+                    return;
+                }
+                row.reformat();
+            });
+            deselected.forEach(function(row) { row.reformat(); });
         });
         table.on('cellEdited', function(cell) {
             if (_isSaving) return;
@@ -771,7 +774,7 @@
         const modalBody = document.getElementById('modalSubTables');
         modalBody.innerHTML = '';
 
-        const isUnlocked = editMode && selectedEditRowIds.has(vcnId);
+        const isUnlocked = editMode && (table.getRows().find(r => r.getData().id === vcnId)?.isSelected() ?? false);
         const canAct = (permissions.can_edit || permissions.can_add) && isUnlocked;
 
         // Lock banner in modal header
@@ -905,7 +908,7 @@
     async function initSubTables(vcnId, operationType = 'Import') {
         const _vcnData = table.getRows().map(r => r.getData()).find(d => d.id === vcnId) || {};
         const _isApproved = _vcnData.doc_status === 'Approved';
-        const canEdit = (permissions.can_edit || permissions.can_add) && editMode && selectedEditRowIds.has(vcnId);
+        const canEdit = (permissions.can_edit || permissions.can_add) && editMode && (table.getRows().find(r => r.getData().id === vcnId)?.isSelected() ?? false);
         const isDark = localStorage.getItem('theme') === 'dark';
 
         // Run type options for nominations
@@ -1307,12 +1310,10 @@
                 showStatus(`Saved ${savedCount} row(s)`, 'saved');
                 hideUnsavedBanner();
                 editMode = false;
-                selectedEditRowIds.clear();
                 const editBtn = document.getElementById('editModeBtn');
                 if (editBtn) { editBtn.textContent = '✏️ Edit'; editBtn.style.background = '#805ad5'; }
                 const editBanner = document.getElementById('editModeBanner');
                 if (editBanner) editBanner.style.display = 'none';
-                table.hideColumn('_select');
                 await table.setData("/api/module/VCN01/data");
             }
         } finally {
@@ -1323,11 +1324,10 @@
     function toggleEditMode() {
         if (editMode) {
             editMode = false;
-            selectedEditRowIds.clear();
+            table.deselectRow();
             const btn = document.getElementById('editModeBtn');
             if (btn) { btn.textContent = '✏️ Edit'; btn.style.background = '#805ad5'; }
             document.getElementById('editModeBanner').style.display = 'none';
-            table.hideColumn('_select');
             table.getRows().forEach(r => r.reformat());
             hideUnsavedBanner();
             table.setData('/api/module/VCN01/data');
@@ -1336,27 +1336,7 @@
             const btn = document.getElementById('editModeBtn');
             if (btn) { btn.textContent = '✖ Cancel Edit'; btn.style.background = '#e53e3e'; }
             document.getElementById('editModeBanner').style.display = 'block';
-            table.showColumn('_select');
         }
-    }
-
-    function toggleRowSelection(id, el) {
-        const row = table.getRows().find(r => r.getData().id === id);
-        if (!row) { el.checked = selectedEditRowIds.has(id); return; }
-        const data = row.getData();
-        if (data.doc_status === 'Approved' && !isApprover) {
-            el.checked = false;
-            alert('Approved records can only be edited by the approver.');
-            return;
-        }
-        if (selectedEditRowIds.has(id)) {
-            selectedEditRowIds.delete(id);
-            el.checked = false;
-        } else {
-            selectedEditRowIds.add(id);
-            el.checked = true;
-        }
-        row.reformat();
     }
 
     // Approval functions

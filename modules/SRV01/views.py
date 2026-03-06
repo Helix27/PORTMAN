@@ -111,6 +111,9 @@ def save():
         'source_type': data.get('source_type'),
         'source_id': data.get('source_id'),
         'source_display': data.get('source_display'),
+        'ref_source_type': data.get('ref_source_type'),
+        'ref_source_id': data.get('ref_source_id'),
+        'ref_source_display': data.get('ref_source_display'),
         'record_date': data.get('record_date'),
         'billable_quantity': data.get('billable_quantity'),
         'billable_uom': data.get('billable_uom'),
@@ -183,9 +186,31 @@ def approve():
     return jsonify({'success': True})
 
 
+@bp.route('/api/module/SRV01/customer-options/<customer_type>')
+def get_customer_options(customer_type):
+    """Get customer or agent list for primary source selection"""
+    if 'user_id' not in session:
+        return jsonify({'error': 'Not logged in'}), 401
+
+    conn = get_db()
+    cur = get_cursor(conn)
+
+    if customer_type == 'Customer':
+        cur.execute("SELECT id, name FROM vessel_customers ORDER BY name")
+    elif customer_type == 'Agent':
+        cur.execute("SELECT id, name FROM vessel_agents WHERE is_active = 1 ORDER BY name")
+    else:
+        conn.close()
+        return jsonify({'data': []})
+
+    rows = cur.fetchall()
+    conn.close()
+    return jsonify({'data': [dict(r) for r in rows]})
+
+
 @bp.route('/api/module/SRV01/source-options/<source_type>')
 def get_source_options(source_type):
-    """Get source document options (VCN/MBC)"""
+    """Get optional VCN/MBC reference options"""
     if 'user_id' not in session:
         return jsonify({'error': 'Not logged in'}), 401
 

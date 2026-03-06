@@ -20,6 +20,7 @@ def index():
                          last_page=(total + 19) // 20,
                          gst_rates=gst_rates,
                          perms=perms,
+                         is_admin=session.get('is_admin', False),
                          username=session.get('username'))
 
 
@@ -31,10 +32,16 @@ def save():
     perms = get_user_permissions(session['user_id'], 'FSTM01')
     data = request.json
 
+    is_admin = session.get('is_admin', False)
+
     if data.get('id') and not perms['can_edit']:
         return jsonify({'success': False, 'error': 'No edit permission'})
     if not data.get('id') and not perms['can_add']:
         return jsonify({'success': False, 'error': 'No add permission'})
+
+    # System rows can only be edited by admins
+    if data.get('is_system') and not is_admin:
+        return jsonify({'success': False, 'error': 'System rows can only be edited by admins'})
 
     data['created_by'] = session.get('username')
     row_id = model.save_service_type(data)

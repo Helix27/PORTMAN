@@ -15,7 +15,13 @@
     .data-table th { background: #34495e; color: white; font-weight: 600; font-size: 10px; text-transform: uppercase; }
     .data-table tr:hover { background: #f8f9fa; }
     .data-table input, .data-table select { width: 100%; padding: 4px; font-size: 11px; border: 1px solid #ddd; }
+    .data-table input[readonly], .data-table input:disabled, .data-table select:disabled { background: #ecf0f1; color: #7f8c8d; cursor: not-allowed; }
     .pagination { margin-top: 15px; display: flex; gap: 5px; justify-content: center; font-size: 11px; }
+    .system-row { background: #fdf6e3 !important; }
+    .system-row:hover { background: #fdf6e3 !important; }
+    .lock-badge { display: inline-block; background: #f39c12; color: white; font-size: 9px; font-weight: 700; padding: 1px 6px; border-radius: 3px; vertical-align: middle; margin-left: 4px; }
+    .tds-pct-cell { display: none; }
+    .tds-pct-cell.visible { display: table-cell; }
 
     /* Field config panel */
     .field-panel { background: #f8f9fa; border: 2px solid #8e44ad; border-radius: 4px; padding: 15px; margin-top: 15px; display: none; }
@@ -61,39 +67,53 @@
             <th>GST Rate</th>
             <th>UOM</th>
             <th>Billable</th>
+            <th>TDS</th>
+            <th>TDS %</th>
             <th>Status</th>
             <th>Fields</th>
         </tr>
     </thead>
     <tbody id="tableBody">
         {% for row in data %}
-        <tr data-id="{{ row.id }}">
-            <td><input type="checkbox" class="row-select"></td>
-            <td><input type="text" name="service_code[]" value="{{ row.service_code }}" {% if row.id and not perms.can_edit %}readonly{% endif %}></td>
-            <td><input type="text" name="service_name[]" value="{{ row.service_name }}" {% if not perms.can_edit %}readonly{% endif %}></td>
-            <td><input type="text" name="service_category[]" value="{{ row.service_category }}" {% if not perms.can_edit %}readonly{% endif %}></td>
-            <td><input type="text" name="gl_code[]" value="{{ row.gl_code }}" {% if not perms.can_edit %}readonly{% endif %}></td>
-            <td><input type="text" name="sap_gl_account[]" value="{{ row.sap_gl_account or '' }}" placeholder="e.g. 4101076030" {% if not perms.can_edit %}readonly{% endif %}></td>
-            <td><input type="text" name="sap_tax_code[]" value="{{ row.sap_tax_code or '' }}" placeholder="e.g. 50" {% if not perms.can_edit %}readonly{% endif %}></td>
-            <td><input type="text" name="sap_profit_center[]" value="{{ row.sap_profit_center or '' }}" placeholder="e.g. 5171000000" {% if not perms.can_edit %}readonly{% endif %}></td>
-            <td><input type="text" name="sap_cost_center[]" value="{{ row.sap_cost_center or '' }}" {% if not perms.can_edit %}readonly{% endif %}></td>
-            <td><input type="text" name="sac_code[]" value="{{ row.sac_code }}" {% if not perms.can_edit %}readonly{% endif %}></td>
-            <td><select name="gst_rate_id[]" {% if not perms.can_edit %}disabled{% endif %}>
+        {% set locked = (row.is_system == 1 and not is_admin) or (not perms.can_edit) %}
+        <tr data-id="{{ row.id }}" {% if row.is_system %}class="system-row" data-system="1"{% endif %}>
+            <td>{% if not row.is_system %}<input type="checkbox" class="row-select">{% else %}<span title="System-managed — cannot be deleted">🔒</span>{% endif %}</td>
+            <td><input type="text" name="service_code[]" value="{{ row.service_code }}" {% if locked %}readonly{% endif %}></td>
+            <td>
+                <input type="text" name="service_name[]" value="{{ row.service_name }}" {% if locked %}readonly{% endif %}>
+                {% if row.is_system %}<span class="lock-badge">SYSTEM</span>{% endif %}
+            </td>
+            <td><input type="text" name="service_category[]" value="{{ row.service_category }}" {% if locked %}readonly{% endif %}></td>
+            <td><input type="text" name="gl_code[]" value="{{ row.gl_code }}" {% if locked %}readonly{% endif %}></td>
+            <td><input type="text" name="sap_gl_account[]" value="{{ row.sap_gl_account or '' }}" placeholder="e.g. 4101076030" {% if locked %}readonly{% endif %}></td>
+            <td><input type="text" name="sap_tax_code[]" value="{{ row.sap_tax_code or '' }}" placeholder="e.g. 50" {% if locked %}readonly{% endif %}></td>
+            <td><input type="text" name="sap_profit_center[]" value="{{ row.sap_profit_center or '' }}" placeholder="e.g. 5171000000" {% if locked %}readonly{% endif %}></td>
+            <td><input type="text" name="sap_cost_center[]" value="{{ row.sap_cost_center or '' }}" {% if locked %}readonly{% endif %}></td>
+            <td><input type="text" name="sac_code[]" value="{{ row.sac_code }}" {% if locked %}readonly{% endif %}></td>
+            <td><select name="gst_rate_id[]" {% if locked %}disabled{% endif %}>
                 <option value="">--Select--</option>
                 {% for gst in gst_rates %}
                 <option value="{{ gst.id }}" {% if row.gst_rate_id == gst.id %}selected{% endif %}>{{ gst.rate_name }}</option>
                 {% endfor %}
             </select></td>
-            <td><input type="text" name="uom[]" value="{{ row.uom }}" {% if not perms.can_edit %}readonly{% endif %}></td>
-            <td><select name="is_billable[]" {% if not perms.can_edit %}disabled{% endif %}>
+            <td><input type="text" name="uom[]" value="{{ row.uom }}" {% if locked %}readonly{% endif %}></td>
+            <td><select name="is_billable[]" {% if locked %}disabled{% endif %}>
                 <option value="1" {% if row.is_billable %}selected{% endif %}>Yes</option>
                 <option value="0" {% if not row.is_billable %}selected{% endif %}>No</option>
             </select></td>
-            <td><select name="is_active[]" {% if not perms.can_edit %}disabled{% endif %}>
+            <td><select name="is_tds[]" {% if locked %}disabled{% endif %} onchange="toggleTdsPct(this)">
+                <option value="0" {% if not row.is_tds %}selected{% endif %}>No</option>
+                <option value="1" {% if row.is_tds %}selected{% endif %}>Yes</option>
+            </select></td>
+            <td><input type="number" step="0.01" min="0" max="100" name="tds_percent[]"
+                value="{{ row.tds_percent or '' }}" placeholder="e.g. 2"
+                style="{% if not row.is_tds %}display:none;{% endif %} width:70px;"
+                {% if locked %}readonly{% endif %}></td>
+            <td><select name="is_active[]" {% if locked %}disabled{% endif %}>
                 <option value="1" {% if row.is_active %}selected{% endif %}>Active</option>
                 <option value="0" {% if not row.is_active %}selected{% endif %}>Inactive</option>
             </select></td>
-            <td>{% if row.id %}<button type="button" class="btn btn-fields" onclick="openFieldConfig({{ row.id }}, '{{ row.service_name }}')">Configure</button>{% endif %}</td>
+            <td>{% if row.id and not row.is_system %}<button type="button" class="btn btn-fields" onclick="openFieldConfig({{ row.id }}, '{{ row.service_name }}')">Configure</button>{% elif row.id and row.is_system %}<span style="font-size:10px;color:#95a5a6;">—</span>{% endif %}</td>
         </tr>
         {% endfor %}
     </tbody>
@@ -174,12 +194,22 @@
 
 {% block scripts %}
 <script>
+const IS_ADMIN = {{ 'true' if is_admin else 'false' }};
 addToRecent('FSTM01', 'Service Type Master');
 
 function toggleSelectAll() {
     const checkboxes = document.querySelectorAll('.row-select');
     const selectAll = document.getElementById('selectAll').checked;
     checkboxes.forEach(cb => cb.checked = selectAll);
+}
+
+function toggleTdsPct(sel) {
+    const row = sel.closest('tr');
+    const pctInput = row.querySelector('[name="tds_percent[]"]');
+    if (pctInput) {
+        pctInput.style.display = sel.value === '1' ? '' : 'none';
+        if (sel.value !== '1') pctInput.value = '';
+    }
 }
 
 function addRow() {
@@ -207,6 +237,11 @@ function addRow() {
             <option value="1" selected>Yes</option>
             <option value="0">No</option>
         </select></td>
+        <td><select name="is_tds[]" onchange="toggleTdsPct(this)">
+            <option value="0" selected>No</option>
+            <option value="1">Yes</option>
+        </select></td>
+        <td><input type="number" step="0.01" min="0" max="100" name="tds_percent[]" placeholder="e.g. 2" style="display:none; width:70px;"></td>
         <td><select name="is_active[]">
             <option value="1" selected>Active</option>
             <option value="0">Inactive</option>
@@ -221,7 +256,12 @@ async function saveAll() {
     let saved = 0;
 
     for (let row of rows) {
+        // Skip system rows for non-admins
+        if (row.dataset.system === '1' && !IS_ADMIN) continue;
+
         const id = row.getAttribute('data-id') || '';
+        const isTds = row.querySelector('[name="is_tds[]"]').value;
+        const tdsPct = row.querySelector('[name="tds_percent[]"]').value;
         const data = {
             id: id,
             service_code: row.querySelector('[name="service_code[]"]').value,
@@ -236,7 +276,10 @@ async function saveAll() {
             gst_rate_id: row.querySelector('[name="gst_rate_id[]"]').value,
             uom: row.querySelector('[name="uom[]"]').value,
             is_billable: row.querySelector('[name="is_billable[]"]').value,
-            is_active: row.querySelector('[name="is_active[]"]').value
+            is_tds: isTds,
+            tds_percent: (isTds === '1' && tdsPct) ? tdsPct : null,
+            is_active: row.querySelector('[name="is_active[]"]').value,
+            is_system: row.dataset.system === '1' ? 1 : 0
         };
 
         if (!data.service_name) continue;
@@ -266,6 +309,7 @@ async function deleteRow() {
 
     for (let checkbox of selected) {
         const row = checkbox.closest('tr');
+        if (row.dataset.system === '1') continue; // System rows cannot be deleted even by admins
         const id = row.getAttribute('data-id');
         if (id) {
             await fetch('/api/module/FSTM01/delete', {

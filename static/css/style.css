@@ -637,3 +637,99 @@ background: linear-gradient(90deg, rgba(236, 28, 36, 1) 11%, rgba(37, 68, 167, 1
     background: #9b2c2c;
     color: #fed7d7;
 }
+
+/* Dark theme — FIN01 generate bill & shared form elements */
+.dark-theme .form-section {
+    background: #2d3748;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.4);
+    color: #e2e8f0;
+}
+.dark-theme .form-section h3 {
+    color: #e2e8f0;
+}
+.dark-theme .form-field label {
+    color: #a0aec0;
+}
+.dark-theme .form-field input,
+.dark-theme .form-field select,
+.dark-theme .card-rate-row input {
+    background: #1a202c;
+    border-color: #4a5568;
+    color: #e2e8f0;
+}
+.dark-theme .form-field input[readonly],
+.dark-theme input[readonly] {
+    background: #1a202c;
+    color: #a0aec0;
+}
+.dark-theme .cargo-card {
+    border-color: #4a5568;
+}
+.dark-theme .cargo-card.billable {
+    border-color: #276749;
+}
+.dark-theme .cargo-card.unbillable {
+    border-color: #9b2c2c;
+}
+.dark-theme .cargo-card.billable .card-header {
+    background: #1c4532;
+    color: #9ae6b4;
+}
+.dark-theme .cargo-card.unbillable .card-header {
+    background: #742a2a;
+    color: #feb2b2;
+}
+.dark-theme .card-body {
+    background: #2d3748;
+    color: #e2e8f0;
+}
+.dark-theme .card-body table th {
+    background: #1a202c;
+    color: #a0aec0;
+}
+.dark-theme .card-body table td {
+    border-bottom-color: #4a5568;
+    color: #e2e8f0;
+}
+.dark-theme .card-rate-row label {
+    color: #a0aec0;
+}
+.dark-theme .data-table th {
+    background: #1a202c;
+    color: #a0aec0;
+}
+.dark-theme .data-table td {
+    border-bottom-color: #4a5568;
+    color: #e2e8f0;
+}
+.dark-theme .data-table tr:hover {
+    background: #4a5568;
+}
+.dark-theme .data-table input[type="number"] {
+    background: #1a202c;
+    border-color: #4a5568;
+    color: #e2e8f0;
+}
+.dark-theme .total-bar {
+    background: #2d3748;
+    border-top-color: #d90429;
+    color: #e2e8f0;
+}
+.dark-theme .total-bar .total-label {
+    color: #a0aec0;
+}
+.dark-theme .total-bar .total-value {
+    color: #e2e8f0;
+}
+.dark-theme .total-bar .total-value.highlight {
+    color: #fc8181;
+}
+.dark-theme .billed-section {
+    background: #1a202c;
+}
+.dark-theme .billed-section h3 {
+    color: #718096;
+}
+.dark-theme .module-header {
+    color: #e2e8f0;
+}

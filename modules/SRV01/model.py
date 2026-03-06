@@ -96,6 +96,7 @@ def save_service_record(header_data, field_values):
         cur.execute('''
             UPDATE service_records
             SET service_type_id=%s, source_type=%s, source_id=%s, source_display=%s,
+                ref_source_type=%s, ref_source_id=%s, ref_source_display=%s,
                 record_date=%s, billable_quantity=%s, billable_uom=%s,
                 doc_status=%s, remarks=%s
             WHERE id=%s
@@ -104,6 +105,9 @@ def save_service_record(header_data, field_values):
             header_data.get('source_type'),
             header_data.get('source_id'),
             header_data.get('source_display'),
+            header_data.get('ref_source_type') or None,
+            header_data.get('ref_source_id') or None,
+            header_data.get('ref_source_display') or None,
             header_data.get('record_date'),
             header_data.get('billable_quantity'),
             header_data.get('billable_uom'),
@@ -119,9 +123,10 @@ def save_service_record(header_data, field_values):
         cur.execute('''
             INSERT INTO service_records
             (record_number, service_type_id, source_type, source_id, source_display,
+             ref_source_type, ref_source_id, ref_source_display,
              record_date, billable_quantity, billable_uom, doc_status,
              created_by, created_date, remarks)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
             RETURNING id
         ''', [
             header_data['record_number'],
@@ -129,6 +134,9 @@ def save_service_record(header_data, field_values):
             header_data.get('source_type'),
             header_data.get('source_id'),
             header_data.get('source_display'),
+            header_data.get('ref_source_type') or None,
+            header_data.get('ref_source_id') or None,
+            header_data.get('ref_source_display') or None,
             header_data.get('record_date'),
             header_data.get('billable_quantity'),
             header_data.get('billable_uom'),
@@ -190,8 +198,8 @@ def get_field_definitions(service_type_id):
     return [dict(r) for r in rows]
 
 
-def get_unbilled_records_for_source(source_type, source_id):
-    """Get approved, unbilled service records for a source (used by billing)"""
+def get_unbilled_records_for_customer(customer_type, customer_id):
+    """Get approved, unbilled service records for a customer/agent (used by billing)"""
     conn = get_db()
     cur = get_cursor(conn)
     cur.execute('''
@@ -202,7 +210,7 @@ def get_unbilled_records_for_source(source_type, source_id):
         WHERE sr.source_type = %s AND sr.source_id = %s
         AND sr.doc_status = 'Approved' AND sr.is_billed = 0
         ORDER BY sr.id
-    ''', [source_type, source_id])
+    ''', [customer_type, customer_id])
     rows = cur.fetchall()
     conn.close()
     return [dict(r) for r in rows]

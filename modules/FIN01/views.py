@@ -72,51 +72,16 @@ def view_bill(bill_id):
 
 @bp.route('/module/FIN01/bill/generate')
 def generate_bill():
-    """Generate bill from EU lines"""
+    """Generate bill - customer-centric"""
     if 'user_id' not in session:
         return redirect(url_for('login'))
 
     perms = get_user_permissions(session['user_id'], 'FIN01')
 
-    # Import other module models
-    from modules.VCN01 import model as vcn_model
-    from modules.MBC01 import model as mbc_model
-    from modules.LUEU01 import model as eu_model
-    from modules.VCUM01 import model as vcum_model
-
-    # Get source options with dates for better identification
-    conn = get_db()
-    cur = get_cursor(conn)
-
-    # VCN with anchorage_arrival from anchorage
-    cur.execute('''
-        SELECT h.id, h.vcn_doc_num, h.vessel_name, a.anchorage_arrival
-        FROM vcn_header h
-        LEFT JOIN vcn_anchorage a ON h.id = a.vcn_id
-        ORDER BY h.id DESC
-    ''')
-    vcn_options = cur.fetchall()
-
-    # MBC with doc_date
-    cur.execute('''
-        SELECT id, doc_num, mbc_name, doc_date
-        FROM mbc_header
-        ORDER BY id DESC
-    ''')
-    mbc_options = cur.fetchall()
-
-    conn.close()
-
-    # Convert to list of dicts for template
-    vcn_options = [dict(r) for r in vcn_options]
-    mbc_options = [dict(r) for r in mbc_options]
-
     from datetime import datetime
     current_date = datetime.now().strftime('%Y-%m-%d')
 
     return render_template('generate_bill.html',
-                         vcn_options=vcn_options,
-                         mbc_options=mbc_options,
                          current_date=current_date,
                          perms=perms,
                          username=session.get('username'))
@@ -179,13 +144,18 @@ def save_bill():
 
     for line in lines:
         line['bill_id'] = row_id
+        # Map frontend field names to model field names
+        if not line.get('service_name') and line.get('description'):
+            line['service_name'] = line['description']
+        if not line.get('service_description'):
+            line['service_description'] = line.get('description', '')
         model.save_bill_line(line)
         subtotal += line.get('line_amount', 0)
         cgst_total += line.get('cgst_amount', 0)
         sgst_total += line.get('sgst_amount', 0)
         igst_total += line.get('igst_amount', 0)
 
-    # Update bill header with calculated totals
+    # Update bill header with calculated totals + mark source records as billed
     total_amount = subtotal + cgst_total + sgst_total + igst_total
     conn = get_db()
     cur = get_cursor(conn)
@@ -193,6 +163,21 @@ def save_bill():
         SET subtotal=%s, cgst_amount=%s, sgst_amount=%s, igst_amount=%s, total_amount=%s
         WHERE id=%s''',
         [subtotal, cgst_total, sgst_total, igst_total, total_amount, row_id])
+
+    # Mark EU lines as billed
+    for line in lines:
+        if line.get('line_type') == 'cargo_handling':
+            eu_ids = line.get('eu_line_ids') or []
+            for eu_id in eu_ids:
+                cur.execute('UPDATE lueu_lines SET is_billed=1, bill_id=%s WHERE id=%s',
+                            [row_id, eu_id])
+
+    # Mark service records as billed
+    for line in lines:
+        if line.get('line_type') == 'service_record' and line.get('service_record_id'):
+            cur.execute('UPDATE service_records SET is_billed=1, bill_id=%s WHERE id=%s',
+                        [row_id, line['service_record_id']])
+
     conn.commit()
     conn.close()
 
@@ -374,9 +359,9 @@ def get_customer_agreements(customer_id):
     return jsonify({'data': [dict(r) for r in rows]})
 
 
-@bp.route('/api/module/FIN01/agreement-rate/<int:customer_id>/<int:service_type_id>')
-def get_agreement_rate(customer_id, service_type_id):
-    """Get rate from active customer agreement. Optionally filter by agreement_id."""
+@bp.route('/api/module/FIN01/agreement-rate/<customer_type>/<int:customer_id>/<int:service_type_id>')
+def get_agreement_rate(customer_type, customer_id, service_type_id):
+    """Get rate from active customer/agent agreement. Optionally filter by agreement_id."""
     if 'user_id' not in session:
         return jsonify({'error': 'Not logged in'}), 401
 
@@ -388,23 +373,21 @@ def get_agreement_rate(customer_id, service_type_id):
     agreement_id = request.args.get('agreement_id')
 
     if agreement_id:
-        # Fetch rate from a specific agreement
         cur.execute('''
             SELECT cal.rate, cal.uom, cal.currency_code,
                    ca.agreement_code, ca.agreement_name
             FROM customer_agreement_lines cal
             INNER JOIN customer_agreements ca ON cal.agreement_id = ca.id
-            WHERE ca.id = %s
-            AND cal.service_type_id = %s
+            WHERE ca.id = %s AND cal.service_type_id = %s
         ''', [agreement_id, service_type_id])
     else:
-        # Fall back to latest valid agreement
         cur.execute('''
             SELECT cal.rate, cal.uom, cal.currency_code,
                    ca.agreement_code, ca.agreement_name
             FROM customer_agreement_lines cal
             INNER JOIN customer_agreements ca ON cal.agreement_id = ca.id
-            WHERE ca.customer_id = %s
+            WHERE ca.customer_type = %s
+            AND ca.customer_id = %s
             AND cal.service_type_id = %s
             AND ca.is_active = 1
             AND ca.agreement_status = 'Approved'
@@ -412,7 +395,7 @@ def get_agreement_rate(customer_id, service_type_id):
             AND (ca.valid_to IS NULL OR ca.valid_to >= %s)
             ORDER BY ca.valid_from DESC
             LIMIT 1
-        ''', [customer_id, service_type_id, today, today])
+        ''', [customer_type, customer_id, service_type_id, today, today])
     row = cur.fetchone()
     conn.close()
 
@@ -422,19 +405,145 @@ def get_agreement_rate(customer_id, service_type_id):
         return jsonify({'success': False, 'error': 'No valid agreement found'})
 
 
-@bp.route('/api/module/FIN01/service-records/<source_type>/<int:source_id>')
-def get_service_records(source_type, source_id):
-    """Get approved, unbilled service records for a source"""
+@bp.route('/api/module/FIN01/customer-billables/<customer_type>/<int:customer_id>')
+def get_customer_billables(customer_type, customer_id):
+    """Get all billable items for a customer/agent.
+    Returns:
+      cargo_handling: lueu_lines grouped by source doc with LDUD closure status
+      other_services: approved unbilled service records for this customer
+      billed: already billed bill_lines for reference
+    """
+    if 'user_id' not in session:
+        return jsonify({'error': 'Not logged in'}), 401
+
+    conn = get_db()
+    cur = get_cursor(conn)
+
+    # --- A. Cargo Handling: all unbilled lueu_lines grouped by source doc ---
+    # Get CARGO_LOAD and CARGO_UNLOAD service type IDs
+    cur.execute("""
+        SELECT id, service_code, service_name, sac_code, uom
+        FROM finance_service_types
+        WHERE service_code IN ('CHGL01', 'CHGU01')
+    """)
+    cargo_st_map = {r['service_code']: dict(r) for r in cur.fetchall()}
+
+    cur.execute("""
+        SELECT el.*
+        FROM lueu_lines el
+        WHERE el.is_billed = 0 OR el.is_billed IS NULL
+        ORDER BY el.source_type, el.source_id, el.operation_type, el.id
+    """)
+    eu_rows = [dict(r) for r in cur.fetchall()]
+
+    # Group by (source_type, source_id)
+    from collections import defaultdict
+    eu_groups = defaultdict(list)
+    for r in eu_rows:
+        key = (r['source_type'], r['source_id'])
+        eu_groups[key].append(r)
+
+    cargo_handling = []
+    for (src_type, src_id), lines in eu_groups.items():
+        # Determine LDUD closure status
+        is_billable = False
+        doc_label = ''
+        doc_status = ''
+
+        if src_type == 'VCN' and src_id:
+            cur.execute("""
+                SELECT lh.doc_status, h.vcn_doc_num, h.vessel_name
+                FROM ldud_header lh
+                JOIN vcn_header h ON lh.vcn_id = h.id
+                WHERE lh.vcn_id = %s
+                ORDER BY lh.id DESC LIMIT 1
+            """, [src_id])
+            row = cur.fetchone()
+            if row:
+                doc_status = row['doc_status'] or ''
+                is_billable = doc_status in ('Closed', 'Partial Close')
+                doc_label = f"{row['vcn_doc_num']} / {row['vessel_name']}"
+            else:
+                # VCN exists but no LDUD — not billable yet
+                cur.execute("SELECT vcn_doc_num, vessel_name FROM vcn_header WHERE id=%s", [src_id])
+                vcn = cur.fetchone()
+                doc_label = f"{vcn['vcn_doc_num']} / {vcn['vessel_name']}" if vcn else f"VCN-{src_id}"
+
+        elif src_type == 'MBC' and src_id:
+            cur.execute("SELECT doc_num, mbc_name, doc_status FROM mbc_header WHERE id=%s", [src_id])
+            row = cur.fetchone()
+            if row:
+                doc_status = row['doc_status'] or ''
+                is_billable = doc_status in ('Closed', 'Partial Close')
+                doc_label = f"{row['doc_num']} / {row['mbc_name']}"
+
+        # Split lines by operation_type → service type
+        load_lines = [l for l in lines if l.get('operation_type') in ('Loading', 'Export', 'Load')]
+        unload_lines = [l for l in lines if l not in load_lines]
+
+        for grp_lines, svc_code in [(load_lines, 'CHGL01'), (unload_lines, 'CHGU01')]:
+            if not grp_lines:
+                continue
+            total_qty = sum(float(l.get('quantity') or 0) for l in grp_lines)
+            st = cargo_st_map.get(svc_code, {})
+            cargo_handling.append({
+                'source_type': src_type,
+                'source_id': src_id,
+                'doc_label': doc_label,
+                'doc_status': doc_status,
+                'is_billable': is_billable,
+                'service_code': svc_code,
+                'service_type_id': st.get('id'),
+                'service_name': st.get('service_name', svc_code),
+                'sac_code': st.get('sac_code', ''),
+                'total_quantity': total_qty,
+                'uom': grp_lines[0].get('quantity_uom', 'MT'),
+                'lines': grp_lines
+            })
+
+    # --- B. Other Services: approved unbilled service records for this customer ---
+    cur.execute("""
+        SELECT sr.*, st.service_name, st.service_code, st.sac_code, st.gst_rate_id
+        FROM service_records sr
+        JOIN finance_service_types st ON sr.service_type_id = st.id
+        WHERE sr.source_type = %s AND sr.source_id = %s
+        AND sr.doc_status = 'Approved' AND (sr.is_billed = 0 OR sr.is_billed IS NULL)
+        ORDER BY sr.id
+    """, [customer_type, customer_id])
+    other_services = [dict(r) for r in cur.fetchall()]
+
+    # --- C. Already billed lines for reference ---
+    cur.execute("""
+        SELECT bl.*, bh.bill_number, bh.bill_date, bh.bill_status
+        FROM bill_lines bl
+        JOIN bill_header bh ON bl.bill_id = bh.id
+        WHERE bh.customer_type = %s AND bh.customer_id = %s
+        ORDER BY bh.id DESC, bl.id
+        LIMIT 50
+    """, [customer_type, customer_id])
+    billed = [dict(r) for r in cur.fetchall()]
+
+    conn.close()
+
+    return jsonify({
+        'cargo_handling': cargo_handling,
+        'other_services': other_services,
+        'billed': billed
+    })
+
+
+@bp.route('/api/module/FIN01/service-records/<customer_type>/<int:customer_id>')
+def get_service_records(customer_type, customer_id):
+    """Get approved, unbilled service records for a customer/agent"""
     if 'user_id' not in session:
         return jsonify({'error': 'Not logged in'}), 401
 
     from modules.SRV01 import model as srv_model
-    records = srv_model.get_unbilled_records_for_source(source_type, source_id)
+    records = srv_model.get_unbilled_records_for_customer(customer_type, customer_id)
 
-    # For each record, also get the field values for display
+    conn = get_db()
+    cur = get_cursor(conn)
     for rec in records:
-        conn = get_db()
-        cur = get_cursor(conn)
         cur.execute('''
             SELECT sfd.field_label, srv.field_value
             FROM service_record_values srv
@@ -443,34 +552,34 @@ def get_service_records(source_type, source_id):
             ORDER BY sfd.display_order, sfd.id
         ''', [rec['id']])
         rec['field_values'] = [dict(r) for r in cur.fetchall()]
-        conn.close()
+    conn.close()
 
     return jsonify({'data': records})
 
 
 @bp.route('/api/module/FIN01/customers/<path:customer_type>')
 def get_customers_for_billing(customer_type):
-    """Get customers with full details for billing"""
+    """Get customers or agents with billing details"""
     if 'user_id' not in session:
         return jsonify({'error': 'Not logged in'}), 401
 
-    # Determine which table to query
-    if customer_type == 'Customer':
-        table = 'vessel_customers'
-    elif customer_type == 'Agent':
-        table = 'vessel_agents'
-    else:
-        return jsonify({'error': 'Invalid customer type'}), 400
-
     conn = get_db()
     cur = get_cursor(conn)
-    cur.execute(f'''
-        SELECT id, name, gstin, gst_state_code, gl_code, pan,
-               billing_address, city, pincode, contact_phone, contact_email
-        FROM {table}
-        ORDER BY name
-    ''')
+    if customer_type == 'Customer':
+        cur.execute('''
+            SELECT id, name, gstin, gst_state_code,
+                   billing_address, city, pincode, contact_phone, contact_email
+            FROM vessel_customers ORDER BY name
+        ''')
+    elif customer_type == 'Agent':
+        cur.execute('''
+            SELECT id, name, gstin, gst_state_code,
+                   billing_address, city, pincode, contact_phone, contact_email
+            FROM vessel_agents WHERE is_active = 1 ORDER BY name
+        ''')
+    else:
+        conn.close()
+        return jsonify({'error': 'Invalid customer type'}), 400
     rows = cur.fetchall()
     conn.close()
-
     return jsonify({'data': [dict(r) for r in rows]})
