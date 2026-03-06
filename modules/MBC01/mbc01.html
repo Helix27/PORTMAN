@@ -912,9 +912,11 @@
     });
 
     async function initSubTables(mbcId, operationType, blQty) {
-        const _mbcData = table.getRows().map(r => r.getData()).find(d => d.id === mbcId) || {};
+        const _mbcRow = table.getRows().find(r => r.getData().id === mbcId);
+        const _mbcData = _mbcRow ? _mbcRow.getData() : {};
         const _isApproved = _mbcData.doc_status === 'Approved';
-        const canEdit = (permissions.can_edit || permissions.can_add) && isUnlocked;
+        const _isUnlocked = isDraftRow(_mbcData.doc_status) || (editMode && (_mbcRow?.isSelected() ?? false));
+        const canEdit = (permissions.can_edit || permissions.can_add) && _isUnlocked;
         const isDark = localStorage.getItem('theme') === 'dark';
 
         const berthOptions = {};

@@ -917,9 +917,11 @@
     // datetimeEditor and dateEditor are now global (defined in base.html)
 
     async function initSubTables(vcnId, operationType = 'Import') {
-        const _vcnData = table.getRows().map(r => r.getData()).find(d => d.id === vcnId) || {};
+        const _vcnRow = table.getRows().find(r => r.getData().id === vcnId);
+        const _vcnData = _vcnRow ? _vcnRow.getData() : {};
         const _isApproved = _vcnData.doc_status === 'Approved';
-        const canEdit = (permissions.can_edit || permissions.can_add) && isUnlocked;
+        const _isUnlocked = isDraftRow(_vcnData.doc_status) || (editMode && (_vcnRow?.isSelected() ?? false));
+        const canEdit = (permissions.can_edit || permissions.can_add) && _isUnlocked;
         const isDark = localStorage.getItem('theme') === 'dark';
 
         // Run type options for nominations
