@@ -490,6 +490,10 @@
     let isAdmin = {{ 'true' if session.get('is_admin') else 'false' }};
     let editMode = false;
 
+    function isDraftRow(docStatus) {
+        return !docStatus || docStatus === 'Draft' || docStatus === 'Pending';
+    }
+
     const currentUser = '{{ session.username }}';
     const permissions = {
         can_read: {{ permissions.can_read|default(0) }},
@@ -978,7 +982,11 @@
                 const data = row.getData();
                 const status = data.doc_status;
                 const el = row.getElement();
-                if (editMode && data.id && row.isSelected()) {
+                if (isDraftRow(status) && data.id) {
+                    el.style.backgroundColor = '#fffff0';
+                    el.style.outline = '';
+                    el.title = '';
+                } else if (editMode && data.id && row.isSelected()) {
                     el.style.backgroundColor = '#ebf8ff';
                     el.style.outline = '2px solid #3182ce';
                     el.title = '';
@@ -1001,7 +1009,10 @@
             const field = cell.getColumn().getField();
             if (!field) return;
             const rowData = cell.getRow().getData();
-            if (!rowData.id || !editMode || !cell.getRow().isSelected()) {
+            // New rows and Draft/Pending rows are always editable
+            if (!rowData.id || isDraftRow(rowData.doc_status)) return;
+            // Approved/Closed rows require edit mode + checkbox selection
+            if (!editMode || !cell.getRow().isSelected()) {
                 cell.cancelEdit();
             }
         });
@@ -1052,7 +1063,9 @@
             lockBanner.style.cssText = 'background:#c6f6d5;color:#276749;padding:6px 14px;font-size:12px;font-weight:600;border-bottom:2px solid #9ae6b4;display:none;';
             document.querySelector('.detail-modal-header').after(lockBanner);
         }
-        const isUnlocked = editMode && (table.getRows().find(r => r.getData().id === ldudId)?.isSelected() ?? false);
+        const headerRow = table.getRows().find(r => r.getData().id === ldudId);
+        const headerStatus = headerRow ? (headerRow.getData().doc_status || '') : '';
+        const isUnlocked = isDraftRow(headerStatus) || (editMode && (headerRow?.isSelected() ?? false));
         if (!isUnlocked) {
             lockBanner.textContent = '🔒 Read Only — select this row in Edit mode to make changes';
             lockBanner.style.display = 'block';
@@ -1285,7 +1298,9 @@
     }
 
     async function initSubTables(ldudId, operationType = 'Import') {
-        const canEdit = (permissions.can_edit || permissions.can_add) && editMode && (table.getRows().find(r => r.getData().id === ldudId)?.isSelected() ?? false);
+        const _hRow = table.getRows().find(r => r.getData().id === ldudId);
+        const _hStatus = _hRow ? (_hRow.getData().doc_status || '') : '';
+        const canEdit = (permissions.can_edit || permissions.can_add) && (isDraftRow(_hStatus) || (editMode && (_hRow?.isSelected() ?? false)));
         const isDark = localStorage.getItem('theme') === 'dark';
 
         // Track operation type for this LDUD

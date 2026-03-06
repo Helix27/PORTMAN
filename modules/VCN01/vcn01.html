@@ -594,6 +594,10 @@
     let isApprover = false;
     const isAdmin = {{ 'true' if session.get('is_admin') else 'false' }};
     let editMode = false;
+
+    function isDraftRow(docStatus) {
+        return !docStatus || docStatus === 'Draft' || docStatus === 'Pending';
+    }
     let currentModalData = null;
 
     function initTable() {
@@ -703,7 +707,11 @@
                 const data = row.getData();
                 const status = data.doc_status;
                 const el = row.getElement();
-                if (editMode && data.id && row.isSelected()) {
+                if (isDraftRow(status) && data.id) {
+                    el.style.backgroundColor = '#fffff0';
+                    el.style.outline = '';
+                    el.title = '';
+                } else if (editMode && data.id && row.isSelected()) {
                     el.style.backgroundColor = '#ebf8ff';
                     el.style.outline = '2px solid #3182ce';
                     el.title = '';
@@ -725,7 +733,8 @@
             const field = cell.getColumn().getField();
             if (!field) return;
             const rowData = cell.getRow().getData();
-            if (!rowData.id || !editMode || !cell.getRow().isSelected()) {
+            if (!rowData.id || isDraftRow(rowData.doc_status)) return;
+            if (!editMode || !cell.getRow().isSelected()) {
                 cell.cancelEdit();
             }
         });
@@ -774,7 +783,9 @@
         const modalBody = document.getElementById('modalSubTables');
         modalBody.innerHTML = '';
 
-        const isUnlocked = editMode && (table.getRows().find(r => r.getData().id === vcnId)?.isSelected() ?? false);
+        const _hRow = table.getRows().find(r => r.getData().id === vcnId);
+        const _hStatus = _hRow ? (_hRow.getData().doc_status || '') : '';
+        const isUnlocked = isDraftRow(_hStatus) || (editMode && (_hRow?.isSelected() ?? false));
         const canAct = (permissions.can_edit || permissions.can_add) && isUnlocked;
 
         // Lock banner in modal header
@@ -908,7 +919,7 @@
     async function initSubTables(vcnId, operationType = 'Import') {
         const _vcnData = table.getRows().map(r => r.getData()).find(d => d.id === vcnId) || {};
         const _isApproved = _vcnData.doc_status === 'Approved';
-        const canEdit = (permissions.can_edit || permissions.can_add) && editMode && (table.getRows().find(r => r.getData().id === vcnId)?.isSelected() ?? false);
+        const canEdit = (permissions.can_edit || permissions.can_add) && isUnlocked;
         const isDark = localStorage.getItem('theme') === 'dark';
 
         // Run type options for nominations

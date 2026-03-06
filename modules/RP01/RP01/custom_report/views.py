@@ -155,6 +155,7 @@ def pivot_data(source):
                     COALESCE(v.vessel_agent_name, '')                   AS "Vessel Agent",
                     COALESCE(STRING_AGG(DISTINCT cd.cargo_name, ', '), '') AS "Cargo",
                     COALESCE(ROUND(CAST(SUM(cd.bl_quantity) AS NUMERIC), 0), 0) AS "BL Qty (MT)",
+                    LEFT(COALESCE(h.nor_tendered, ''), 10)              AS "NOR Tendered Date",
                     LEFT(COALESCE(h.discharge_commenced, ''), 10)       AS "Discharge Date",
                     LEFT(COALESCE(h.discharge_completed,  ''), 10)      AS "Completion Date",
                     CASE
@@ -172,12 +173,12 @@ def pivot_data(source):
                 FROM ldud_header h
                 LEFT JOIN vcn_header v ON v.id = h.vcn_id
                 LEFT JOIN vcn_cargo_declaration cd ON cd.vcn_id = h.vcn_id
-                WHERE NULLIF(h.discharge_commenced, '') IS NOT NULL
-                  AND LEFT(h.discharge_commenced, 10) BETWEEN %s AND %s
+                WHERE NULLIF(h.nor_tendered, '') IS NOT NULL
+                  AND LEFT(h.nor_tendered, 10) BETWEEN %s AND %s
                 GROUP BY h.id, h.doc_num, h.vcn_doc_num, h.vessel_name,
                          v.operation_type, h.operation_type, v.vessel_agent_name,
-                         h.discharge_commenced, h.discharge_completed, h.doc_status
-                ORDER BY h.discharge_commenced DESC
+                         h.nor_tendered, h.discharge_commenced, h.discharge_completed, h.doc_status
+                ORDER BY h.nor_tendered DESC
                 LIMIT 10000
             """, (from_date, to_date))
 
@@ -195,6 +196,7 @@ def pivot_data(source):
                     COALESCE(h.created_date, '')                           AS "Created Date",
 
                     -- LDUD Header timestamps
+                    COALESCE(h.nor_tendered::TEXT, '')                     AS "NOR Tendered",
                     COALESCE(h.anchored_datetime::TEXT, '')                AS "Anchored Date/Time",
                     COALESCE(h.arrival_inner_anchorage::TEXT, '')          AS "Arrival Inner Anchorage",
                     COALESCE(h.arrival_outer_anchorage::TEXT, '')          AS "Arrival Outer Anchorage",
@@ -244,9 +246,9 @@ def pivot_data(source):
                 FROM ldud_header h
                 LEFT JOIN vcn_header v ON v.id = h.vcn_id
                 LEFT JOIN ldud_barge_lines bl ON bl.ldud_id = h.id
-                WHERE NULLIF(h.discharge_commenced, '') IS NOT NULL
-                  AND LEFT(h.discharge_commenced, 10) BETWEEN %s AND %s
-                ORDER BY h.discharge_commenced DESC, h.id, bl.trip_number
+                WHERE NULLIF(h.nor_tendered, '') IS NOT NULL
+                  AND LEFT(h.nor_tendered, 10) BETWEEN %s AND %s
+                ORDER BY h.nor_tendered DESC, h.id, bl.trip_number
                 LIMIT 10000
             """, (from_date, to_date))
 
