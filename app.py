@@ -22,7 +22,6 @@ from modules.ADMIN import bp as admin_bp, MODULE_INFO as admin_info
 
 # Import new master modules
 from modules.VAM01 import bp as vam01_bp, MODULE_INFO as vam01_info
-from modules.VIEM01 import bp as viem01_bp, MODULE_INFO as viem01_info
 from modules.VCUM01 import bp as vcum01_bp, MODULE_INFO as vcum01_info
 from modules.VCDS01 import bp as vcds01_bp, MODULE_INFO as vcds01_info
 from modules.VTOD01 import bp as vtod01_bp, MODULE_INFO as vtod01_info
@@ -60,6 +59,9 @@ from modules.PSM01 import bp as psm01_bp, MODULE_INFO as psm01_info
 from modules.PSMM01 import bp as psmm01_bp, MODULE_INFO as psmm01_info
 from modules.PSOM01 import bp as psom01_bp, MODULE_INFO as psom01_info
 
+# Import reports module
+from modules.RP01 import bp as rp01_bp, MODULE_INFO as rp01_info
+
 # Import accounts redesign modules
 from modules.FINV01 import bp as finv01_bp, MODULE_INFO as finv01_info
 from modules.SAPCFG import bp as sapcfg_bp, MODULE_INFO as sapcfg_info
@@ -78,7 +80,6 @@ register_module(admin_info['code'], admin_info['name'], admin_bp)
 
 # Register new master modules
 register_module(vam01_info['code'], vam01_info['name'], vam01_bp)
-register_module(viem01_info['code'], viem01_info['name'], viem01_bp)
 register_module(vcum01_info['code'], vcum01_info['name'], vcum01_bp)
 register_module(vcds01_info['code'], vcds01_info['name'], vcds01_bp)
 register_module(vtod01_info['code'], vtod01_info['name'], vtod01_bp)
@@ -114,6 +115,9 @@ register_module(tm01_info['code'], tm01_info['name'], tm01_bp)
 register_module(psm01_info['code'], psm01_info['name'], psm01_bp)
 register_module(psmm01_info['code'], psmm01_info['name'], psmm01_bp)
 register_module(psom01_info['code'], psom01_info['name'], psom01_bp)
+
+# Register reports module
+register_module(rp01_info['code'], rp01_info['name'], rp01_bp)
 
 # Register accounts redesign modules
 register_module(finv01_info['code'], finv01_info['name'], finv01_bp)

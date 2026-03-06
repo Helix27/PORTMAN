@@ -145,14 +145,14 @@ try {
 
 console.log('Script starting...');
 
-var importers = {{ importers|tojson|safe }} || [];
+var agents = {{ agents|tojson|safe }} || [];
 var customers = {{ customers|tojson|safe }} || [];
 var serviceTypes = {{ service_types|tojson|safe }} || [];
 var currencies = {{ currencies|tojson|safe }} || [];
 var currentAgreementId = document.getElementById('agreement_id').value;
 
 console.log('Variables declared');
-console.log('Importers type:', typeof importers, 'length:', importers.length);
+console.log('Agents type:', typeof agents, 'length:', agents.length);
 console.log('Customers type:', typeof customers, 'length:', customers.length);
 console.log('Service Types loaded:', serviceTypes.length);
 console.log('First customer:', customers[0]);
@@ -163,7 +163,7 @@ function loadCustomers() {
     customerSelect.innerHTML = '<option value="">--Select--</option>';
 
     console.log('Loading customers for type:', type);
-    const list = type === 'Customer' ? customers : importers;
+    const list = type === 'Customer' ? customers : agents;
     console.log('Selected list:', list);
     console.log('Is array?', Array.isArray(list));
     console.log('List length:', list ? list.length : 0);

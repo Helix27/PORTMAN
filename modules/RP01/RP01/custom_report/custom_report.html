@@ -1,0 +1,681 @@
+{% extends "base.html" %}
+
+{% block title %}Custom Report Designer — RP01{% endblock %}
+
+{% block head %}
+<!-- jQuery + jQuery UI (required by PivotTable.js drag-and-drop) -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.7.1/jquery.min.js"></script>
+<link  href="https://cdnjs.cloudflare.com/ajax/libs/jqueryui/1.13.2/themes/base/jquery-ui.min.css" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jqueryui/1.13.2/jquery-ui.min.js"></script>
+
+<!-- PivotTable.js core -->
+<link  href="https://cdnjs.cloudflare.com/ajax/libs/pivottable/2.23.0/pivot.min.css" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pivottable/2.23.0/pivot.min.js"></script>
+
+<!-- Plotly chart renderers: plotly-basic is served from the official Plotly CDN
+     because cdnjs only carries the full plotly.js bundle, not the -basic variant. -->
+<script src="https://cdn.plot.ly/plotly-basic-2.35.2.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pivottable/2.23.0/plotly_renderers.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pivottable/2.23.0/export_renderers.min.js"></script>
+
+<style>
+/* ── Page header ─────────────────────────────────────────── */
+.page-header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 14px;
+    padding-bottom: 12px;
+    border-bottom: 2px solid var(--border-color);
+}
+.page-header h2 { margin: 0; font-size: 18px; color: var(--text-primary); }
+.module-badge {
+    background: #4a90d9; color: #fff;
+    padding: 3px 10px; border-radius: 4px;
+    font-size: 11px; font-weight: 700; letter-spacing: 0.5px;
+}
+.back-link {
+    margin-left: auto; font-size: 12px; color: #4a90d9;
+    text-decoration: none; font-weight: 600;
+}
+.back-link:hover { text-decoration: underline; }
+
+/* ── Toolbar ─────────────────────────────────────────────── */
+.toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    align-items: flex-end;
+    margin-bottom: 10px;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    padding: 10px 12px;
+}
+.toolbar-group {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+}
+.toolbar-group label {
+    font-size: 10px;
+    font-weight: 600;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.4px;
+}
+.toolbar-group select,
+.toolbar-group input[type="date"] {
+    padding: 4px 8px;
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    font-size: 12px;
+    background: var(--bg-primary);
+    color: var(--text-primary);
+    height: 28px;
+}
+.toolbar-group select:focus,
+.toolbar-group input[type="date"]:focus { outline: none; border-color: #4a90d9; }
+.tb-btn {
+    padding: 0 14px;
+    height: 28px;
+    border: none;
+    border-radius: 4px;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    align-self: flex-end;
+    white-space: nowrap;
+}
+.tb-btn.primary  { background: #4a90d9; color: #fff; }
+.tb-btn.primary:hover  { background: #357abd; }
+.tb-btn.success  { background: #27ae60; color: #fff; }
+.tb-btn.success:hover  { background: #1e8449; }
+.tb-btn.neutral  { background: var(--bg-secondary); color: var(--text-secondary); border: 1px solid var(--border-color); }
+.tb-btn.neutral:hover  { background: var(--border-color); }
+.tb-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+/* ── Status bar ──────────────────────────────────────────── */
+.status-bar {
+    font-size: 11px;
+    color: var(--text-secondary);
+    margin-bottom: 6px;
+    min-height: 16px;
+}
+.status-bar.error { color: #e74c3c; }
+
+/* ── Pivot wrapper ───────────────────────────────────────── */
+#pivot-wrap {
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    background: #fff;
+    overflow: auto;
+    min-height: 340px;
+    padding: 12px;
+}
+#pivot-placeholder {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    height: 300px;
+    color: #aaa;
+    font-size: 13px;
+    font-family: Verdana, sans-serif;
+    gap: 10px;
+    -webkit-user-select: none;
+    user-select: none;
+}
+#pivot-placeholder .ph-icon { font-size: 42px; opacity: 0.3; }
+
+/* ── PivotTable.js — minimal overrides, stay true to stock ── */
+.pvtUi {
+    font-family: Verdana, Arial, sans-serif;
+    font-size: 8pt;
+    width: 100%;
+}
+
+/* axis containers: keep the stock #eee look, proper sizing */
+td.pvtAxisContainer,
+td.pvtVals,
+td.pvtRenderers {
+    background: #eee !important;
+    border: 1px solid gray !important;
+    padding: 8px !important;
+    min-width: 120px !important;
+    min-height: 60px !important;
+    vertical-align: top;
+}
+
+/* unused-attrs horizontal band: give it enough height */
+td.pvtAxisContainer.pvtUnused {
+    min-height: 70px !important;
+}
+
+/* cols/rows zones: ensure they breathe */
+td.pvtAxisContainer.pvtCols { min-height: 50px !important; }
+td.pvtAxisContainer.pvtRows { min-width: 140px !important; }
+
+/* attribute pills: stock look */
+td.pvtAxisContainer li span.pvtAttr {
+    -webkit-text-size-adjust: 100%;
+    text-size-adjust: 100%;
+    background: #ddd;
+    border: 1px solid #aaa;
+    border-radius: 3px;
+    padding: 2px 5px;
+    cursor: move;
+    white-space: nowrap;
+    font-size: 8pt;
+}
+td.pvtAxisContainer li span.pvtAttr:hover {
+    border-color: #4a90d9;
+    background: #d0e4f4;
+}
+
+/* renderer area */
+td.pvtRendererArea {
+    padding: 5px !important;
+    vertical-align: top;
+}
+
+/* result table */
+table.pvtTable {
+    font-size: 8pt;
+    text-align: left;
+    border-collapse: collapse;
+}
+table.pvtTable thead tr th,
+table.pvtTable tbody tr th {
+    background-color: #e6EEEE;
+    border: 1px solid #aaa;
+    font-size: 8pt;
+    padding: 5px;
+}
+table.pvtTable tbody tr td {
+    color: #3a3a3a;
+    padding: 5px;
+    background-color: #fff;
+    border: 1px solid #aaa;
+    vertical-align: top;
+    text-align: right;
+}
+.pvtGrandTotal, .pvtTotal { font-weight: bold; }
+.pvtColLabel { text-align: center !important; }
+.pvtTotalLabel { text-align: right !important; }
+
+/* dropdowns inside pivot — match app toolbar style */
+.pvtUi select {
+    padding: 4px 8px;
+    height: 28px;
+    border: 1px solid var(--border-color, #ccc);
+    border-radius: 4px;
+    font-size: 12px;
+    background: var(--bg-primary, #fff);
+    color: var(--text-primary, #333);
+    cursor: pointer;
+    max-width: 220px;
+}
+/* renderer select fills its cell */
+td.pvtRenderers select {
+    width: 100%;
+    max-width: none;
+    box-sizing: border-box;
+}
+/* aggregator select leaves ~44px for the two arrow icons */
+td.pvtVals select.pvtAggregator {
+    width: calc(100% - 44px);
+    max-width: none;
+    box-sizing: border-box;
+    vertical-align: middle;
+}
+/* arrow links sit inline, vertically centred */
+.pvtUi a.pvtRowOrder,
+.pvtUi a.pvtColOrder {
+    display: inline-block;
+    vertical-align: middle;
+    margin-left: 4px;
+    line-height: 1;
+}
+.pvtUi select:focus { outline: none; border-color: #4a90d9; }
+
+/* renderer cell — same fixed width as vals cell */
+td.pvtRenderers {
+    width: 200px;
+}
+td.pvtRenderers::before {
+    display: block;
+    content: "Renderer";
+    font-size: 10px;
+    font-weight: 600;
+    color: var(--text-secondary, #888);
+    text-transform: uppercase;
+    letter-spacing: 0.4px;
+    margin-bottom: 5px;
+}
+
+/* aggregator/vals cell — same fixed width as renderer cell */
+td.pvtVals {
+    width: 200px;
+}
+td.pvtVals::before {
+    display: block;
+    content: "Values";
+    font-size: 10px;
+    font-weight: 600;
+    color: var(--text-secondary, #888);
+    text-transform: uppercase;
+    letter-spacing: 0.4px;
+    margin-bottom: 5px;
+}
+
+/* unused-attrs label */
+td.pvtAxisContainer.pvtUnused::before {
+    display: block;
+    content: "Unused Fields — drag to Rows or Columns";
+    font-size: 10px;
+    font-weight: 600;
+    color: var(--text-secondary, #888);
+    text-transform: uppercase;
+    letter-spacing: 0.4px;
+    margin-bottom: 6px;
+}
+
+/* rows/cols zone labels */
+td.pvtAxisContainer.pvtRows::before {
+    display: block;
+    content: "Rows";
+    font-size: 10px;
+    font-weight: 600;
+    color: var(--text-secondary, #888);
+    text-transform: uppercase;
+    letter-spacing: 0.4px;
+    margin-bottom: 5px;
+}
+td.pvtAxisContainer.pvtCols::before {
+    display: block;
+    content: "Columns";
+    font-size: 10px;
+    font-weight: 600;
+    color: var(--text-secondary, #888);
+    text-transform: uppercase;
+    letter-spacing: 0.4px;
+    margin-bottom: 5px;
+}
+
+/* swap/flip icons beside aggregator */
+.pvtUi a.pvtRowOrder,
+.pvtUi a.pvtColOrder {
+    color: #4a90d9;
+    font-size: 14px;
+    margin-left: 4px;
+    cursor: pointer;
+}
+
+/* ── Save modal ──────────────────────────────────────────── */
+.modal-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.45);
+    z-index: 9999;
+    align-items: center;
+    justify-content: center;
+}
+.modal-overlay.open { display: flex; }
+.modal-box {
+    background: var(--bg-primary);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    padding: 24px;
+    width: 380px;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.3);
+}
+.modal-box h3 { margin: 0 0 16px; font-size: 15px; color: var(--text-primary); }
+.modal-field { display: flex; flex-direction: column; gap: 4px; margin-bottom: 12px; }
+.modal-field label { font-size: 10px; font-weight: 600; color: var(--text-secondary); text-transform: uppercase; }
+.modal-field input, .modal-field textarea {
+    padding: 6px 9px;
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    font-size: 12px;
+    background: var(--bg-secondary);
+    color: var(--text-primary);
+}
+.modal-field input:focus, .modal-field textarea:focus { outline: none; border-color: #4a90d9; }
+.modal-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 16px; }
+
+/* ── Saved-reports dropdown ──────────────────────────────── */
+.saved-dropdown { position: relative; align-self: flex-end; }
+.saved-list {
+    display: none;
+    position: absolute;
+    top: calc(100% + 4px);
+    left: 0;
+    min-width: 260px;
+    background: var(--bg-primary);
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    box-shadow: 0 4px 16px rgba(0,0,0,0.2);
+    z-index: 500;
+    max-height: 300px;
+    overflow-y: auto;
+}
+.saved-list.open { display: block; }
+.saved-item {
+    display: flex;
+    align-items: center;
+    padding: 8px 12px;
+    border-bottom: 1px solid var(--border-color);
+    font-size: 12px;
+    color: var(--text-primary);
+    cursor: pointer;
+    gap: 6px;
+}
+.saved-item:last-child { border-bottom: none; }
+.saved-item:hover { background: var(--hover-bg, #f0f4ff); }
+.saved-item-name { flex: 1; }
+.saved-item-src {
+    font-size: 10px; color: var(--text-secondary);
+    background: var(--bg-secondary);
+    padding: 1px 6px; border-radius: 10px;
+}
+.saved-item-del {
+    font-size: 16px; color: #e74c3c;
+    border: none; background: none; cursor: pointer; padding: 0 2px; line-height: 1;
+}
+.saved-item-del:hover { color: #c0392b; }
+.saved-empty { padding: 14px; text-align: center; font-size: 12px; color: var(--text-secondary); }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h2>Custom Report Designer</h2>
+    <span class="module-badge">RP01</span>
+    <a class="back-link" href="/module/RP01/">&larr; Reports</a>
+</div>
+
+<div class="toolbar">
+    <div class="toolbar-group">
+        <label for="src-sel">Data Source</label>
+        <select id="src-sel">
+            <option value="vessel-ops">Vessel Operations</option>
+            <option value="delays">Delay Analysis</option>
+            <option value="barge-lines">Barge Lines</option>
+            <option value="financials">Financials</option>
+        </select>
+    </div>
+    <div class="toolbar-group">
+        <label for="f-from">From Date</label>
+        <input type="date" id="f-from">
+    </div>
+    <div class="toolbar-group">
+        <label for="f-to">To Date</label>
+        <input type="date" id="f-to">
+    </div>
+    <button type="button" class="tb-btn primary" id="load-btn" onclick="loadData()">&#9654; Load Data</button>
+    <button type="button" class="tb-btn success" id="save-btn" onclick="openSaveModal()" disabled>&#128190; Save Report</button>
+    <div class="saved-dropdown" id="saved-dd">
+        <button type="button" class="tb-btn neutral" onclick="toggleSaved()">&#128196; Saved Reports &#9660;</button>
+        <div class="saved-list" id="saved-list"></div>
+    </div>
+    <button type="button" class="tb-btn neutral" id="csv-btn" onclick="exportCSV()" disabled>&#8595; Export CSV</button>
+</div>
+
+<div class="status-bar" id="status-bar">Select a data source and date range, then click Load Data.</div>
+
+<div id="pivot-wrap">
+    <div id="pivot-placeholder">
+        <div class="ph-icon">&#128202;</div>
+        <div>No data loaded &mdash; choose a source and click Load Data</div>
+    </div>
+</div>
+
+<!-- Save modal -->
+<div class="modal-overlay" id="save-modal" onclick="if(event.target===this)closeSaveModal()">
+    <div class="modal-box">
+        <h3>Save Report Configuration</h3>
+        <div class="modal-field">
+            <label>Report Name *</label>
+            <input type="text" id="save-name" placeholder="e.g. Monthly Vessel Summary">
+        </div>
+        <div class="modal-field">
+            <label>Description (optional)</label>
+            <textarea id="save-desc" rows="2" placeholder="Brief description"></textarea>
+        </div>
+        <div class="modal-actions">
+            <button type="button" class="tb-btn neutral" onclick="closeSaveModal()">Cancel</button>
+            <button type="button" class="tb-btn success" onclick="saveReport()">Save</button>
+        </div>
+    </div>
+</div>
+
+<script>
+/* ── State ───────────────────────────────────────────────── */
+let _data    = null;
+let _source  = null;
+let _pivotEl = null;
+let _saved   = [];
+
+/* ── Init date defaults ──────────────────────────────────── */
+(function () {
+    const n = new Date();
+    const y = n.getFullYear();
+    const m = String(n.getMonth() + 1).padStart(2, '0');
+    const d = String(n.getDate()).padStart(2, '0');
+    document.getElementById('f-from').value = `${y}-${m}-01`;
+    document.getElementById('f-to').value   = `${y}-${m}-${d}`;
+})();
+
+/* ── Load data ───────────────────────────────────────────── */
+function loadData() {
+    const src  = document.getElementById('src-sel').value;
+    const from = document.getElementById('f-from').value;
+    const to   = document.getElementById('f-to').value;
+    const btn  = document.getElementById('load-btn');
+
+    btn.disabled = true;
+    btn.textContent = 'Loading\u2026';
+    setStatus('Fetching data\u2026', false);
+
+    fetch(`/api/module/RP01/pivot/data/${src}?from_date=${from}&to_date=${to}`)
+        .then(r => { if (!r.ok) throw new Error('Server error ' + r.status); return r.json(); })
+        .then(rows => {
+            _data   = rows;
+            _source = src;
+            renderPivot(rows, null);
+            setStatus(`${rows.length.toLocaleString()} rows loaded \u2014 ${srcLabel(src)}.`, false);
+            document.getElementById('save-btn').disabled = false;
+            document.getElementById('csv-btn').disabled  = false;
+        })
+        .catch(err => { console.error(err); setStatus('Error: ' + err.message, true); })
+        .finally(() => {
+            btn.disabled = false;
+            btn.innerHTML = '&#9654; Load Data';
+        });
+}
+
+/* ── Render PivotTable.js interactive UI ─────────────────── */
+function renderPivot(rows, cfg) {
+    const wrap = document.getElementById('pivot-wrap');
+    wrap.innerHTML = '<div id="pivot-holder"></div>';
+    _pivotEl = $('#pivot-holder');
+
+    const renderers = $.extend(
+        {},
+        $.pivotUtilities.renderers,
+        $.pivotUtilities.plotly_renderers,
+        $.pivotUtilities.export_renderers
+    );
+
+    const opts = Object.assign(
+        {
+            renderers:           renderers,
+            rendererName:        'Table',
+            unusedAttrsVertical: false,
+            menuLimit:           300,
+            hiddenAttributes:    [],
+        },
+        cfg || {}
+    );
+
+    /* always pass renderers so the renderer dropdown stays populated */
+    opts.renderers = renderers;
+
+    _pivotEl.pivotUI(rows, opts);
+}
+
+/* ── Extract current pivot config for saving ─────────────── */
+function getConfig() {
+    if (!_pivotEl) return {};
+    const o = _pivotEl.data('pivotUIOptions');
+    if (!o) return {};
+    return {
+        rows:           o.rows           || [],
+        cols:           o.cols           || [],
+        vals:           o.vals           || [],
+        aggregatorName: o.aggregatorName || 'Count',
+        rendererName:   o.rendererName   || 'Table',
+        inclusions:     o.inclusions     || {},
+        exclusions:     o.exclusions     || {},
+    };
+}
+
+/* ── Save modal ──────────────────────────────────────────── */
+function openSaveModal() {
+    document.getElementById('save-name').value = '';
+    document.getElementById('save-desc').value = '';
+    document.getElementById('save-modal').classList.add('open');
+    setTimeout(() => document.getElementById('save-name').focus(), 50);
+}
+function closeSaveModal() {
+    document.getElementById('save-modal').classList.remove('open');
+}
+
+function saveReport() {
+    const name = document.getElementById('save-name').value.trim();
+    if (!name) { document.getElementById('save-name').focus(); return; }
+    const body = {
+        name,
+        description: document.getElementById('save-desc').value.trim(),
+        data_source: _source,
+        config: getConfig(),
+    };
+    fetch('/api/module/RP01/pivot/saved-reports', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+    })
+    .then(r => r.json())
+    .then(() => {
+        closeSaveModal();
+        setStatus(`Saved \u201c${name}\u201d.`, false);
+        refreshSaved();
+    })
+    .catch(err => { console.error(err); alert('Save failed.'); });
+}
+
+/* ── Saved reports ───────────────────────────────────────── */
+function toggleSaved() {
+    const list = document.getElementById('saved-list');
+    const open = list.classList.toggle('open');
+    if (open) refreshSaved();
+}
+document.addEventListener('click', e => {
+    if (!document.getElementById('saved-dd').contains(e.target))
+        document.getElementById('saved-list').classList.remove('open');
+});
+
+function refreshSaved() {
+    fetch('/api/module/RP01/pivot/saved-reports')
+        .then(r => r.json())
+        .then(data => {
+            _saved = data;
+            const list = document.getElementById('saved-list');
+            if (!data.length) {
+                list.innerHTML = '<div class="saved-empty">No saved reports yet.</div>';
+                return;
+            }
+            list.innerHTML = data.map(r => `
+                <div class="saved-item">
+                    <span class="saved-item-name" onclick="loadSaved(${r.id})">${esc(r.name)}</span>
+                    <span class="saved-item-src">${esc(r.data_source)}</span>
+                    <button type="button" class="saved-item-del" onclick="delSaved(event,${r.id})" title="Delete">&times;</button>
+                </div>`).join('');
+        })
+        .catch(console.error);
+}
+
+function loadSaved(id) {
+    const rep = _saved.find(r => r.id === id);
+    if (!rep) return;
+    document.getElementById('src-sel').value = rep.data_source;
+    document.getElementById('saved-list').classList.remove('open');
+    const from = document.getElementById('f-from').value;
+    const to   = document.getElementById('f-to').value;
+    setStatus('Loading\u2026', false);
+    fetch(`/api/module/RP01/pivot/data/${rep.data_source}?from_date=${from}&to_date=${to}`)
+        .then(r => r.json())
+        .then(rows => {
+            _data   = rows;
+            _source = rep.data_source;
+            renderPivot(rows, rep.config);
+            setStatus(`Loaded \u201c${rep.name}\u201d \u2014 ${rows.length.toLocaleString()} rows.`, false);
+            document.getElementById('save-btn').disabled = false;
+            document.getElementById('csv-btn').disabled  = false;
+        })
+        .catch(err => setStatus('Error: ' + err.message, true));
+}
+
+function delSaved(e, id) {
+    e.stopPropagation();
+    if (!confirm('Delete this saved report?')) return;
+    fetch(`/api/module/RP01/pivot/saved-reports/${id}`, { method: 'DELETE' })
+        .then(() => refreshSaved())
+        .catch(console.error);
+}
+
+/* ── Export CSV (raw data) ───────────────────────────────── */
+function exportCSV() {
+    if (!_data || !_data.length) return;
+    const keys  = Object.keys(_data[0]);
+    const lines = [keys.join(',')].concat(_data.map(r =>
+        keys.map(k => {
+            const v = r[k] == null ? '' : String(r[k]);
+            return /[,"\n]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v;
+        }).join(',')
+    ));
+    const blob = new Blob([lines.join('\r\n')], { type: 'text/csv' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `Report_${_source}_${new Date().toISOString().slice(0, 10)}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(a.href);
+}
+
+/* ── Helpers ─────────────────────────────────────────────── */
+function setStatus(msg, isErr) {
+    const el = document.getElementById('status-bar');
+    el.textContent = msg;
+    el.className = 'status-bar' + (isErr ? ' error' : '');
+}
+function srcLabel(s) {
+    return {
+        'vessel-ops':  'Vessel Operations',
+        'delays':      'Delay Analysis',
+        'barge-lines': 'Barge Lines',
+        'financials':  'Financials',
+    }[s] || s;
+}
+function esc(s) {
+    return String(s)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
+}
+</script>
+{% endblock %}

@@ -4,14 +4,12 @@
 
 {% block content %}
 <style>
-    .va-panel { background: #f8f9fa; border: 2px solid #2980b9; border-radius: 4px; padding: 15px; margin-top: 15px; display: none; }
-    .va-panel h3 { margin: 0 0 10px 0; font-size: 13px; color: #2980b9; border-bottom: 2px solid #2980b9; padding-bottom: 5px; }
-    .va-table { width: 100%; border-collapse: collapse; font-size: 11px; background: white; }
-    .va-table th, .va-table td { padding: 5px; text-align: left; border-bottom: 1px solid #ecf0f1; }
-    .va-table th { background: #2980b9; color: white; font-weight: 600; font-size: 10px; text-transform: uppercase; }
-    .va-table input, .va-table select { width: 100%; padding: 3px; font-size: 11px; border: 1px solid #ddd; box-sizing: border-box; }
+    .va-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+    .va-table th, .va-table td { padding: 8px 10px; text-align: left; border-bottom: 1px solid #e2e8f0; }
+    .va-table th { background: #2980b9; color: white; font-weight: 600; font-size: 11px; text-transform: uppercase; }
+    .va-table tbody tr:hover { background: #f7fafc; }
+    .va-table input { width: 100%; padding: 4px 6px; font-size: 12px; border: 1px solid #cbd5e0; border-radius: 3px; box-sizing: border-box; }
     .va-table input[type="checkbox"] { width: auto; }
-    .va-table input[type="date"] { width: 120px; }
 </style>
 
 <div class="module-header">
@@ -28,37 +26,32 @@
 
 <div id="table"></div>
 
-<!-- Virtual Accounts Sub-Panel -->
-<div id="vaPanel" class="va-panel">
-    <h3>Virtual Accounts for: <span id="vaPartyName"></span>
-        <button type="button" class="btn" style="float:right;background:#95a5a6;color:white;padding:4px 10px;font-size:11px;" onclick="closeVAPanel()">Close</button>
-    </h3>
-    <div class="toolbar" style="margin-bottom:8px">
-        {% if permissions.can_add %}<button class="btn btn-add" onclick="addVARow()">+ Add Account</button>{% endif %}
-        {% if permissions.can_add or permissions.can_edit %}<button class="btn btn-save" onclick="saveAllVA()">Save Accounts</button>{% endif %}
-        {% if permissions.can_delete %}<button class="btn btn-delete" onclick="deleteSelectedVA()">Delete Selected</button>{% endif %}
-    </div>
-    <div style="overflow-x:auto">
-    <table class="va-table">
-        <thead>
-            <tr>
-                <th style="width:25px"><input type="checkbox" onclick="document.querySelectorAll('.va-sel').forEach(c=>c.checked=this.checked)"></th>
-                <th>Account No.</th>
-                <th>IFSC Code</th>
-                <th>Bank Name</th>
-                <th>Branch</th>
-                <th>Account Holder</th>
-                <th style="width:80px">Type</th>
-                <th style="width:100px">Purpose</th>
-                <th>GL Account</th>
-                <th style="width:55px">Active</th>
-                <th>From</th>
-                <th>To</th>
-                <th>Remarks</th>
-            </tr>
-        </thead>
-        <tbody id="vaTableBody"></tbody>
-    </table>
+<!-- Bank Accounts Modal -->
+<div id="vaModal" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.5);z-index:9999;align-items:center;justify-content:center;">
+    <div style="background:white;border-radius:8px;max-width:700px;width:90%;box-shadow:0 4px 24px rgba(0,0,0,0.3);max-height:80vh;display:flex;flex-direction:column;">
+        <div style="padding:14px 18px;border-bottom:1px solid #e2e8f0;display:flex;justify-content:space-between;align-items:center;">
+            <h3 style="margin:0;font-size:15px;font-weight:600;">Virtual Bank Accounts — <span id="vaPartyName"></span></h3>
+            <button onclick="closeVAModal()" style="background:none;border:none;font-size:20px;cursor:pointer;color:#718096;line-height:1;">✕</button>
+        </div>
+        <div style="padding:10px 18px;border-bottom:1px solid #e2e8f0;display:flex;gap:8px;">
+            {% if permissions.can_add %}<button class="btn btn-add" style="padding:4px 12px;font-size:12px;" onclick="addVARow()">+ Add</button>{% endif %}
+            {% if permissions.can_add or permissions.can_edit %}<button class="btn btn-save" style="padding:4px 12px;font-size:12px;" onclick="saveAllVA()">Save</button>{% endif %}
+            {% if permissions.can_delete %}<button class="btn btn-delete" style="padding:4px 12px;font-size:12px;" onclick="deleteSelectedVA()">Delete Selected</button>{% endif %}
+        </div>
+        <div style="overflow-y:auto;padding:14px 18px;">
+            <table class="va-table">
+                <thead>
+                    <tr>
+                        <th style="width:30px"><input type="checkbox" onclick="document.querySelectorAll('.va-sel').forEach(c=>c.checked=this.checked)"></th>
+                        <th>Account Number</th>
+                        <th>IFSC Code</th>
+                        <th>Bank Name</th>
+                        <th>Beneficiary Name</th>
+                    </tr>
+                </thead>
+                <tbody id="vaTableBody"></tbody>
+            </table>
+        </div>
     </div>
 </div>
 {% endblock %}
@@ -97,7 +90,7 @@
                     width: 70},
                 {title: "", field: "id", formatter: function(cell) {
                     const id = cell.getValue();
-                    return id ? '<button class="btn" style="background:#2980b9;color:white;padding:2px 8px;font-size:10px" onclick="event.stopPropagation();openVAPanel('+id+',\''+encodeURIComponent(cell.getRow().getData().name || '')+'\')">Bank A/c</button>' : '';
+                    return id ? `<button class="btn" style="background:#2980b9;color:white;padding:2px 8px;font-size:10px" onclick="event.stopPropagation();openVAModal(${id},'${encodeURIComponent(cell.getRow().getData().name||'')}')">Virtual Bank A/c</button>` : '';
                 }, width: 70, headerSort: false, hozAlign: "center"}
             ],
             pagination: true,
@@ -124,13 +117,7 @@
         if (!confirm(`Delete ${selected.length} row(s)?`)) return;
         selected.forEach(row => {
             const id = row.getData().id;
-            if (id) {
-                fetch(`/api/module/${MODULE}/delete`, {
-                    method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({id: id})
-                });
-            }
+            if (id) fetch(`/api/module/${MODULE}/delete`, {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id})});
             row.delete();
         });
     }
@@ -140,11 +127,7 @@
         for (const row of rows) {
             const data = row.getData();
             if (!data.name) continue;
-            const res = await fetch(`/api/module/${MODULE}/save`, {
-                method: 'POST',
-                headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify(data)
-            });
+            const res = await fetch(`/api/module/${MODULE}/save`, {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)});
             const result = await res.json();
             if (result.id) row.update({id: result.id});
         }
@@ -155,29 +138,31 @@
         if ((e.ctrlKey || e.metaKey) && e.key === 's') { e.preventDefault(); saveAll(); }
     });
 
-    // ===== VIRTUAL ACCOUNTS =====
+    // ===== BANK ACCOUNTS MODAL =====
     let currentVAPartyId = null;
     let currentVAPartyName = null;
 
-    async function openVAPanel(partyId, partyName) {
+    async function openVAModal(partyId, partyName) {
         currentVAPartyId = partyId;
         currentVAPartyName = decodeURIComponent(partyName);
         document.getElementById('vaPartyName').textContent = currentVAPartyName;
-        document.getElementById('vaPanel').style.display = 'block';
+        document.getElementById('vaModal').style.display = 'flex';
         await loadVAData();
-        document.getElementById('vaPanel').scrollIntoView({behavior: 'smooth'});
     }
 
-    function closeVAPanel() {
-        document.getElementById('vaPanel').style.display = 'none';
+    function closeVAModal() {
+        document.getElementById('vaModal').style.display = 'none';
         currentVAPartyId = null;
     }
+
+    document.getElementById('vaModal').addEventListener('click', function(e) {
+        if (e.target === this) closeVAModal();
+    });
 
     async function loadVAData() {
         const res = await fetch(`/api/module/${MODULE}/virtual-accounts/${currentVAPartyId}`);
         const rows = await res.json();
-        const tbody = document.getElementById('vaTableBody');
-        tbody.innerHTML = '';
+        document.getElementById('vaTableBody').innerHTML = '';
         rows.forEach(r => addVARowWithData(r));
     }
 
@@ -187,29 +172,14 @@
         const tbody = document.getElementById('vaTableBody');
         const tr = document.createElement('tr');
         if (r.id) tr.setAttribute('data-va-id', r.id);
-        const esc = (v) => (v || '').toString().replace(/"/g, '&quot;');
+        const esc = v => (v || '').toString().replace(/"/g, '&quot;');
+        const ro = !canEdit ? 'readonly' : '';
         tr.innerHTML = `
             <td><input type="checkbox" class="va-sel"></td>
-            <td><input type="text" class="va-acct" value="${esc(r.account_number)}" ${!canEdit?'readonly':''}></td>
-            <td><input type="text" class="va-ifsc" value="${esc(r.ifsc_code)}" placeholder="BANKX000nnn" ${!canEdit?'readonly':''}></td>
-            <td><input type="text" class="va-bank" value="${esc(r.bank_name)}" ${!canEdit?'readonly':''}></td>
-            <td><input type="text" class="va-branch" value="${esc(r.branch_name)}" ${!canEdit?'readonly':''}></td>
-            <td><input type="text" class="va-holder" value="${esc(r.account_holder_name)}" ${!canEdit?'readonly':''}></td>
-            <td><select class="va-type" ${!canEdit?'disabled':''}>
-                ${['Current','Savings','Virtual'].map(t => `<option value="${t}" ${r.account_type===t?'selected':''}>${t}</option>`).join('')}
-            </select></td>
-            <td><select class="va-purpose" ${!canEdit?'disabled':''}>
-                <option value="">--</option>
-                ${['InvoicePayment','Advance','General'].map(p => `<option value="${p}" ${r.purpose===p?'selected':''}>${p}</option>`).join('')}
-            </select></td>
-            <td><input type="text" class="va-gl" value="${esc(r.gl_account_code)}" ${!canEdit?'readonly':''}></td>
-            <td><select class="va-active" ${!canEdit?'disabled':''}>
-                <option value="1" ${r.is_active!=0?'selected':''}>Yes</option>
-                <option value="0" ${r.is_active==0?'selected':''}>No</option>
-            </select></td>
-            <td><input type="date" class="va-from" value="${r.effective_from||''}" ${!canEdit?'readonly':''}></td>
-            <td><input type="date" class="va-to" value="${r.effective_to||''}" ${!canEdit?'readonly':''}></td>
-            <td><input type="text" class="va-remarks" value="${esc(r.remarks)}" ${!canEdit?'readonly':''}></td>
+            <td><input type="text" class="va-acct" value="${esc(r.account_number)}" placeholder="Account number" ${ro}></td>
+            <td><input type="text" class="va-ifsc" value="${esc(r.ifsc_code)}" placeholder="BANKX000nnn" ${ro}></td>
+            <td><input type="text" class="va-bank" value="${esc(r.bank_name)}" placeholder="Bank name" ${ro}></td>
+            <td><input type="text" class="va-holder" value="${esc(r.account_holder_name)}" placeholder="Beneficiary name" ${ro}></td>
         `;
         tbody.appendChild(tr);
     }
@@ -224,26 +194,17 @@
                 account_number: row.querySelector('.va-acct').value,
                 ifsc_code: row.querySelector('.va-ifsc').value,
                 bank_name: row.querySelector('.va-bank').value,
-                branch_name: row.querySelector('.va-branch').value,
-                account_holder_name: row.querySelector('.va-holder').value,
-                account_type: row.querySelector('.va-type').value,
-                purpose: row.querySelector('.va-purpose').value,
-                gl_account_code: row.querySelector('.va-gl').value,
-                is_active: row.querySelector('.va-active').value,
-                effective_from: row.querySelector('.va-from').value,
-                effective_to: row.querySelector('.va-to').value,
-                remarks: row.querySelector('.va-remarks').value
+                account_holder_name: row.querySelector('.va-holder').value
             };
             if (!data.account_number) continue;
             const res = await fetch(`/api/module/${MODULE}/virtual-accounts/save`, {
-                method: 'POST', headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify(data)
+                method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(data)
             });
             const result = await res.json();
             if (result.id && !vaId) row.setAttribute('data-va-id', result.id);
             saved++;
         }
-        if (saved > 0) { alert(`Saved ${saved} account(s)`); await loadVAData(); }
+        if (saved > 0) { await loadVAData(); }
     }
 
     async function deleteSelectedVA() {
@@ -253,12 +214,7 @@
         for (let cb of selected) {
             const row = cb.closest('tr');
             const id = row.getAttribute('data-va-id');
-            if (id) {
-                await fetch(`/api/module/${MODULE}/virtual-accounts/delete`, {
-                    method: 'POST', headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({id: id})
-                });
-            }
+            if (id) await fetch(`/api/module/${MODULE}/virtual-accounts/delete`, {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id})});
             row.remove();
         }
     }

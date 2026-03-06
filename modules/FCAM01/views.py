@@ -2,7 +2,7 @@ from flask import render_template, request, redirect, url_for, session, jsonify
 from . import bp
 from . import model
 from database import get_db, get_cursor, get_user_permissions, get_module_config
-from modules.VIEM01 import model as viem_model
+from modules.VAM01 import model as vam01_model
 from modules.VCUM01 import model as vcum_model
 from modules.FSTM01 import model as fstm_model
 from modules.FCRM01 import model as fcrm_model
@@ -33,7 +33,7 @@ def entry(agreement_id=None):
     perms = get_user_permissions(session['user_id'], 'FCAM01')
 
     # Get master data
-    importers = viem_model.get_data()[0] or []
+    agents = vam01_model.get_data()[0] or []
     customers = vcum_model.get_data()[0] or []
     service_types = fstm_model.get_all_service_types() or []
     currencies = fcrm_model.get_all_currencies() or []
@@ -52,7 +52,7 @@ def entry(agreement_id=None):
     return render_template('entry.html',
                          header=header_data,
                          lines=lines_data,
-                         importers=importers,
+                         agents=agents,
                          customers=customers,
                          service_types=service_types,
                          currencies=currencies,

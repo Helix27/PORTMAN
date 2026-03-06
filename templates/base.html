@@ -279,6 +279,21 @@
                 </div>
             </div>
 
+            <!-- Reports Accordion -->
+            <div class="accordion-section reports">
+                <div class="accordion-header" onclick="toggleAccordion(this)">
+                    <img src="{{ url_for('static', filename='img/reports.png') }}" alt="Reports" class="icon">
+                    <span>Reports</span>
+                    <span class="arrow">&#9654;</span>
+                </div>
+                <div class="accordion-content">
+                    <div class="module-item" onclick="goToModule('RP01', 'Reports')">
+                        <span class="code">RP01</span>
+                        <span class="name">Reports</span>
+                    </div>
+                </div>
+            </div>
+
             <!-- Masters Accordion -->
             <div class="accordion-section masters">
                 <div class="accordion-header" onclick="toggleAccordion(this)">
@@ -295,16 +310,8 @@
                         <span class="code">VCM01</span>
                         <span class="name">Vessel Country Master</span>
                     </div>
-                    <div class="module-item" onclick="goToModule('GM01', 'Grade Master')">
-                        <span class="code">GM01</span>
-                        <span class="name">Grade Master</span>
-                    </div>
                     <div class="module-item" onclick="goToModule('VAM01', 'Vessel Agent Master')">
                         <span class="code">VAM01</span>
-                        <span class="name">Vessel Agent Master</span>
-                    </div>
-                    <div class="module-item" onclick="goToModule('VIEM01', 'Vessel Agent Master')">
-                        <span class="code">VIEM01</span>
                         <span class="name">Vessel Agent Master</span>
                     </div>
                     <div class="module-item" onclick="goToModule('VCUM01', 'Vessel Currency')">

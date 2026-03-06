@@ -348,12 +348,16 @@
     {% if permissions.can_add %}<button class="btn btn-add" onclick="addRow()">+ Add Row</button>{% endif %}
     {% if permissions.can_delete %}<button class="btn btn-delete" onclick="deleteSelected()">Delete Selected</button>{% endif %}
     {% if permissions.can_add or permissions.can_edit %}<button class="btn btn-save" onclick="saveAll()">Save (Ctrl+S)</button>{% endif %}
+    {% if permissions.can_edit or permissions.can_add %}<button id="editModeBtn" class="btn" style="font-size:12px;padding:4px 12px;background:#805ad5;color:white;border:none;" onclick="toggleEditMode()">✏️ Edit</button>{% endif %}
     <button class="btn" style="font-size:12px;padding:4px 12px;" onclick="toggleFilterPanel()">⚙ Filters <span id="filterBadge" style="display:none;background:#3182ce;color:white;border-radius:10px;padding:1px 6px;font-size:11px;margin-left:4px;">0</span></button>
     <div class="row-info">Rows: <span id="rowCount">0</span> / <span id="totalCount">0</span></div>
 </div>
 <!-- Header unsaved banner -->
 <div id="unsavedBanner" class="unsaved-banner">
     ⚠ You have unsaved header changes &mdash; <button class="btn btn-save" onclick="saveAll()" style="margin:0;padding:3px 10px;font-size:12px;">Save Now</button>
+</div>
+<div id="editModeBanner" style="display:none;background:#ebf8ff;border-left:4px solid #3182ce;color:#2b6cb0;padding:8px 14px;font-size:12px;">
+    ✏️ <b>Edit mode</b> — Check rows to select for editing, then modify cells and click <b>Save</b>.
 </div>
 <div id="filterPanel" class="filter-panel" style="display:none;">
     <div id="filterRows"></div>
@@ -586,7 +590,8 @@
 
     let isApprover = false;
     const isAdmin = {{ 'true' if session.get('is_admin') else 'false' }};
-    let editUnlockedRowId = null;
+    let editMode = false;
+    const selectedEditRowIds = new Set();
     let currentModalData = null;
 
     function initTable() {
@@ -610,6 +615,15 @@
 
         const columns = [
             {formatter: "rowSelection", titleFormatter: "rowSelection", hozAlign: "center", headerSort: false, width: 40},
+            {
+                field: '_select', title: '', width: 35, headerSort: false, visible: false,
+                formatter: function(cell) {
+                    const id = cell.getRow().getData().id;
+                    if (!id) return '';
+                    const checked = selectedEditRowIds.has(id);
+                    return `<input type="checkbox" ${checked ? 'checked' : ''} onclick="toggleRowSelection(${id},this)" style="cursor:pointer;width:14px;height:14px;">`;
+                }
+            },
             {
                 title: "Details",
                 formatter: function(cell) {
@@ -668,11 +682,7 @@
                     if (!data.id) return '';
                     if (data.doc_status === 'Approved') {
                         if (isApprover) {
-                            const unlocked = editUnlockedRowId === data.id;
-                            const editBtn = unlocked
-                                ? `<button class="btn-approve" onclick="saveEditedRow(${data.id})" title="Save changes">💾 Save</button>`
-                                : `<button class="btn-approve" onclick="editRow(${data.id})" title="Unlock for editing">✏️ Edit</button>`;
-                            return `${editBtn} <button class="btn-back-draft" onclick="openSendBackModal(${data.id})">↩ Draft</button>`;
+                            return `<button class="btn-back-draft" onclick="openSendBackModal(${data.id})">↩ Draft</button>`;
                         }
                         return '';
                     }
@@ -700,26 +710,34 @@
                 const data = row.getData();
                 const status = data.doc_status;
                 const el = row.getElement();
-                if (status === 'Approved') el.style.backgroundColor = '#f0fff4';
-                else el.style.backgroundColor = '#fffff0';
-                if (data._autosave_error) {
-                    el.style.outline = '2px solid #e53e3e';
-                    el.title = `Autosave failed: ${data._autosave_error}`;
-                } else {
-                    el.style.outline = '';
+                if (editMode && data.id && selectedEditRowIds.has(data.id)) {
+                    el.style.backgroundColor = '#ebf8ff';
+                    el.style.outline = '2px solid #3182ce';
                     el.title = '';
+                } else {
+                    if (status === 'Approved') el.style.backgroundColor = '#f0fff4';
+                    else el.style.backgroundColor = '#fffff0';
+                    if (data._autosave_error) {
+                        el.style.outline = '2px solid #e53e3e';
+                        el.title = `Autosave failed: ${data._autosave_error}`;
+                    } else {
+                        el.style.outline = '';
+                        el.title = '';
+                    }
                 }
             }
         });
 
+        table.on('cellEditing', function(cell) {
+            const field = cell.getColumn().getField();
+            if (!field || field === '_select') return;
+            const rowData = cell.getRow().getData();
+            if (!rowData.id || !editMode || !selectedEditRowIds.has(rowData.id)) {
+                cell.cancelEdit();
+            }
+        });
         table.on('cellEdited', function(cell) {
             if (_isSaving) return;
-            const rowData = cell.getRow().getData();
-            if (rowData.doc_status === 'Approved' && editUnlockedRowId !== rowData.id) {
-                cell.restoreOldValue();
-                alert('Click the ✏️ Edit button on this row to enable editing.');
-                return;
-            }
             headerDirty = true;
             showUnsavedBanner();
         });
@@ -746,16 +764,13 @@
 
         const modalBody = document.getElementById('modalSubTables');
         modalBody.innerHTML = '';
-        const isRecordApproved = data.doc_status === 'Approved';
-        const isUnlocked = editUnlockedRowId === mbcId;
-        const canAct = (permissions.can_edit || permissions.can_add) && (!isRecordApproved || isUnlocked);
+        const isUnlocked = editMode && selectedEditRowIds.has(mbcId);
+        const canAct = (permissions.can_edit || permissions.can_add) && isUnlocked;
 
         // Lock banner in modal header
         const lockBanner = document.getElementById('modalLockBanner');
-        if (isRecordApproved && !isUnlocked) {
-            lockBanner.innerHTML = isApprover
-                ? `<span style="background:#feebc8;color:#744210;padding:2px 10px;border-radius:12px;font-size:11px;font-weight:600;">🔒 Approved — <button onclick="enableModalEditing()" style="background:none;border:none;color:#744210;cursor:pointer;font-weight:700;text-decoration:underline;font-size:11px;padding:0;">Enable Editing</button></span>`
-                : `<span style="background:#feebc8;color:#744210;padding:2px 10px;border-radius:12px;font-size:11px;font-weight:600;">🔒 Approved — Read Only</span>`;
+        if (!isUnlocked) {
+            lockBanner.innerHTML = `<span style="background:#feebc8;color:#744210;padding:2px 10px;border-radius:12px;font-size:11px;font-weight:600;">🔒 Read Only — select this row in Edit mode to make changes</span>`;
             lockBanner.style.display = 'inline-block';
         } else {
             lockBanner.style.display = 'none';
@@ -885,7 +900,7 @@
     async function initSubTables(mbcId, operationType, blQty) {
         const _mbcData = table.getRows().map(r => r.getData()).find(d => d.id === mbcId) || {};
         const _isApproved = _mbcData.doc_status === 'Approved';
-        const canEdit = (permissions.can_edit || permissions.can_add) && (!_isApproved || editUnlockedRowId === mbcId);
+        const canEdit = (permissions.can_edit || permissions.can_add) && editMode && selectedEditRowIds.has(mbcId);
         const isDark = localStorage.getItem('theme') === 'dark';
 
         const berthOptions = {};
@@ -1174,6 +1189,13 @@
             } else {
                 showStatus(`Saved ${savedCount} row(s)`, 'saved');
                 hideUnsavedBanner();
+                editMode = false;
+                selectedEditRowIds.clear();
+                const editBtn = document.getElementById('editModeBtn');
+                if (editBtn) { editBtn.textContent = '✏️ Edit'; editBtn.style.background = '#805ad5'; }
+                const editBanner = document.getElementById('editModeBanner');
+                if (editBanner) editBanner.style.display = 'none';
+                table.hideColumn('_select');
                 await table.setData("/api/module/MBC01/data");
             }
         } finally {
@@ -1181,40 +1203,43 @@
         }
     }
 
-    // Row edit unlock functions
-    function editRow(id) {
-        if (editUnlockedRowId !== null && editUnlockedRowId !== id) {
-            alert('Please save your changes to the current row first.');
+    function toggleEditMode() {
+        if (editMode) {
+            editMode = false;
+            selectedEditRowIds.clear();
+            const btn = document.getElementById('editModeBtn');
+            if (btn) { btn.textContent = '✏️ Edit'; btn.style.background = '#805ad5'; }
+            document.getElementById('editModeBanner').style.display = 'none';
+            table.hideColumn('_select');
+            table.getRows().forEach(r => r.reformat());
+            hideUnsavedBanner();
+            table.setData('/api/module/MBC01/data');
+        } else {
+            editMode = true;
+            const btn = document.getElementById('editModeBtn');
+            if (btn) { btn.textContent = '✖ Cancel Edit'; btn.style.background = '#e53e3e'; }
+            document.getElementById('editModeBanner').style.display = 'block';
+            table.showColumn('_select');
+        }
+    }
+
+    function toggleRowSelection(id, el) {
+        const row = table.getRows().find(r => r.getData().id === id);
+        if (!row) { el.checked = selectedEditRowIds.has(id); return; }
+        const data = row.getData();
+        if (data.doc_status === 'Approved' && !isApprover) {
+            el.checked = false;
+            alert('Approved records can only be edited by the approver.');
             return;
         }
-        editUnlockedRowId = id;
-        const row = table.getRows().find(r => r.getData().id === id);
-        if (row) { row.reformat(); row.getElement().style.outline = '2px solid #3182ce'; }
-    }
-
-    async function saveEditedRow(id) {
-        const row = table.getRows().find(r => r.getData().id === id);
-        if (!row) return;
-        const data = row.getData();
-        try {
-            const res = await fetch("/api/module/MBC01/save", {
-                method: 'POST',
-                headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify(data)
-            });
-            const result = await res.json();
-            if (result.error) { alert(result.error); return; }
-            if (result.id) row.update({id: result.id, doc_num: result.doc_num, doc_status: result.doc_status});
-        } catch (e) { alert('Save failed'); return; }
-        editUnlockedRowId = null;
+        if (selectedEditRowIds.has(id)) {
+            selectedEditRowIds.delete(id);
+            el.checked = false;
+        } else {
+            selectedEditRowIds.add(id);
+            el.checked = true;
+        }
         row.reformat();
-        row.getElement().style.outline = '';
-    }
-
-    function enableModalEditing() {
-        if (!currentModalData) return;
-        editRow(currentModalData.id);
-        openDetailsModal(currentModalData);
     }
 
     // Approval functions

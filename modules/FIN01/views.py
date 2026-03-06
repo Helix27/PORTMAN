@@ -82,7 +82,6 @@ def generate_bill():
     from modules.VCN01 import model as vcn_model
     from modules.MBC01 import model as mbc_model
     from modules.LUEU01 import model as eu_model
-    from modules.VIEM01 import model as viem_model
     from modules.VCUM01 import model as vcum_model
 
     # Get source options with dates for better identification

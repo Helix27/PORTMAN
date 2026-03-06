@@ -14,7 +14,15 @@ depends_on = None
 
 
 def upgrade():
-    op.execute('ALTER TABLE eu_lines RENAME TO lueu_lines')
+    # Rename only if eu_lines exists (skip if already renamed or created as lueu_lines)
+    op.execute("""
+        DO $$
+        BEGIN
+            IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'eu_lines') THEN
+                ALTER TABLE eu_lines RENAME TO lueu_lines;
+            END IF;
+        END $$
+    """)
     op.execute("UPDATE module_permissions SET module_code = 'LUEU01' WHERE module_code = 'EU01'")
 
 

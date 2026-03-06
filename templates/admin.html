@@ -13,6 +13,8 @@
     <button class="tab-btn" onclick="showTab('permissions')">Module Permissions</button>
     <button class="tab-btn" onclick="showTab('config')">Module Config</button>
     <button class="tab-btn" onclick="showTab('vessels')">Vessel Closure</button>
+    <button class="tab-btn" onclick="showTab('gst')">GST Config</button>
+    <button class="tab-btn" onclick="showTab('banks')">Bank Accounts</button>
 </div>
 
 <!-- User Management Tab -->
@@ -91,28 +93,6 @@
                     </label>
                 </div>
             </div>
-            <!-- FIN01-specific: Port / Seller details for GST -->
-            <div class="config-group" id="finConfigGroup" style="display:none;">
-                <h4>Port / Seller Details (GST)</h4>
-                <div class="config-row" style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
-                    <label>Port GST State Code:<br><input type="text" id="cfgPortStateCode" placeholder="e.g., 20" maxlength="2" style="width:100%;padding:6px;"></label>
-                    <label>Seller GSTIN:<br><input type="text" id="cfgSellerGstin" placeholder="e.g., 20AABCT1234H1Z0" maxlength="15" style="width:100%;padding:6px;"></label>
-                </div>
-                <div class="config-row">
-                    <label>Legal Name:<br><input type="text" id="cfgSellerLegalName" placeholder="Registered company name" style="width:100%;padding:6px;"></label>
-                </div>
-                <div class="config-row">
-                    <label>Address:<br><input type="text" id="cfgSellerAddress" placeholder="Registered address" style="width:100%;padding:6px;"></label>
-                </div>
-                <div class="config-row" style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;">
-                    <label>City / Location:<br><input type="text" id="cfgSellerLocation" placeholder="City" style="width:100%;padding:6px;"></label>
-                    <label>Pincode:<br><input type="text" id="cfgSellerPincode" placeholder="6-digit" maxlength="6" style="width:100%;padding:6px;"></label>
-                    <label>Phone:<br><input type="text" id="cfgSellerPhone" placeholder="Optional" style="width:100%;padding:6px;"></label>
-                </div>
-                <div class="config-row">
-                    <label>Email:<br><input type="text" id="cfgSellerEmail" placeholder="Optional" style="width:100%;padding:6px;"></label>
-                </div>
-            </div>
         </div>
     </div>
 </div>
@@ -138,6 +118,63 @@
                 </tr>
             </thead>
             <tbody id="ldudVesselsBody"></tbody>
+        </table>
+    </div>
+</div>
+
+<!-- GST Config Tab -->
+<div id="gst-tab" class="tab-content">
+    <div class="admin-section">
+        <h3>Port / Seller GST Details</h3>
+        <div class="toolbar">
+            <button class="btn btn-save" onclick="saveGstConfig()">Save GST Config</button>
+        </div>
+        <div class="config-panel" style="display:block;">
+            <div class="config-group">
+                <div class="config-row" style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+                    <label>Port GST State Code:<br><input type="text" id="gstPortStateCode" placeholder="e.g., 20" maxlength="2" style="width:100%;padding:6px;"></label>
+                    <label>Seller GSTIN:<br><input type="text" id="gstSellerGstin" placeholder="e.g., 20AABCT1234H1Z0" maxlength="15" style="width:100%;padding:6px;"></label>
+                </div>
+                <div class="config-row">
+                    <label>Legal Name:<br><input type="text" id="gstSellerLegalName" placeholder="Registered company name" style="width:100%;padding:6px;"></label>
+                </div>
+                <div class="config-row">
+                    <label>Address:<br><input type="text" id="gstSellerAddress" placeholder="Registered address" style="width:100%;padding:6px;"></label>
+                </div>
+                <div class="config-row" style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;">
+                    <label>City / Location:<br><input type="text" id="gstSellerLocation" placeholder="City" style="width:100%;padding:6px;"></label>
+                    <label>Pincode:<br><input type="text" id="gstSellerPincode" placeholder="6-digit" maxlength="6" style="width:100%;padding:6px;"></label>
+                    <label>Phone:<br><input type="text" id="gstSellerPhone" placeholder="Optional" style="width:100%;padding:6px;"></label>
+                </div>
+                <div class="config-row">
+                    <label>Email:<br><input type="text" id="gstSellerEmail" placeholder="Optional" style="width:100%;padding:6px;"></label>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Bank Accounts Tab -->
+<div id="banks-tab" class="tab-content">
+    <div class="admin-section">
+        <h3>Port Bank Accounts</h3>
+        <div class="toolbar">
+            <button class="btn btn-add" onclick="addBankRow()">+ Add Row</button>
+            <button class="btn btn-save" onclick="saveBankAccounts()">Save</button>
+            <button class="btn btn-delete" onclick="deleteSelectedBanks()">Delete Selected</button>
+        </div>
+        <table class="admin-table" id="banksTable">
+            <thead>
+                <tr>
+                    <th style="width:30px;"><input type="checkbox" id="bankSelectAll" onclick="document.querySelectorAll('.bank-sel').forEach(c=>c.checked=this.checked)"></th>
+                    <th>Bank Name</th>
+                    <th>Account Number</th>
+                    <th>IFSC Code</th>
+                    <th>Account Holder Name</th>
+                    <th>Branch</th>
+                </tr>
+            </thead>
+            <tbody id="banksTableBody"></tbody>
         </table>
     </div>
 </div>
@@ -198,6 +235,7 @@ body.dark-theme .modal-content { background: #2d3748; color: #e2e8f0; }
 body.dark-theme .form-group input { background: #1a202c; border-color: #4a5568; color: #e2e8f0; }
 body.dark-theme .tab-btn { background: #4a5568; color: #e2e8f0; }
 body.dark-theme .tab-btn.active { background: #4299e1; color: white; }
+body.dark-theme #banksTable input[type="text"] { background: #1a202c; border-color: #4a5568; color: #e2e8f0; }
 </style>
 {% endblock %}
 
@@ -243,6 +281,8 @@ function showTab(tab) {
     document.querySelector(`[onclick*="showTab('${tab}')"]`).classList.add('active');
     document.getElementById(`${tab}-tab`).classList.add('active');
     if (tab === 'vessels') loadLdudVessels();
+    if (tab === 'gst') loadGstConfig();
+    if (tab === 'banks') loadBankAccounts();
 }
 
 function showAddUser() { document.getElementById('addUserModal').style.display = 'flex'; }
@@ -331,12 +371,9 @@ async function savePermissions() {
 async function loadConfig() {
     const moduleCode = document.getElementById('configModuleSelect').value;
     const panel = document.getElementById('configPanel');
-    const finGroup = document.getElementById('finConfigGroup');
     if (!moduleCode) { panel.style.display = 'none'; return; }
 
     panel.style.display = 'block';
-    // Show FIN01-specific fields only for FIN01
-    finGroup.style.display = (moduleCode === 'FIN01') ? 'block' : 'none';
 
     const res = await fetch(`/admin/api/config/${moduleCode}`);
     const config = await res.json();
@@ -344,18 +381,6 @@ async function loadConfig() {
     document.getElementById('cfgApprovalAdd').checked = config.approval_add || false;
     document.getElementById('cfgApprovalEdit').checked = config.approval_edit || false;
     document.getElementById('cfgApprover').value = config.approver_id || '';
-
-    // FIN01-specific fields
-    if (moduleCode === 'FIN01') {
-        document.getElementById('cfgPortStateCode').value = config.port_gst_state_code || '';
-        document.getElementById('cfgSellerGstin').value = config.seller_gstin || '';
-        document.getElementById('cfgSellerLegalName').value = config.seller_legal_name || '';
-        document.getElementById('cfgSellerAddress').value = config.seller_address || '';
-        document.getElementById('cfgSellerLocation').value = config.seller_location || '';
-        document.getElementById('cfgSellerPincode').value = config.seller_pincode || '';
-        document.getElementById('cfgSellerPhone').value = config.seller_phone || '';
-        document.getElementById('cfgSellerEmail').value = config.seller_email || '';
-    }
 }
 
 async function saveConfig() {
@@ -368,18 +393,6 @@ async function saveConfig() {
         approver_id: document.getElementById('cfgApprover').value || null
     };
 
-    // Include FIN01-specific fields
-    if (moduleCode === 'FIN01') {
-        config.port_gst_state_code = document.getElementById('cfgPortStateCode').value.trim();
-        config.seller_gstin = document.getElementById('cfgSellerGstin').value.trim();
-        config.seller_legal_name = document.getElementById('cfgSellerLegalName').value.trim();
-        config.seller_address = document.getElementById('cfgSellerAddress').value.trim();
-        config.seller_location = document.getElementById('cfgSellerLocation').value.trim();
-        config.seller_pincode = document.getElementById('cfgSellerPincode').value.trim();
-        config.seller_phone = document.getElementById('cfgSellerPhone').value.trim();
-        config.seller_email = document.getElementById('cfgSellerEmail').value.trim();
-    }
-
     const res = await fetch(`/admin/api/config/${moduleCode}/save`, {
         method: 'POST',
         headers: {'Content-Type': 'application/json'},
@@ -388,6 +401,108 @@ async function saveConfig() {
 
     if (res.ok) alert('Config saved!');
     else alert('Failed to save config');
+}
+
+// ── GST Config ─────────────────────────────────────────────────────────────
+async function loadGstConfig() {
+    const res = await fetch('/admin/api/config/FIN01');
+    const config = await res.json();
+    document.getElementById('gstPortStateCode').value = config.port_gst_state_code || '';
+    document.getElementById('gstSellerGstin').value = config.seller_gstin || '';
+    document.getElementById('gstSellerLegalName').value = config.seller_legal_name || '';
+    document.getElementById('gstSellerAddress').value = config.seller_address || '';
+    document.getElementById('gstSellerLocation').value = config.seller_location || '';
+    document.getElementById('gstSellerPincode').value = config.seller_pincode || '';
+    document.getElementById('gstSellerPhone').value = config.seller_phone || '';
+    document.getElementById('gstSellerEmail').value = config.seller_email || '';
+}
+
+async function saveGstConfig() {
+    // Merge with existing FIN01 config to preserve approval fields
+    const existing = await (await fetch('/admin/api/config/FIN01')).json();
+    const config = Object.assign({}, existing, {
+        port_gst_state_code: document.getElementById('gstPortStateCode').value.trim(),
+        seller_gstin: document.getElementById('gstSellerGstin').value.trim(),
+        seller_legal_name: document.getElementById('gstSellerLegalName').value.trim(),
+        seller_address: document.getElementById('gstSellerAddress').value.trim(),
+        seller_location: document.getElementById('gstSellerLocation').value.trim(),
+        seller_pincode: document.getElementById('gstSellerPincode').value.trim(),
+        seller_phone: document.getElementById('gstSellerPhone').value.trim(),
+        seller_email: document.getElementById('gstSellerEmail').value.trim()
+    });
+    const res = await fetch('/admin/api/config/FIN01/save', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(config)
+    });
+    if (res.ok) alert('GST config saved!');
+    else alert('Failed to save GST config');
+}
+
+// ── Port Bank Accounts ──────────────────────────────────────────────────────
+const bankInputStyle = 'width:100%;padding:4px 6px;font-size:12px;border:1px solid #cbd5e0;border-radius:3px;box-sizing:border-box;';
+
+async function loadBankAccounts() {
+    const res = await fetch('/admin/api/port-banks');
+    const rows = await res.json();
+    const tbody = document.getElementById('banksTableBody');
+    tbody.innerHTML = '';
+    rows.forEach(r => addBankRowWithData(r));
+}
+
+function addBankRow() { addBankRowWithData({}); }
+
+function addBankRowWithData(r) {
+    const tbody = document.getElementById('banksTableBody');
+    const tr = document.createElement('tr');
+    if (r.id) tr.setAttribute('data-bank-id', r.id);
+    const esc = v => (v || '').toString().replace(/"/g, '&quot;');
+    tr.innerHTML = `
+        <td><input type="checkbox" class="bank-sel"></td>
+        <td><input type="text" class="bank-name" value="${esc(r.bank_name)}" placeholder="Bank name" style="${bankInputStyle}"></td>
+        <td><input type="text" class="bank-acct" value="${esc(r.account_number)}" placeholder="Account number" style="${bankInputStyle}"></td>
+        <td><input type="text" class="bank-ifsc" value="${esc(r.ifsc_code)}" placeholder="IFSC code" style="${bankInputStyle}"></td>
+        <td><input type="text" class="bank-holder" value="${esc(r.account_holder_name)}" placeholder="Account holder name" style="${bankInputStyle}"></td>
+        <td><input type="text" class="bank-branch" value="${esc(r.branch_name)}" placeholder="Branch (optional)" style="${bankInputStyle}"></td>
+    `;
+    tbody.appendChild(tr);
+}
+
+async function saveBankAccounts() {
+    const rows = document.querySelectorAll('#banksTableBody tr');
+    for (let row of rows) {
+        const bankId = row.getAttribute('data-bank-id') || '';
+        const data = {
+            id: bankId,
+            bank_name: row.querySelector('.bank-name').value,
+            account_number: row.querySelector('.bank-acct').value,
+            ifsc_code: row.querySelector('.bank-ifsc').value,
+            account_holder_name: row.querySelector('.bank-holder').value,
+            branch_name: row.querySelector('.bank-branch').value
+        };
+        if (!data.bank_name && !data.account_number) continue;
+        const res = await fetch('/admin/api/port-banks/save', {
+            method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(data)
+        });
+        const result = await res.json();
+        if (result.id && !bankId) row.setAttribute('data-bank-id', result.id);
+    }
+    await loadBankAccounts();
+}
+
+async function deleteSelectedBanks() {
+    const selected = document.querySelectorAll('.bank-sel:checked');
+    if (selected.length === 0) { alert('Select accounts to delete'); return; }
+    if (!confirm(`Delete ${selected.length} account(s)?`)) return;
+    for (let cb of selected) {
+        const row = cb.closest('tr');
+        const id = row.getAttribute('data-bank-id');
+        if (id) await fetch('/admin/api/port-banks/delete', {
+            method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({id})
+        });
+        row.remove();
+    }
+    document.getElementById('bankSelectAll').checked = false;
 }
 
 // ── Vessel Closure ───────────────────────────────────────────────────────────

@@ -147,6 +147,70 @@ def save_config(module_code):
 
 # ── LDUD Vessel Closure Admin ─────────────────────────────────────────────────
 
+# ── Port Bank Accounts ────────────────────────────────────────────────────────
+
+PORT_BANKS_TABLE = 'port_bank_accounts'
+
+def _ensure_port_banks_table(cur):
+    cur.execute(f'''
+        CREATE TABLE IF NOT EXISTS {PORT_BANKS_TABLE} (
+            id SERIAL PRIMARY KEY,
+            bank_name TEXT,
+            account_number TEXT,
+            ifsc_code TEXT,
+            account_holder_name TEXT,
+            branch_name TEXT
+        )
+    ''')
+
+@bp.route('/api/port-banks')
+@admin_required
+def get_port_banks():
+    conn = get_db()
+    cur = get_cursor(conn)
+    _ensure_port_banks_table(cur)
+    cur.execute(f'SELECT * FROM {PORT_BANKS_TABLE} ORDER BY id')
+    rows = cur.fetchall()
+    conn.commit()
+    conn.close()
+    return jsonify([dict(r) for r in rows])
+
+@bp.route('/api/port-banks/save', methods=['POST'])
+@admin_required
+def save_port_bank():
+    data = request.json
+    conn = get_db()
+    cur = get_cursor(conn)
+    _ensure_port_banks_table(cur)
+    row_id = data.get('id')
+    fields = ['bank_name', 'account_number', 'ifsc_code', 'account_holder_name', 'branch_name']
+    vals = [data.get(f, '') for f in fields]
+    if row_id:
+        sets = ', '.join(f'{f}=%s' for f in fields)
+        cur.execute(f'UPDATE {PORT_BANKS_TABLE} SET {sets} WHERE id=%s', vals + [row_id])
+    else:
+        cols = ', '.join(fields)
+        phs = ', '.join('%s' for _ in fields)
+        cur.execute(f'INSERT INTO {PORT_BANKS_TABLE} ({cols}) VALUES ({phs}) RETURNING id', vals)
+        row_id = cur.fetchone()['id']
+    conn.commit()
+    conn.close()
+    return jsonify({'success': True, 'id': row_id})
+
+@bp.route('/api/port-banks/delete', methods=['POST'])
+@admin_required
+def delete_port_bank():
+    row_id = request.json.get('id')
+    conn = get_db()
+    cur = get_cursor(conn)
+    cur.execute(f'DELETE FROM {PORT_BANKS_TABLE} WHERE id=%s', (row_id,))
+    conn.commit()
+    conn.close()
+    return jsonify({'success': True})
+
+
+# ── LDUD Vessel Closure Admin ─────────────────────────────────────────────────
+
 @bp.route('/api/ldud/vessels')
 @admin_required
 def get_ldud_vessels():

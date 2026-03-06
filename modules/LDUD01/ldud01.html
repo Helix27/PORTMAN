@@ -367,12 +367,16 @@
     {% if permissions.can_add %}<button class="btn btn-add" onclick="addRow()">+ Add Row</button>{% endif %}
     {% if permissions.can_delete %}<button class="btn btn-delete" onclick="deleteSelected()">Delete Selected</button>{% endif %}
     {% if permissions.can_add or permissions.can_edit %}<button class="btn btn-save" onclick="saveAll()">Save (Ctrl+S)</button>{% endif %}
+    {% if permissions.can_edit or permissions.can_add %}<button id="editModeBtn" class="btn" style="font-size:12px;padding:4px 12px;background:#805ad5;color:white;border:none;" onclick="toggleEditMode()">✏️ Edit</button>{% endif %}
     <button class="btn" style="font-size:12px;padding:4px 12px;" onclick="toggleFilterPanel()">⚙ Filters <span id="filterBadge" style="display:none;background:#3182ce;color:white;border-radius:10px;padding:1px 6px;font-size:11px;margin-left:4px;">0</span></button>
     <div class="row-info">Rows: <span id="rowCount">0</span> / <span id="totalCount">0</span></div>
 </div>
 <!-- Header unsaved banner -->
 <div id="unsavedBanner" class="unsaved-banner">
     ⚠ You have unsaved header changes &mdash; <button class="btn btn-save" onclick="saveAll()" style="margin:0;padding:3px 10px;font-size:12px;">Save Now</button>
+</div>
+<div id="editModeBanner" style="display:none;background:#ebf8ff;border-left:4px solid #3182ce;color:#2b6cb0;padding:8px 14px;font-size:12px;">
+    ✏️ <b>Edit mode</b> — Check rows to select for editing, then modify cells and click <b>Save</b>.
 </div>
 <div id="filterPanel" class="filter-panel" style="display:none;">
     <div id="filterRows"></div>
@@ -484,6 +488,8 @@
     // Module-scope so openDetailsModal and closure functions can access them
     let isApprover = false;
     let isAdmin = {{ 'true' if session.get('is_admin') else 'false' }};
+    let editMode = false;
+    const selectedEditRowIds = new Set();
 
     const currentUser = '{{ session.username }}';
     const permissions = {
@@ -849,6 +855,15 @@
         const columns = [
             {formatter: "rowSelection", titleFormatter: "rowSelection", hozAlign: "center", headerSort: false, width: 40},
             {
+                field: '_select', title: '', width: 35, headerSort: false, visible: false,
+                formatter: function(cell) {
+                    const id = cell.getRow().getData().id;
+                    if (!id) return '';
+                    const checked = selectedEditRowIds.has(id);
+                    return `<input type="checkbox" ${checked ? 'checked' : ''} onclick="toggleRowSelection(${id},this)" style="cursor:pointer;width:14px;height:14px;">`;
+                }
+            },
+            {
                 title: "Details",
                 formatter: function(cell) {
                     const data = cell.getRow().getData();
@@ -973,27 +988,35 @@
                 const data = row.getData();
                 const status = data.doc_status;
                 const el = row.getElement();
-                if (status === 'Closed') el.style.backgroundColor = '#f0fff4';
-                else if (status === 'Partial Close') el.style.backgroundColor = '#fffbf0';
-                else el.style.backgroundColor = '#fffff0';
-                if (data._autosave_error) {
-                    el.style.outline = '2px solid #e53e3e';
-                    el.title = `Autosave failed: ${data._autosave_error}`;
-                } else {
-                    el.style.outline = '';
+                if (editMode && data.id && selectedEditRowIds.has(data.id)) {
+                    el.style.backgroundColor = '#ebf8ff';
+                    el.style.outline = '2px solid #3182ce';
                     el.title = '';
+                } else {
+                    if (status === 'Closed') el.style.backgroundColor = '#f0fff4';
+                    else if (status === 'Partial Close') el.style.backgroundColor = '#fffbf0';
+                    else el.style.backgroundColor = '#fffff0';
+                    if (data._autosave_error) {
+                        el.style.outline = '2px solid #e53e3e';
+                        el.title = `Autosave failed: ${data._autosave_error}`;
+                    } else {
+                        el.style.outline = '';
+                        el.title = '';
+                    }
                 }
             }
         });
 
+        table.on('cellEditing', function(cell) {
+            const field = cell.getColumn().getField();
+            if (!field || field === '_select') return;
+            const rowData = cell.getRow().getData();
+            if (!rowData.id || !editMode || !selectedEditRowIds.has(rowData.id)) {
+                cell.cancelEdit();
+            }
+        });
         table.on('cellEdited', function(cell) {
             if (_isSaving) return;
-            const rowData = cell.getRow().getData();
-            if (rowData.doc_status === 'Closed' && !isApprover && !isAdmin) {
-                cell.restoreOldValue();
-                alert('This vessel is Closed and cannot be edited.');
-                return;
-            }
             headerDirty = true;
             showUnsavedBanner();
         });
@@ -1025,12 +1048,9 @@
             lockBanner.style.cssText = 'background:#c6f6d5;color:#276749;padding:6px 14px;font-size:12px;font-weight:600;border-bottom:2px solid #9ae6b4;display:none;';
             document.querySelector('.detail-modal-header').after(lockBanner);
         }
-        const isRecordClosed = data.doc_status === 'Closed';
-        if (isRecordClosed && !isApprover && !isAdmin) {
-            lockBanner.textContent = '🔒 This vessel is Closed — view only';
-            lockBanner.style.display = 'block';
-        } else if (isRecordClosed) {
-            lockBanner.textContent = '🔒 This vessel is Closed — you can edit as approver';
+        const isUnlocked = editMode && selectedEditRowIds.has(ldudId);
+        if (!isUnlocked) {
+            lockBanner.textContent = '🔒 Read Only — select this row in Edit mode to make changes';
             lockBanner.style.display = 'block';
         } else {
             lockBanner.style.display = 'none';
@@ -1041,7 +1061,7 @@
         modalBody.innerHTML = '';
 
         const anchorageTitle = operationType === 'Export' ? 'Anchorage Recording Export' : 'Anchorage Recording';
-        const canAct = (permissions.can_edit || permissions.can_add) && (!isRecordClosed || isApprover || isAdmin);
+        const canAct = (permissions.can_edit || permissions.can_add) && isUnlocked;
 
         // Build vessel ops section — Import uses pivot+hold-summary, Export uses simple row table
         let vesselOpsSection = '';
@@ -1261,7 +1281,7 @@
     }
 
     async function initSubTables(ldudId, operationType = 'Import') {
-        const canEdit = permissions.can_edit || permissions.can_add;
+        const canEdit = (permissions.can_edit || permissions.can_add) && editMode && selectedEditRowIds.has(ldudId);
         const isDark = localStorage.getItem('theme') === 'dark';
 
         // Track operation type for this LDUD
@@ -2197,6 +2217,13 @@
             }
             showStatus(`Saved ${savedCount} row(s)`, 'saved');
             hideUnsavedBanner();
+            editMode = false;
+            selectedEditRowIds.clear();
+            const editBtn = document.getElementById('editModeBtn');
+            if (editBtn) { editBtn.textContent = '✏️ Edit'; editBtn.style.background = '#805ad5'; }
+            const editBanner = document.getElementById('editModeBanner');
+            if (editBanner) editBanner.style.display = 'none';
+            table.hideColumn('_select');
             await table.setData("/api/module/LDUD01/data");
         } finally {
             _isSaving = false;
@@ -2206,6 +2233,46 @@
     document.addEventListener('keydown', function(e) {
         if ((e.ctrlKey || e.metaKey) && e.key === 's') { e.preventDefault(); saveAll(); }
     });
+
+    function toggleEditMode() {
+        if (editMode) {
+            editMode = false;
+            selectedEditRowIds.clear();
+            const btn = document.getElementById('editModeBtn');
+            if (btn) { btn.textContent = '✏️ Edit'; btn.style.background = '#805ad5'; }
+            document.getElementById('editModeBanner').style.display = 'none';
+            table.hideColumn('_select');
+            table.getRows().forEach(r => r.reformat());
+            hideUnsavedBanner();
+            table.setData('/api/module/LDUD01/data');
+        } else {
+            editMode = true;
+            const btn = document.getElementById('editModeBtn');
+            if (btn) { btn.textContent = '✖ Cancel Edit'; btn.style.background = '#e53e3e'; }
+            document.getElementById('editModeBanner').style.display = 'block';
+            table.showColumn('_select');
+        }
+    }
+
+    function toggleRowSelection(id, el) {
+        const row = table.getRows().find(r => r.getData().id === id);
+        if (!row) { el.checked = selectedEditRowIds.has(id); return; }
+        const data = row.getData();
+        const status = data.doc_status || '';
+        if ((status === 'Closed' || status === 'Partial Close') && !isApprover && !isAdmin) {
+            el.checked = false;
+            alert('Closed records can only be edited by the approver.');
+            return;
+        }
+        if (selectedEditRowIds.has(id)) {
+            selectedEditRowIds.delete(id);
+            el.checked = false;
+        } else {
+            selectedEditRowIds.add(id);
+            el.checked = true;
+        }
+        row.reformat();
+    }
 
     // ── Closure functions ────────────────────────────────────────────────────
     let closureTargetId = null;
