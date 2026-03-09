@@ -8,32 +8,36 @@ def _clean_empty(data):
     return data
 
 def get_next_doc_num():
+    import datetime
     conn = get_db()
     cur = get_cursor(conn)
-    cur.execute("SELECT MAX(CAST(SUBSTR(doc_num, 5) AS INTEGER)) FROM ldud_header WHERE doc_num LIKE 'LDUD%%'")
+    yy = datetime.datetime.now().strftime('%y%y')  # e.g. 2626 for FY2026
+    # Use financial year suffix: FY starting April, so Mar→prev year pair
+    now = datetime.datetime.now()
+    fy_start = now.year if now.month >= 4 else now.year - 1
+    fy_suffix = f"{str(fy_start)[2:]}{str(fy_start + 1)[2:]}"  # e.g. "2526"
+    prefix = f"LDUD-{fy_suffix}-"
+    cur.execute(
+        "SELECT MAX(CAST(SPLIT_PART(doc_num, '-', 3) AS INTEGER)) FROM ldud_header WHERE doc_num LIKE %s",
+        (prefix + '%',)
+    )
     result = cur.fetchone()['max']
     conn.close()
     next_num = (result or 0) + 1
-    return f"LDUD{next_num}"
+    return f"{prefix}{next_num:03d}"
 
 def _build_vcn_list(rows):
     result = []
     for r in rows:
-        doc_date = r.get('doc_date') or ''
-        op_type = r.get('operation_type') or ''
         display = f"{r['vcn_doc_num']} / {r['vessel_name']}"
-        if doc_date:
-            display += f" / {doc_date}"
-        if op_type:
-            display += f" / {op_type}"
         result.append({
             'value': display,
             'vcn_id': r['id'],
             'vcn_doc_num': r['vcn_doc_num'],
             'vessel_name': r['vessel_name'],
             'anchored_datetime': r.get('anchorage_arrival'),
-            'doc_date': doc_date,
-            'operation_type': op_type
+            'doc_date': r.get('doc_date') or '',
+            'operation_type': r.get('operation_type') or ''
         })
     return result
 
@@ -149,14 +153,18 @@ def get_data(page=1, size=20, filters=None):
                 cn = v['cargo_name'] or ''
                 vo_by_cargo[lid][cn] = float(v['total_qty'] or 0)
 
-            # Earliest discharge_started and latest discharge_commenced from anchorage recording
-            cur.execute('''SELECT ldud_id, MIN(discharge_started) as first_start, MAX(discharge_commenced) as last_end
+            # Earliest discharge_started and latest discharge_commenced from anchorage recording.
+            # ops_completed is NULL if any anchorage is started but not yet completed.
+            cur.execute('''SELECT ldud_id,
+                               MIN(discharge_started) as first_start,
+                               MAX(discharge_commenced) as last_end,
+                               BOOL_OR(discharge_started IS NOT NULL AND discharge_commenced IS NULL) as has_open
                            FROM ldud_anchorage WHERE ldud_id = ANY(%s)
                            GROUP BY ldud_id''', (ldud_ids,))
             for v in cur.fetchall():
                 vo_times[v['ldud_id']] = {
                     'first_start': str(v['first_start']).replace(' ', 'T') if v['first_start'] else None,
-                    'last_end': str(v['last_end']).replace(' ', 'T') if v['last_end'] else None
+                    'last_end': None if v['has_open'] else (str(v['last_end']).replace(' ', 'T') if v['last_end'] else None)
                 }
 
         # Enrich rows

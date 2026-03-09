@@ -439,6 +439,7 @@
     let cargoNames = [];
     let cargoByType = {};
     let uomList = [];
+    let defaultUom = '';
     let berthList = [];
     let payloaderList = [];
     let customerList = [];
@@ -577,6 +578,9 @@
         });
         cargoNames = [...new Set(cnData.map(c => c.cargo_name).filter(Boolean))].sort();
         uomList = await uomRes.json();
+        const uomDefaultRes = await fetch('/api/module/VQM01/default');
+        const uomDefaultData = await uomDefaultRes.json();
+        defaultUom = uomDefaultData.default || '';
         berthList = await berthRes.json();
         payloaderList = await pplRes.json();
         customerList = await custRes.json();
@@ -1157,7 +1161,8 @@
             created_date: getTodayDate(),
             doc_date: getTodayDate(),
             doc_status: 'Draft',
-            doc_series: defaultDocSeries
+            doc_series: defaultDocSeries,
+            quantity_uom: defaultUom
         }, true);
     }
 

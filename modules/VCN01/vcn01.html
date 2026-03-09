@@ -450,6 +450,7 @@
     let delayTypes = [];
     let cargoNames = [];
     let quantityUoms = [];
+    let defaultUom = '';
     let holds = [];
     let portNames = [];
     let moduleConfig = {};
@@ -584,6 +585,9 @@
         delayTypes = await dmRes.json();
         cargoNames = await cnRes.json();
         quantityUoms = await uomRes.json();
+        const uomDefaultRes = await fetch('/api/module/VQM01/default');
+        const uomDefaultData = await uomDefaultRes.json();
+        defaultUom = uomDefaultData.default || '';
         holds = await holdRes.json();
         portNames = await portRes.json();
         moduleConfig = await configRes.json();
@@ -1183,6 +1187,9 @@
         }
         if (data.id && subTables[vcnId] && subTables[vcnId][type]) {
             const newRow = {id: data.id, vcn_id: vcnId};
+            if ((type === 'cargo' || type === 'export_cargo') && defaultUom) {
+                newRow.quantity_uom = defaultUom;
+            }
             subTables[vcnId][type].addRow(newRow, false);
         }
     }

@@ -718,7 +718,18 @@
         const tableRef = subTables[ldudId] && subTables[ldudId].vessel_ops;
         if (!tableRef) return;
         const holdDefs = getHoldDefs(ldudId);
-        const newRow = {op_date: getTodayDate(), __cellIds: {}};
+        // Default date: day after the last existing row's date, or today if no rows
+        let nextDate = getTodayDate();
+        const existingRows = tableRef.getRows();
+        if (existingRows.length > 0) {
+            const lastDate = existingRows[existingRows.length - 1].getData().op_date;
+            if (lastDate) {
+                const d = new Date(lastDate);
+                d.setDate(d.getDate() + 1);
+                nextDate = d.toISOString().split('T')[0];
+            }
+        }
+        const newRow = {op_date: nextDate, __cellIds: {}};
         holdDefs.forEach(def => {
             newRow[def.field] = '';
             newRow.__cellIds[def.field] = [];
@@ -898,7 +909,7 @@
             {title: "BL Quantity", field: "bl_quantities_display", width: 160,
                 formatter: function(cell) { return cargoColorBadges(cell.getValue()); }
             },
-            {title: "Balance (Load/Disch)", field: "balance_display", width: 180,
+            {title: "Total Disch / Balance", field: "balance_display", width: 180,
                 formatter: function(cell) { return cargoColorBadges(cell.getValue()); }
             },
             {title: "Agent Name", field: "agent_name", width: 120},
@@ -967,11 +978,8 @@
             ajaxURL: "/api/module/LDUD01/data",
             ajaxParams: function() { return currentFilters.length ? { filters: JSON.stringify(currentFilters) } : {}; },
             ajaxResponse: function(url, params, response) {
-                // Build display field using doc_date and operation_type from VCN
                 response.data.forEach(r => {
                     r.vcn_display = r.vcn_doc_num ? `${r.vcn_doc_num} / ${r.vessel_name || ''}` : '';
-                    if (r.vcn_doc_date) r.vcn_display += ` / ${r.vcn_doc_date}`;
-                    if (r.operation_type) r.vcn_display += ` / ${r.operation_type}`;
                 });
                 document.getElementById('rowCount').textContent = response.data.length;
                 document.getElementById('totalCount').textContent = response.total;
