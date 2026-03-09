@@ -236,14 +236,17 @@ def create_invoice_from_bills(bill_ids, invoice_data):
     invoice_data['customer_gl_code'] = first_bill['customer_gl_code']
 
     # Generate invoice number and FY
-    invoice_number = get_next_invoice_number(invoice_data.get('invoice_series', 'INV'))
+    if invoice_data.get('_invoice_number_override'):
+        invoice_number = invoice_data.pop('_invoice_number_override')
+    else:
+        invoice_number = get_next_invoice_number(invoice_data.get('invoice_series', 'INV'))
     financial_year = get_financial_year(invoice_data['invoice_date'])
 
     invoice_data['invoice_number'] = invoice_number
     invoice_data['financial_year'] = financial_year
 
     # Insert invoice header
-    cols = [k for k in invoice_data if k != 'id']
+    cols = [k for k in invoice_data if k not in ('id', '_invoice_number_override')]
     cur.execute(f'''INSERT INTO invoice_header
         ({', '.join(cols)})
         VALUES ({', '.join(['%s']*len(cols))})

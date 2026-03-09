@@ -45,6 +45,18 @@ def index():
     return redirect(url_for('FINV01.invoices'))
 
 
+@bp.route('/module/FINV01/doc-series')
+def doc_series_page():
+    """Invoice doc series master management page"""
+    if 'user_id' not in session:
+        return redirect(url_for('login'))
+    perms = get_perms()
+    return render_template('finv01_doc_series.html',
+                           perms=perms,
+                           username=session.get('username'),
+                           module_code='FINV01')
+
+
 @bp.route('/module/FINV01/invoices')
 def invoices():
     """List all invoices"""
@@ -103,9 +115,32 @@ def create_invoice():
     data = request.json
     bill_ids = data.get('bill_ids', [])
 
+    # Resolve invoice number from doc series
+    doc_series_id = data.get('doc_series_id')
+    doc_series_prefix = data.get('doc_series_prefix', 'INV')
+    doc_series_name = data.get('doc_series_name', '')
+
+    invoice_date = data.get('invoice_date', '')
+    # Determine financial year suffix e.g. 25-26
+    fy_suffix = model.get_financial_year(invoice_date) if invoice_date else ''
+    # Compute next sequence for this prefix/FY
+    conn_seq = get_db()
+    cur_seq = get_cursor(conn_seq)
+    like_pat = f'{doc_series_prefix}/{fy_suffix}/%'
+    cur_seq.execute(
+        'SELECT MAX(doc_series_seq) FROM invoice_header WHERE doc_series=%s AND financial_year=%s',
+        [doc_series_prefix, fy_suffix]
+    )
+    row_seq = cur_seq.fetchone()
+    next_seq = (row_seq['max'] or 0) + 1 if row_seq else 1
+    conn_seq.close()
+    invoice_number_override = f'{doc_series_prefix}/{fy_suffix}/{next_seq}'
+
     invoice_data = {
-        'invoice_date': data.get('invoice_date'),
-        'invoice_series': data.get('invoice_series', 'INV'),
+        'invoice_date': invoice_date,
+        'invoice_series': doc_series_prefix,
+        'doc_series': doc_series_prefix,
+        'doc_series_seq': next_seq,
         'customer_type': data.get('customer_type'),
         'customer_id': data.get('customer_id'),
         'customer_name': data.get('customer_name'),
@@ -118,6 +153,10 @@ def create_invoice():
         'customer_pincode': data.get('customer_pincode'),
         'customer_phone': data.get('customer_phone'),
         'customer_email': data.get('customer_email'),
+        'ship_to_name': data.get('ship_to_name'),
+        'ship_to_address': data.get('ship_to_address'),
+        'ship_to_gstin': data.get('ship_to_gstin'),
+        'ship_to_state_code': data.get('ship_to_state_code'),
         'currency_code': data.get('currency_code', 'INR'),
         'exchange_rate': data.get('exchange_rate', 1.0),
         'subtotal': data.get('subtotal'),
@@ -130,9 +169,19 @@ def create_invoice():
         'amount_in_words': data.get('amount_in_words'),
         'payment_terms': data.get('payment_terms'),
         'due_date': data.get('due_date'),
+        'vessel_name': data.get('vessel_name'),
+        'vessel_call_no': data.get('vessel_call_no'),
+        'commodity': data.get('commodity'),
+        'date_of_berthing': data.get('date_of_berthing'),
+        'date_of_sailing': data.get('date_of_sailing'),
+        'grt_of_vessel': data.get('grt_of_vessel'),
+        'no_of_days': data.get('no_of_days'),
+        'cargo_quantity': data.get('cargo_quantity'),
+        'no_of_hrs': data.get('no_of_hrs'),
         'created_by': session.get('username'),
         'created_date': __import__('datetime').datetime.now().strftime('%Y-%m-%d'),
-        'remarks': data.get('remarks')
+        'remarks': data.get('remarks'),
+        '_invoice_number_override': invoice_number_override,
     }
 
     invoice_id, invoice_number = model.create_invoice_from_bills(bill_ids, invoice_data)
@@ -169,6 +218,42 @@ def print_invoice(invoice_id):
     invoice_lines = model.get_invoice_lines(invoice_id)
     sac_summary = model.get_invoice_sac_summary(invoice_id)
 
+    # Port config for header GSTIN etc.
+    config = get_module_config('FIN01')
+    port_config = {
+        'seller_gstin': config.get('seller_gstin', ''),
+        'seller_legal_name': config.get('seller_legal_name', 'JSW Dharamtar Port Pvt. Ltd.'),
+    }
+
+    # Payment bank: use customer virtual account if available, else port bank account
+    payment_bank = None
+    conn_b = get_db()
+    cur_b = get_cursor(conn_b)
+    try:
+        ctype = (invoice.get('customer_type') or '').lower()
+        cid   = invoice.get('customer_id')
+        va = None
+        if cid:
+            tbl = 'vessel_agents' if ctype == 'agent' else 'vessel_customers'
+            cur_b.execute(f'SELECT virtual_account_number FROM {tbl} WHERE id=%s', [cid])
+            row = cur_b.fetchone()
+            if row:
+                va = (row['virtual_account_number'] or '').strip()
+
+        if va:
+            # Build a synthetic bank dict from the virtual account number
+            cur_b.execute('SELECT * FROM port_bank_accounts ORDER BY id LIMIT 1')
+            base = cur_b.fetchone()
+            payment_bank = dict(base) if base else {}
+            payment_bank['account_number'] = va
+        else:
+            cur_b.execute('SELECT * FROM port_bank_accounts ORDER BY id LIMIT 1')
+            row = cur_b.fetchone()
+            payment_bank = dict(row) if row else None
+    except Exception:
+        payment_bank = None
+    conn_b.close()
+
     from datetime import datetime
     current_datetime = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
 
@@ -176,6 +261,8 @@ def print_invoice(invoice_id):
                          invoice=invoice,
                          invoice_lines=invoice_lines,
                          sac_summary=sac_summary,
+                         port_config=port_config,
+                         payment_bank=payment_bank,
                          current_datetime=current_datetime)
 
 
@@ -480,6 +567,235 @@ def cancel_irn():
     })
 
 
+# ===== Customer/Agent lookup for virtual account + full billing details =====
+
+@bp.route('/api/module/FINV01/customer-bank/<customer_type>/<int:customer_id>')
+def get_customer_bank(customer_type, customer_id):
+    """Return full billing details + virtual_account_number from VAM01/VCUM01 master"""
+    if 'user_id' not in session:
+        return jsonify({'error': 'Not logged in'}), 401
+    conn = get_db()
+    cur = get_cursor(conn)
+    try:
+        if customer_type.lower() == 'agent':
+            cur.execute('''
+                SELECT name, gstin, gst_state_code, gst_state_name, pan,
+                       billing_address, city, pincode, virtual_account_number
+                FROM vessel_agents WHERE id=%s
+            ''', [customer_id])
+        else:
+            cur.execute('''
+                SELECT name, gstin, gst_state_code, gst_state_name, pan,
+                       billing_address, city, pincode, virtual_account_number
+                FROM vessel_customers WHERE id=%s
+            ''', [customer_id])
+        row = cur.fetchone()
+        result = dict(row) if row else {}
+    except Exception:
+        result = {}
+    conn.close()
+    return jsonify(result)
+
+
+# ===== Bill → Vessel details (LDUD / VCN / MBC lookup) =====
+
+@bp.route('/api/module/FINV01/bill-vessel-details/<int:bill_id>')
+def get_bill_vessel_details(bill_id):
+    """Trace a bill back to vessel/cargo details via LUEU01 chain, then bill_header fallback"""
+    if 'user_id' not in session:
+        return jsonify({'error': 'Not logged in'}), 401
+    conn = get_db()
+    cur = get_cursor(conn)
+    result = {}
+    try:
+        # Primary path: bill_lines → lueu_lines → ldud_header/mbc_header
+        cur.execute('''
+            SELECT ll.source_type, ll.source_id, ll.cargo_name AS eu_cargo, ll.quantity AS eu_qty
+            FROM bill_lines bl
+            JOIN lueu_lines ll ON ll.id = bl.eu_line_id
+            WHERE bl.bill_id = %s AND bl.eu_line_id IS NOT NULL
+            LIMIT 1
+        ''', [bill_id])
+        eu = cur.fetchone()
+
+        if eu:
+            src_type = (eu['source_type'] or '').upper()
+            src_id   = eu['source_id']
+
+            if src_type == 'LDUD' and src_id:
+                cur.execute('''
+                    SELECT v.vessel_name, v.vcn_doc_num, v.vessel_master_doc,
+                           l.nor_tendered, l.discharge_completed
+                    FROM ldud_header l
+                    JOIN vcn_header v ON v.id = l.vcn_id
+                    WHERE l.id = %s
+                ''', [src_id])
+                row = cur.fetchone()
+                if row:
+                    result['vessel_name']      = row['vessel_name'] or ''
+                    result['vessel_call_no']   = row['vcn_doc_num'] or ''
+                    result['date_of_berthing'] = _fmt_date(row['nor_tendered'])
+                    result['date_of_sailing']  = _fmt_date(row['discharge_completed'])
+                    # Fetch GRT from vessels master
+                    if row.get('vessel_master_doc'):
+                        cur.execute('SELECT gt FROM vessels WHERE doc_num=%s LIMIT 1',
+                                    [row['vessel_master_doc']])
+                        vrow = cur.fetchone()
+                        result['grt_of_vessel'] = vrow['gt'] if vrow else ''
+                result['commodity']      = eu['eu_cargo'] or ''
+                result['cargo_quantity'] = eu['eu_qty']
+
+            elif src_type == 'MBC' and src_id:
+                cur.execute('''
+                    SELECT mbc_name, cargo_name, bl_quantity
+                    FROM mbc_header WHERE id = %s
+                ''', [src_id])
+                row = cur.fetchone()
+                if row:
+                    result['vessel_name']    = row['mbc_name'] or ''
+                    result['commodity']      = row['cargo_name'] or ''
+                    result['cargo_quantity'] = row['bl_quantity']
+                if not result.get('commodity'):
+                    result['commodity'] = eu['eu_cargo'] or ''
+
+        else:
+            # Fallback: bill_header.source_type / source_id
+            cur.execute('SELECT source_type, source_id FROM bill_header WHERE id=%s', [bill_id])
+            bill = cur.fetchone()
+            if not bill:
+                conn.close()
+                return jsonify(result)
+
+            src_type = (bill['source_type'] or '').upper()
+            src_id   = bill['source_id']
+
+            if src_type == 'VCN' and src_id:
+                cur.execute('''
+                    SELECT v.vessel_name, v.vcn_doc_num, v.vessel_master_doc,
+                           l.nor_tendered, l.discharge_completed
+                    FROM vcn_header v
+                    LEFT JOIN ldud_header l ON l.vcn_id = v.id
+                    WHERE v.id = %s
+                    ORDER BY l.id DESC LIMIT 1
+                ''', [src_id])
+                row = cur.fetchone()
+                if row:
+                    result['vessel_name']      = row['vessel_name'] or ''
+                    result['vessel_call_no']   = row['vcn_doc_num'] or ''
+                    result['date_of_berthing'] = _fmt_date(row['nor_tendered'])
+                    result['date_of_sailing']  = _fmt_date(row['discharge_completed'])
+                    # Fetch GRT from vessels master
+                    if row.get('vessel_master_doc'):
+                        cur.execute('SELECT gt FROM vessels WHERE doc_num=%s LIMIT 1',
+                                    [row['vessel_master_doc']])
+                        vrow = cur.fetchone()
+                        result['grt_of_vessel'] = vrow['gt'] if vrow else ''
+                cur.execute('''
+                    SELECT cargo_name, bl_quantity FROM vcn_cargo_declaration
+                    WHERE vcn_id = %s ORDER BY id LIMIT 1
+                ''', [src_id])
+                cargo = cur.fetchone()
+                if cargo:
+                    result['commodity']      = cargo['cargo_name'] or ''
+                    result['cargo_quantity'] = cargo['bl_quantity']
+
+            elif src_type == 'MBC' and src_id:
+                cur.execute('''
+                    SELECT mbc_name, cargo_name, bl_quantity
+                    FROM mbc_header WHERE id = %s
+                ''', [src_id])
+                row = cur.fetchone()
+                if row:
+                    result['vessel_name']    = row['mbc_name'] or ''
+                    result['commodity']      = row['cargo_name'] or ''
+                    result['cargo_quantity'] = row['bl_quantity']
+
+    except Exception:
+        pass
+    conn.close()
+    return jsonify(result)
+
+
+def _fmt_date(val):
+    """Extract YYYY-MM-DD from a datetime/text value"""
+    if not val:
+        return ''
+    s = str(val)
+    if len(s) >= 10:
+        return s[:10]
+    return s
+
+
+# ===== Invoice Doc Series =====
+
+def _ensure_invoice_doc_series(cur):
+    cur.execute('''
+        CREATE TABLE IF NOT EXISTS invoice_doc_series (
+            id SERIAL PRIMARY KEY,
+            name TEXT NOT NULL,
+            prefix TEXT NOT NULL,
+            is_default BOOLEAN DEFAULT FALSE
+        )
+    ''')
+
+
+@bp.route('/api/module/FINV01/doc-series')
+def get_doc_series():
+    if 'user_id' not in session:
+        return jsonify({'error': 'Not logged in'}), 401
+    conn = get_db()
+    cur = get_cursor(conn)
+    _ensure_invoice_doc_series(cur)
+    conn.commit()
+    cur.execute('SELECT * FROM invoice_doc_series ORDER BY name')
+    rows = [dict(r) for r in cur.fetchall()]
+    conn.close()
+    return jsonify(rows)
+
+
+@bp.route('/api/module/FINV01/doc-series/save', methods=['POST'])
+def save_doc_series():
+    if 'user_id' not in session:
+        return jsonify({'error': 'Not logged in'}), 401
+    perms = get_perms()
+    if not perms.get('can_edit') and not perms.get('can_add'):
+        return jsonify({'error': 'No permission'}), 403
+    data = request.json
+    conn = get_db()
+    cur = get_cursor(conn)
+    _ensure_invoice_doc_series(cur)
+    is_default = bool(data.get('is_default', False))
+    if is_default:
+        cur.execute('UPDATE invoice_doc_series SET is_default=FALSE WHERE is_default=TRUE')
+    if data.get('id'):
+        cur.execute('UPDATE invoice_doc_series SET name=%s, prefix=%s, is_default=%s WHERE id=%s',
+                    [data['name'], data['prefix'], is_default, data['id']])
+        row_id = data['id']
+    else:
+        cur.execute('INSERT INTO invoice_doc_series (name, prefix, is_default) VALUES (%s,%s,%s) RETURNING id',
+                    [data['name'], data['prefix'], is_default])
+        row_id = cur.fetchone()['id']
+    conn.commit()
+    conn.close()
+    return jsonify({'success': True, 'id': row_id})
+
+
+@bp.route('/api/module/FINV01/doc-series/delete', methods=['POST'])
+def delete_doc_series():
+    if 'user_id' not in session:
+        return jsonify({'error': 'Not logged in'}), 401
+    perms = get_perms()
+    if not perms.get('can_delete'):
+        return jsonify({'error': 'No permission'}), 403
+    row_id = request.json.get('id')
+    conn = get_db()
+    cur = get_cursor(conn)
+    cur.execute('DELETE FROM invoice_doc_series WHERE id=%s', [row_id])
+    conn.commit()
+    conn.close()
+    return jsonify({'success': True})
+
+
 # ===== Port Config (shared) =====
 
 @bp.route('/api/module/FINV01/port-config')
@@ -487,9 +803,26 @@ def get_port_config():
     if 'user_id' not in session:
         return jsonify({'error': 'Not logged in'}), 401
     config = get_module_config('FIN01')
+    conn = get_db()
+    cur = get_cursor(conn)
+    # Fetch the primary port bank account for invoice footer
+    bank = {}
+    try:
+        _ensure_invoice_doc_series(cur)  # ensure tables exist
+        cur.execute('''
+            SELECT * FROM port_bank_accounts ORDER BY id LIMIT 1
+        ''')
+        row = cur.fetchone()
+        if row:
+            bank = dict(row)
+    except Exception:
+        pass
+    conn.commit()
+    conn.close()
     return jsonify({
         'port_gst_state_code': config.get('port_gst_state_code', ''),
         'port_gstin': config.get('port_gstin', ''),
         'seller_gstin': config.get('seller_gstin', ''),
         'seller_legal_name': config.get('seller_legal_name', ''),
+        'bank': bank,
     })

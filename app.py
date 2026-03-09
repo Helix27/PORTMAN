@@ -40,6 +40,7 @@ from modules.LDUD01 import bp as ldud01_bp, MODULE_INFO as ldud01_info
 from modules.MBCM01 import bp as mbcm01_bp, MODULE_INFO as mbcm01_info
 from modules.PBM01 import bp as pbm01_bp, MODULE_INFO as pbm01_info
 from modules.MBCDS01 import bp as mbcds01_bp, MODULE_INFO as mbcds01_info
+from modules.INVDS01 import bp as invds01_bp, MODULE_INFO as invds01_info
 from modules.MBC01 import bp as mbc01_bp, MODULE_INFO as mbc01_info
 from modules.PPL01 import bp as ppl01_bp, MODULE_INFO as ppl01_info
 from modules.LUEU01 import bp as eu01_bp, MODULE_INFO as eu01_info
@@ -98,6 +99,7 @@ register_module(ldud01_info['code'], ldud01_info['name'], ldud01_bp)
 register_module(mbcm01_info['code'], mbcm01_info['name'], mbcm01_bp)
 register_module(pbm01_info['code'], pbm01_info['name'], pbm01_bp)
 register_module(mbcds01_info['code'], mbcds01_info['name'], mbcds01_bp)
+register_module(invds01_info['code'], invds01_info['name'], invds01_bp)
 register_module(mbc01_info['code'], mbc01_info['name'], mbc01_bp)
 register_module(ppl01_info['code'], ppl01_info['name'], ppl01_bp)
 register_module(eu01_info['code'], eu01_info['name'], eu01_bp)

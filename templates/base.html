@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>{% block title %}DPPL PMS{% endblock %}</title>
+    <title>{% block title %}PORTBIRD DPPL{% endblock %}</title>
     <link href="https://unpkg.com/tabulator-tables@6.3.0/dist/css/tabulator.min.css" rel="stylesheet">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
     <style>
@@ -218,6 +218,10 @@
                     <div class="module-item" onclick="goToModule('MBCDS01', 'MBC Doc Series')">
                         <span class="code">MBCDS01</span>
                         <span class="name">MBC Doc Series</span>
+                    </div>
+                    <div class="module-item" onclick="goToModule('INVDS01', 'Invoice Doc Series')">
+                        <span class="code">INVDS01</span>
+                        <span class="name">Invoice Doc Series</span>
                     </div>
                 </div>
             </div>

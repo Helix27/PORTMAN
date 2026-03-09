@@ -159,9 +159,14 @@ def _ensure_port_banks_table(cur):
             account_number TEXT,
             ifsc_code TEXT,
             account_holder_name TEXT,
-            branch_name TEXT
+            branch_name TEXT,
+            pan TEXT,
+            cin TEXT,
+            corporate_office_address TEXT
         )
     ''')
+    for col in ('pan', 'cin', 'corporate_office_address'):
+        cur.execute(f'ALTER TABLE {PORT_BANKS_TABLE} ADD COLUMN IF NOT EXISTS {col} TEXT')
 
 @bp.route('/api/port-banks')
 @admin_required
@@ -183,7 +188,8 @@ def save_port_bank():
     cur = get_cursor(conn)
     _ensure_port_banks_table(cur)
     row_id = data.get('id')
-    fields = ['bank_name', 'account_number', 'ifsc_code', 'account_holder_name', 'branch_name']
+    fields = ['bank_name', 'account_number', 'ifsc_code', 'account_holder_name', 'branch_name',
+              'pan', 'cin', 'corporate_office_address']
     vals = [data.get(f, '') for f in fields]
     if row_id:
         sets = ', '.join(f'{f}=%s' for f in fields)
