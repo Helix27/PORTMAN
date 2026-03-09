@@ -66,15 +66,33 @@
         }
         .header-logo {
             flex: 1;
-            padding: 4px 6px;
+            padding: 4px 8px;
             border-right: 1px solid #000;
             display: flex;
+            flex-direction: column;
             align-items: center;
+            justify-content: center;
+            text-align: center;
         }
         .header-logo img {
-            max-height: 90px;
+            max-height: 42px;
             width: auto;
             display: block;
+            margin-bottom: 3px;
+        }
+        .company-address {
+            font-size: 7.5px;
+            line-height: 1.45;
+            color: #000;
+            text-align: center;
+        }
+        .company-tax-title {
+            font-size: 11px;
+            font-weight: 700;
+            letter-spacing: 1px;
+            margin-top: 3px;
+            text-align: center;
+            width: 100%;
         }
         .header-right {
             width: 155px;
@@ -349,6 +367,13 @@
     <div class="inv-header">
         <div class="header-logo">
             <img src="/static/img/logo31.png" alt="JSW Dharamtar Port Pvt. Ltd.">
+            <div class="company-address">
+                At:Dharamtar, Post:Dolvi, Tal: Pen, Dist:Raigad,<br>
+                Mumbai, Maharashtra, India - 402107<br>
+                Phone: 02143-277620 &nbsp;&nbsp; Fax: 02143-277800<br>
+                Email: jetty.accounts@jsw.in &nbsp;&nbsp; Website: www.jsw.in<br>
+                GSTIN: 27AACCJ9361Q1ZS
+            </div>
         </div>
         <div class="header-right">
             <div class="copy-type">{{ copy_label }}</div>
