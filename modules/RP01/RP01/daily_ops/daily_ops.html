@@ -1,0 +1,146 @@
+{% extends "base.html" %}
+
+{% block title %}Daily Port Operations Report — RP01{% endblock %}
+
+{% block head %}
+<style>
+    .page-header {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        margin-bottom: 18px;
+        padding-bottom: 12px;
+        border-bottom: 2px solid var(--border-color);
+    }
+    .page-header h2 { margin: 0; font-size: 18px; color: var(--text-primary); }
+    .module-badge {
+        background: #4a90d9;
+        color: #fff;
+        padding: 3px 10px;
+        border-radius: 4px;
+        font-size: 11px;
+        font-weight: 700;
+        letter-spacing: 0.5px;
+    }
+    .breadcrumb {
+        font-size: 11px; color: var(--text-secondary); margin-bottom: 14px;
+    }
+    .breadcrumb a { color: #4a90d9; text-decoration: none; }
+    .breadcrumb a:hover { text-decoration: underline; }
+    .filter-bar {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+        align-items: flex-end;
+        margin-bottom: 14px;
+        background: var(--bg-secondary);
+        border: 1px solid var(--border-color);
+        border-radius: 6px;
+        padding: 12px 14px;
+    }
+    .filter-group { display: flex; flex-direction: column; gap: 4px; }
+    .filter-group label {
+        font-size: 10px;
+        font-weight: 600;
+        color: var(--text-secondary);
+        text-transform: uppercase;
+        letter-spacing: 0.4px;
+    }
+    .filter-group input {
+        padding: 5px 9px;
+        border: 1px solid var(--border-color);
+        border-radius: 4px;
+        font-size: 12px;
+        background: var(--bg-primary);
+        color: var(--text-primary);
+        height: 30px;
+    }
+    .filter-group input:focus { outline: none; border-color: #4a90d9; }
+    .filter-btn {
+        padding: 0 18px;
+        height: 30px;
+        border: none;
+        border-radius: 4px;
+        font-size: 12px;
+        font-weight: 600;
+        cursor: pointer;
+        align-self: flex-end;
+    }
+    .filter-btn.primary { background: #4a90d9; color: #fff; }
+    .filter-btn.primary:hover { background: #357abd; }
+    .filter-btn.primary:disabled { background: #aaa; cursor: not-allowed; }
+    .info-text {
+        font-size: 11px;
+        color: var(--text-secondary);
+        margin-top: 4px;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h2>Daily Port Operations Report</h2>
+    <span class="module-badge">RP01</span>
+</div>
+<div class="breadcrumb">
+    <a href="/module/RP01/">Reports</a> &rsaquo; Daily Port Operations
+</div>
+
+<div class="filter-bar">
+    <div class="filter-group">
+        <label for="report-date">Report Date</label>
+        <input type="date" id="report-date">
+    </div>
+    <button type="button" class="filter-btn primary" id="dl-btn" onclick="downloadReport()">&#8595; Download Excel</button>
+</div>
+
+<p class="info-text">
+    Shows all active vessels (Import &amp; Export) on the selected date.<br>
+    24-hour window: 07:00 of the previous day to 07:00 of the selected date.
+</p>
+
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    const today = new Date();
+    const y = today.getFullYear();
+    const m = String(today.getMonth() + 1).padStart(2, '0');
+    const d = String(today.getDate()).padStart(2, '0');
+    document.getElementById('report-date').value = `${y}-${m}-${d}`;
+});
+
+function downloadReport() {
+    const d   = document.getElementById('report-date').value;
+    const btn = document.getElementById('dl-btn');
+    if (!d) { alert('Please select a report date.'); return; }
+
+    btn.disabled    = true;
+    btn.textContent = 'Preparing\u2026';
+
+    fetch(`/api/module/RP01/daily-ops/download?report_date=${d}`)
+        .then(res => {
+            if (res.status === 404) throw new Error('No active vessels on the selected date.');
+            if (!res.ok) throw new Error('Server error ' + res.status);
+            const disposition = res.headers.get('Content-Disposition') || '';
+            const match = disposition.match(/filename="(.+?)"/);
+            const filename = match ? match[1] : `DailyOps_${d}.xlsx`;
+            return res.blob().then(blob => ({ blob, filename }));
+        })
+        .then(({ blob, filename }) => {
+            const a = document.createElement('a');
+            a.href = URL.createObjectURL(blob);
+            a.download = filename;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(a.href);
+        })
+        .catch(err => {
+            alert(err.message || 'Download failed. Please try again.');
+        })
+        .finally(() => {
+            btn.disabled    = false;
+            btn.textContent = '\u2193 Download Excel';
+        });
+}
+</script>
+{% endblock %}
