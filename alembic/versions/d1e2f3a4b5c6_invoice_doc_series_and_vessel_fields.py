@@ -45,13 +45,23 @@ def upgrade() -> None:
             ADD COLUMN IF NOT EXISTS ship_to_state_code TEXT
     ''')
 
-    # ── 3. port_bank_accounts — PAN / CIN / corporate office ──────────────────
+    # ── 3. port_bank_accounts — create if missing, then ensure extra columns ──
     op.execute('''
-        ALTER TABLE port_bank_accounts
-            ADD COLUMN IF NOT EXISTS pan TEXT,
-            ADD COLUMN IF NOT EXISTS cin TEXT,
-            ADD COLUMN IF NOT EXISTS corporate_office_address TEXT
+        CREATE TABLE IF NOT EXISTS port_bank_accounts (
+            id SERIAL PRIMARY KEY,
+            bank_name TEXT,
+            account_number TEXT,
+            ifsc_code TEXT,
+            account_holder_name TEXT,
+            branch_name TEXT,
+            pan TEXT,
+            cin TEXT,
+            corporate_office_address TEXT
+        )
     ''')
+    op.execute('ALTER TABLE port_bank_accounts ADD COLUMN IF NOT EXISTS pan TEXT')
+    op.execute('ALTER TABLE port_bank_accounts ADD COLUMN IF NOT EXISTS cin TEXT')
+    op.execute('ALTER TABLE port_bank_accounts ADD COLUMN IF NOT EXISTS corporate_office_address TEXT')
 
     # ── 4. vessel_customers — virtual account number ───────────────────────────
     op.execute('''
@@ -69,9 +79,7 @@ def upgrade() -> None:
 def downgrade() -> None:
     op.execute('ALTER TABLE vessel_agents DROP COLUMN IF EXISTS virtual_account_number')
     op.execute('ALTER TABLE vessel_customers DROP COLUMN IF EXISTS virtual_account_number')
-    op.execute('ALTER TABLE port_bank_accounts DROP COLUMN IF EXISTS pan')
-    op.execute('ALTER TABLE port_bank_accounts DROP COLUMN IF EXISTS cin')
-    op.execute('ALTER TABLE port_bank_accounts DROP COLUMN IF EXISTS corporate_office_address')
+    op.execute('DROP TABLE IF EXISTS port_bank_accounts CASCADE')
     op.execute('''
         ALTER TABLE invoice_header
             DROP COLUMN IF EXISTS doc_series,
